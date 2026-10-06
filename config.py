@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = Path(
     os.getenv(
         "PIPELINE_OUTPUT_DIR",
-        BASE_DIR / "csv_output"
+        BASE_DIR / "Data"
     )
 )
 
@@ -239,6 +239,89 @@ NAUKRI_PROFILE_DIR = (
 
 
 # ============================================================================
+# INDEED SCRAPER SETTINGS
+# ============================================================================
+
+INDEED_LOCATION = os.getenv(
+    "INDEED_LOCATION",
+    "India",
+)
+
+INDEED_MAX_JOBS_PER_KEYWORD = _int(
+    os.getenv("INDEED_MAX_JOBS_PER_KEYWORD"),
+    50,
+)
+
+INDEED_MAX_AGE_HOURS = _int(
+    os.getenv("INDEED_MAX_AGE_HOURS"),
+    168,
+)
+
+
+# ============================================================================
+# INDEED COMPATIBILITY CONFIG
+# ============================================================================
+# These names are kept for legacy code and older Indeed helper scripts.
+# All of them now come from the same central config file.
+
+CITIES = [
+    ("Tamil Nadu", "India"),
+    ("Kerala", "India"),
+]
+
+HOURS_OLD = 168
+RESULTS_PER_SEARCH = 50
+REQUEST_TIMEOUT = 20
+REQUEST_DELAY = 1.5
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/154.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-IN,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Connection": "keep-alive",
+}
+
+DATABASE_FILE = "indeed_jobs.sqlite3"
+TABLE_NAME = "jobs"
+CSV_FILE = "indeed_jobs.csv"
+
+__all__ = [
+    "BASE_DIR",
+    "OUTPUT_DIR",
+    "SEARCH_KEYWORDS",
+    "LINKEDIN_KEYWORDS",
+    "LINKEDIN_LOCATION",
+    "LINKEDIN_MAX_JOBS_PER_KEYWORD",
+    "LINKEDIN_JOBS_PER_PAGE",
+    "LINKEDIN_MAX_AGE_HOURS",
+    "NAUKRI_JOB_TITLES",
+    "NAUKRI_MAX_PAGES",
+    "NAUKRI_MAX_JOBS",
+    "NAUKRI_MAX_TOTAL",
+    "NAUKRI_DELAY_SECONDS",
+    "NAUKRI_HEADLESS",
+    "NAUKRI_BROWSER",
+    "NAUKRI_PROFILE_DIR",
+    "INDEED_LOCATION",
+    "INDEED_MAX_JOBS_PER_KEYWORD",
+    "INDEED_MAX_AGE_HOURS",
+    "CITIES",
+    "HOURS_OLD",
+    "RESULTS_PER_SEARCH",
+    "REQUEST_TIMEOUT",
+    "REQUEST_DELAY",
+    "HEADERS",
+    "DATABASE_FILE",
+    "TABLE_NAME",
+    "CSV_FILE",
+]
+
+
+# ============================================================================
 # CONFIGURATION SUMMARY
 # ============================================================================
 
@@ -317,6 +400,23 @@ if __name__ == "__main__":
     )
 
     print()
+
+    print("Indeed:")
+    print(
+        "  Location            :",
+        INDEED_LOCATION
+    )
+    print(
+        "  Max jobs/keyword    :",
+        INDEED_MAX_JOBS_PER_KEYWORD
+    )
+    print(
+        "  Max age (hours)     :",
+        INDEED_MAX_AGE_HOURS
+    )
+
+    print()
+
     print(
         "Output directory:",
         OUTPUT_DIR

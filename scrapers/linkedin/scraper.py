@@ -1216,6 +1216,8 @@ def extract_job_from_card(
 
         "job_description": NOT_SPECIFIED,
 
+        "experience": NOT_SPECIFIED,
+
         "posted_date": extract_posted_time(
             card
         ),
@@ -1233,6 +1235,72 @@ def extract_job_from_card(
         "search_keyword": keyword,
 
     }
+
+
+# ============================================================
+# EXPERIENCE
+# ============================================================
+
+def extract_experience_from_text(
+    text
+):
+    """
+    Best-effort LinkedIn experience parser.
+
+    Handles patterns like:
+        - 3-5 years
+        - 3 to 5 years
+        - 4+ years
+        - 5 years of experience
+        - minimum 4 years of experience
+        - overall experience of 8 years
+    """
+
+    if not text:
+        return NOT_SPECIFIED
+
+    cleaned = clean_text(
+        text
+    )
+
+    if not cleaned:
+        return NOT_SPECIFIED
+
+    patterns = [
+        r"\b(\d+)\s*(?:to|-)\s*(\d+)\s*(?:years?|yrs?)\b",
+        r"\b(\d+)\s*(?:to|-)\s*(\d+)\s*(?:years?|yrs?)\s*(?:of\s+)?experience\b",
+        r"\b(\d+)\s*\+\s*(?:years?|yrs?)\b",
+        r"\b(\d+)\s*(?:years?|yrs?)\s*(?:of\s+)?experience\b",
+        r"\bminimum\s+(\d+)\s*(?:years?|yrs?)\s*(?:of\s+)?experience\b",
+        r"\b(?:overall\s+)?experience\s+(?:of\s+)?(\d+)\s*(?:years?|yrs?)\b",
+        r"\bexperience\s*[:\-]\s*(\d+)\s*(?:years?|yrs?)\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(
+            pattern,
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+        if not match:
+            continue
+
+        if match.lastindex and match.lastindex >= 2:
+            minimum = match.group(1)
+            maximum = match.group(2)
+            return (
+                f"{minimum} to {maximum} years"
+            )
+
+        value = match.group(1)
+
+        if value:
+            return (
+                f"{value} years"
+            )
+
+    return NOT_SPECIFIED
 
 
 # ============================================================
@@ -1828,6 +1896,24 @@ def enrich_job(
             ] = description
 
         # ----------------------------------------------------
+        # Experience
+        # ----------------------------------------------------
+
+        experience_text = None
+
+        try:
+            experience_text = (
+                extract_experience_from_text(
+                    description
+                )
+            )
+        except Exception:
+            experience_text = NOT_SPECIFIED
+
+        if experience_text != NOT_SPECIFIED:
+            job["experience"] = experience_text
+
+        # ----------------------------------------------------
         # Company
         # ----------------------------------------------------
 
@@ -1884,6 +1970,19 @@ def enrich_job(
         job[
             "skills"
         ] = extract_skills(
+            job.get(
+                "job_description",
+                ""
+            )
+        )
+
+        # ----------------------------------------------------
+        # Experience
+        # ----------------------------------------------------
+
+        job[
+            "experience"
+        ] = extract_experience_from_text(
             job.get(
                 "job_description",
                 ""

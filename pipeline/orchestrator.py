@@ -17,7 +17,7 @@ Workflow:
         ↓
     unified CSV
 
-LinkedIn and Naukri are isolated from each other.
+LinkedIn, Naukri, and Indeed are isolated from each other.
 
 IMPORTANT:
     ml_predictor / enrichment code is NOT modified here.
@@ -208,6 +208,9 @@ def _adapt_source_job(
         "platform",
     )
 
+    if source_lower == "indeed":
+        source = "Indeed"
+
     if not source:
 
         if source_lower == "linkedin":
@@ -215,6 +218,9 @@ def _adapt_source_job(
 
         elif source_lower == "naukri":
             source = "Naukri"
+
+        elif source_lower == "indeed":
+            source = "Indeed"
 
         else:
             source = source_key
@@ -342,6 +348,7 @@ def _adapt_source_job(
     job_url = _first_value(
         raw,
         "job_url",
+        "job_url_direct",
         "url",
         "link",
         "Job URL",
@@ -383,6 +390,7 @@ def _adapt_source_job(
         "search_keywords",
         "keyword",
         "query",
+        "search_term",
     )
 
     if search_keyword:
@@ -769,10 +777,14 @@ def run_pipeline(
         Callable[..., List[dict]]
     ] = None,
     naukri_kwargs: Optional[dict] = None,
+    indeed_collector: Optional[
+        Callable[..., List[dict]]
+    ] = None,
+    indeed_kwargs: Optional[dict] = None,
     apply_enrichment: bool = True,
 ) -> RunReport:
     """
-    Run LinkedIn and/or Naukri.
+    Run any selected combination of LinkedIn, Naukri, and Indeed.
 
     Each source is isolated.
 
@@ -781,6 +793,9 @@ def run_pipeline(
 
     If Naukri fails:
         LinkedIn continues.
+
+    If Indeed fails:
+        LinkedIn and Naukri continue.
 
     Existing ML enrichment remains unchanged.
     """
@@ -831,6 +846,17 @@ def run_pipeline(
                 "Naukri",
                 naukri_collector,
                 naukri_kwargs or {},
+            )
+        )
+
+    if indeed_collector is not None:
+
+        sources.append(
+            (
+                "indeed",
+                "Indeed",
+                indeed_collector,
+                indeed_kwargs or {},
             )
         )
 

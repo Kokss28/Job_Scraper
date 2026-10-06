@@ -11,7 +11,7 @@ from config import OUTPUT_DIR
 # CSV_PATH / DB_PATH are derived from config.OUTPUT_DIR so that
 # this script always targets the same output directory as
 # main.py (respecting the PIPELINE_OUTPUT_DIR environment
-# variable / .env setting). Do not hardcode "csv_output" here
+# variable / .env setting). Do not hardcode "Data" here
 # again — that previously caused this script to silently sync
 # the wrong files whenever PIPELINE_OUTPUT_DIR was customized.
 # ============================================================

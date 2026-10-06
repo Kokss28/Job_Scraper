@@ -1,9 +1,9 @@
 """
-Unified LinkedIn + Naukri Job Scraping Pipeline.
+Unified LinkedIn + Naukri + Indeed Job Scraping Pipeline.
 
 Pipeline flow:
 
-    LinkedIn / Naukri
+    LinkedIn / Naukri / Indeed
             ↓
        Orchestrator
             ↓
@@ -24,7 +24,7 @@ IMPORTANT:
 
 SEARCH KEYWORDS:
     The common SEARCH_KEYWORDS list from config.py is used
-    for both LinkedIn and Naukri.
+    for LinkedIn, Naukri, and Indeed.
 
 Example in config.py:
 
@@ -60,6 +60,9 @@ from config import (
     NAUKRI_MAX_TOTAL,
     NAUKRI_DELAY_SECONDS,
     NAUKRI_HEADLESS,
+    INDEED_LOCATION,
+    INDEED_MAX_JOBS_PER_KEYWORD,
+    INDEED_MAX_AGE_HOURS,
 )
 
 from pipeline.orchestrator import run_pipeline
@@ -71,6 +74,10 @@ from scrapers.linkedin.scraper import (
 
 from scrapers.naukri.scraper import (
     collect_naukri_jobs,
+)
+
+from scrapers.indeed.scraper import (
+    collect_indeed_jobs,
 )
 
 
@@ -274,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Unified LinkedIn + Naukri "
+            "Unified LinkedIn + Naukri + Indeed "
             "Job Scraping Pipeline"
         )
     )
@@ -288,9 +295,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[
             "linkedin",
             "naukri",
+            "indeed",
             "both",
+            "all",
         ],
-        default="both",
+        default="all",
         help="Job source to scrape.",
     )
 
@@ -400,6 +409,33 @@ def build_parser() -> argparse.ArgumentParser:
             "Fetch Naukri detail pages to extract "
             "skills and education."
         ),
+    )
+
+    # ========================================================
+    # INDEED
+    # ========================================================
+
+    parser.add_argument(
+        "--indeed-keywords",
+        default=default_keywords,
+        help="Comma-separated Indeed keywords (defaults to SEARCH_KEYWORDS).",
+    )
+    parser.add_argument(
+        "--indeed-location",
+        default=INDEED_LOCATION,
+        help="Indeed search location.",
+    )
+    parser.add_argument(
+        "--indeed-max-jobs",
+        type=int,
+        default=INDEED_MAX_JOBS_PER_KEYWORD,
+        help="Maximum Indeed jobs per keyword.",
+    )
+    parser.add_argument(
+        "--indeed-max-age-hours",
+        type=int,
+        default=INDEED_MAX_AGE_HOURS,
+        help="Only collect Indeed jobs posted within the last N hours.",
     )
 
     return parser
@@ -937,6 +973,10 @@ def main(
         args.naukri_titles
     )
 
+    indeed_keywords = split_csv(
+        args.indeed_keywords
+    )
+
     # ========================================================
     # HEADER
     # ========================================================
@@ -1078,6 +1118,13 @@ def main(
     ),
         }
 
+    indeed_kwargs = {
+        "keywords": indeed_keywords,
+        "location": args.indeed_location,
+        "max_jobs": args.indeed_max_jobs,
+        "max_age_hours": args.indeed_max_age_hours,
+    }
+
     # ========================================================
     # SHOW NAUKRI SEARCH URLS
     # ========================================================
@@ -1108,10 +1155,12 @@ def main(
 
     linkedin_collector = None
     naukri_collector = None
+    indeed_collector = None
 
     if args.source in {
         "linkedin",
         "both",
+        "all",
     }:
 
         linkedin_collector = (
@@ -1121,11 +1170,18 @@ def main(
     if args.source in {
         "naukri",
         "both",
+        "all",
     }:
 
         naukri_collector = (
             collect_naukri_jobs
         )
+
+    if args.source in {
+        "indeed",
+        "all",
+    }:
+        indeed_collector = collect_indeed_jobs
 
     # ========================================================
     # RUN SCRAPING PIPELINE
@@ -1153,6 +1209,14 @@ def main(
             naukri_kwargs=(
                 naukri_kwargs
                 if naukri_collector
+                else None
+            ),
+
+            indeed_collector=indeed_collector,
+
+            indeed_kwargs=(
+                indeed_kwargs
+                if indeed_collector
                 else None
             ),
 
@@ -1483,7 +1547,7 @@ def _run_main_tests() -> None:
 
     assert (
         args.source
-        == "both"
+        == "all"
     )
 
     assert (

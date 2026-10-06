@@ -8,13 +8,16 @@ beautifulsoup4
 # ---- LinkedIn scraper (from LinkedIn_Job_Pipeline) ----
 # Scrapling provides both a plain requests-style Fetcher and a
 # StealthyFetcher (headless-browser) mode used for anti-bot pages.
-scrapling
+scrapling[fetchers]
 
 # ---- Naukri scraper (from Naukri-scraper) ----
 # Naukri's search/detail pages are JS-rendered, so this project uses a real
 # controlled browser (Playwright) rather than requests/BeautifulSoup.
 # After installing requirements, also run: playwright install chromium
 playwright
+
+# ---- Indeed scraper (from the standalone Indeed project) ----
+python-jobspy
 
 # ---- Unified pipeline additions ----
 python-dotenv     # optional .env configuration loading (config.py)

@@ -624,7 +624,7 @@ def _run_storage_tests() -> None:
     Lightweight storage module test.
 
     Uses a temporary directory and does not touch the real
-    csv_output directory.
+    Data directory.
     """
 
     import tempfile

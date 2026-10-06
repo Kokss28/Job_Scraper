@@ -1,7 +1,7 @@
 """
 Unified job schema.
 
-Both LinkedIn and Naukri produce different raw structures.
+LinkedIn, Naukri, and Indeed produce different raw structures.
 
 UnifiedJob is the single canonical representation used by:
 

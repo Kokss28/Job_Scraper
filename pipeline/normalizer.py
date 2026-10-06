@@ -939,12 +939,12 @@ def _normalize_naukri_location(
 def _normalize_education(
     value: Any,
 ) -> str:
-    """
+    r"""
     Normalize education values.
 
     Examples:
 
-        B\.?E\., Bachelor(?:'s)?, degree
+        B\. ?E\., Bachelor(?:'s)?, degree
 
     becomes:
 

@@ -12,7 +12,7 @@ ENV/
 .env
 
 # Data outputs, databases, and local tracking files
-csv_output/
+Data/
 *.csv
 *.db
 *.json

@@ -20,7 +20,7 @@ TRAINING_FILE = (
 
 PRODUCTION_FILE = (
     BASE_DIR
-    / "csv_output"
+    / "Data"
     / "unified_jobs.csv"
 )
 

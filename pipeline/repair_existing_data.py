@@ -1,11 +1,10 @@
-
 import csv
 import sqlite3
 from pathlib import Path
 
 ROOT = Path(r"D:\job_scraper_pipeline")
-CSV_PATH = ROOT / "csv_output" / "unified_jobs.csv"
-DB_PATH = ROOT / "csv_output" / "jobs.db"
+CSV_PATH = ROOT / "Data" / "unified_jobs.csv"
+DB_PATH = ROOT / "Data" / "jobs.db"
 
 # -----------------------------
 # Backup CSV

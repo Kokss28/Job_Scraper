@@ -1,6 +1,6 @@
 # 🕸️ Job Scraper Pipeline
 
-A Python pipeline that scrapes job postings from **LinkedIn** and **Naukri**, cleans and normalizes them into one unified format, enriches them using **Machine Learning**, removes duplicates, and stores everything in both **CSV** and **SQLite**.
+A Python pipeline that scrapes job postings from **LinkedIn**, **Naukri**, and **Indeed**, cleans and normalizes them into one unified format, enriches them using **Machine Learning**, removes duplicates, and stores everything in both **CSV** and **SQLite**.
 
 > **Goal:** Keep one clean, searchable job database — and make it easy to change what jobs you're searching for from a single file.
 
@@ -34,9 +34,11 @@ A Python pipeline that scrapes job postings from **LinkedIn** and **Naukri**, cl
 flowchart TD
     A["⚙️ config.py<br/>Search keywords & settings"] --> B["LinkedIn Scraper"]
     A --> C["Naukri Scraper"]
+    A --> J["Indeed Scraper"]
 
     B --> D["🔄 Normalizer<br/>Converts to unified schema"]
     C --> D
+    J --> D
 
     D --> E["✅ Validator<br/>Checks required fields"]
     E --> F["🤖 ML Enrichment<br/>Predicts degree & specialization"]
@@ -58,8 +60,8 @@ flowchart TD
 
 **In plain words:**
 1. You set your job search keywords once in `config.py`.
-2. The **LinkedIn** and **Naukri** scrapers collect raw job postings.
-3. The **normalizer** reshapes both sources into one common 18-column format.
+2. The **LinkedIn**, **Naukri**, and **Indeed** scrapers collect raw job postings.
+3. The **normalizer** reshapes all three sources into one common 16-column format.
 4. The **validator** checks that required fields (title, company, link, etc.) are present and correct.
 5. **ML enrichment** fills in missing `degree_required` / `specialization_required` fields using trained models.
 6. **Deduplication** makes sure a job already in your database isn't added twice.
@@ -70,7 +72,7 @@ flowchart TD
 ## ✨ Features
 
 ### 📥 Job Collection
-- Scrapes jobs from **LinkedIn** and **Naukri**
+- Scrapes jobs from **LinkedIn**, **Naukri**, and **Indeed**
 - Supports multiple search keywords at once
 - LinkedIn: filter by location and how recently the job was posted
 - Naukri: multiple search URLs/titles, multiple pages
@@ -78,7 +80,7 @@ flowchart TD
 - Limits like max jobs per keyword / max total jobs
 
 ### 🔄 Data Processing
-- One unified schema for both sources
+- One unified schema for all three sources
 - Cleans up location, education, and experience fields
 - Fills missing values with `"Not Specified"` instead of leaving blanks
 - Validates job IDs and URLs
@@ -129,9 +131,10 @@ Job_Scraper/
 │   └── models/                 # Saved model files (.pkl)
 │
 ├── tests/                      # Automated tests
-├── csv_output/
+├── Data/
 │   ├── unified_jobs.csv        # Generated dataset (created after first run)
-│   └── jobs.db                 # Generated SQLite database (created after first run)
+│   ├── jobs.db                 # Generated SQLite database (created after first run)
+│   └── seen_job_ids.json       # Deduplication state
 │
 ├── .env                        # Your local settings (never commit this)
 ├── requirements.txt            # Python dependencies
@@ -147,7 +150,7 @@ Every job, no matter the source, is saved with these **16 columns**:
 | Column | Description |
 |---|---|
 | `job_id` | Unique identifier for the job |
-| `source` | Where it came from — `linkedin` or `naukri` |
+| `source` | Where it came from — `LinkedIn`, `Naukri`, or `Indeed` |
 | `title` | Job title |
 | `company` | Company name |
 | `search_keyword` | The search keyword that found this job (e.g. `data analyst`) |
@@ -219,7 +222,7 @@ playwright install chromium
 
 ## 🔑 Changing Search Keywords
 
-All keywords live in **one place** — `config.py` — and are automatically used by *both* LinkedIn and Naukri.
+All keywords live in **one place** — `config.py` — and are automatically used by LinkedIn, Naukri, and Indeed.
 
 ```python
 DEFAULT_SEARCH_KEYWORDS = [
@@ -232,7 +235,7 @@ DEFAULT_SEARCH_KEYWORDS = [
 
 After editing, just re-run the pipeline:
 ```bash
-python main.py --source both
+python main.py
 ```
 
 > ⚠️ Don't keep separate keyword lists anywhere else — this file is the single source of truth.
@@ -244,7 +247,7 @@ python main.py --source both
 Keep machine-specific or private settings in a `.env` file (never commit it). Example:
 
 ```env
-PIPELINE_OUTPUT_DIR=csv_output
+PIPELINE_OUTPUT_DIR=Data
 LINKEDIN_LOCATION=India
 LINKEDIN_MAX_JOBS_PER_KEYWORD=100
 LINKEDIN_JOBS_PER_PAGE=25
@@ -256,6 +259,9 @@ NAUKRI_DELAY_SECONDS=2.0
 NAUKRI_HEADLESS=true
 NAUKRI_BROWSER=chromium
 NAUKRI_PROFILE_DIR=
+INDEED_LOCATION=India
+INDEED_MAX_JOBS_PER_KEYWORD=50
+INDEED_MAX_AGE_HOURS=168
 ```
 
 🚫 **Never commit:** API keys, cookies, browser session profiles, passwords, or personal tokens.
@@ -264,31 +270,25 @@ NAUKRI_PROFILE_DIR=
 
 ## ▶️ Running the Pipeline
 
-```bash
-python main.py --source both
+Activate the virtual environment and run the scraper from the project root:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python main.py --source all
 ```
 
-This runs the full flow: **LinkedIn → Naukri → Normalize → Validate → ML Enrich → Deduplicate → CSV → SQLite**
+This runs the full flow: **LinkedIn + Naukri + Indeed → Normalize → Validate → ML Enrich → Deduplicate → CSV → SQLite**
 
----
+### ✅ Fast examples
 
-## 🎛️ Command-Line Options
+```powershell
+# 1-hour freshness, all sources
+.\.venv\Scripts\Activate.ps1
+python main.py --source all --indeed-max-age-hours 1 --linkedin-max-age-hours 1
 
-| Option | What it does |
-|---|---|
-| `--source linkedin` / `naukri` / `both` | Which source(s) to scrape |
-| `--output-dir csv_output` | Where to save output files |
-| `--rebuild-output` | Rebuilds the dataset (use carefully!) |
-| `--no-enrichment` | Skips ML enrichment |
-| `--linkedin-max-jobs 5` | Max jobs per keyword on LinkedIn |
-| `--linkedin-max-age-hours 1` | Only accept LinkedIn jobs posted this recently |
-| `--naukri-max-pages 5` | Max pages to scrape on Naukri |
-| `--naukri-max-jobs 20` | Max jobs to collect on Naukri |
-| `--naukri-headless` | Run the Naukri browser headlessly |
-| `--naukri-detail-pages` | Fetch Naukri detail pages for richer skills and education |
+# 5 jobs only, all sources
+python main.py --source all --linkedin-max-jobs 5 --indeed-max-jobs 5
 
-**Common examples:**
-```bash
 # LinkedIn only
 python main.py --source linkedin
 
@@ -297,6 +297,57 @@ python main.py --source naukri --naukri-detail-pages
 
 # Small test run (2 jobs, last 1 hour only)
 python main.py --source both --linkedin-max-jobs 2 --linkedin-max-age-hours 1
+
+# Skip ML enrichment
+python main.py --source both --no-enrichment
+```
+
+### 📁 Output location
+
+All generated results are stored in the shared folder:
+
+```text
+D:\Job_Scraper\Data\
+```
+
+Inside it you will find:
+- `unified_jobs.csv`
+- `jobs.db`
+- `seen_job_ids.json`
+
+---
+
+## 🎛️ Command-Line Options
+
+| Option | What it does |
+|---|---|
+| `--source linkedin` / `naukri` / `indeed` / `both` / `all` | Which source(s) to scrape (`all` is the default; `both` keeps LinkedIn + Naukri) |
+| `--output-dir Data` | Where to save output files |
+| `--rebuild-output` | Rebuilds the dataset (use carefully!) |
+| `--no-enrichment` | Skips ML enrichment |
+| `--linkedin-max-jobs 5` | Max jobs per keyword on LinkedIn |
+| `--linkedin-max-age-hours 1` | Only accept LinkedIn jobs posted this recently |
+| `--naukri-max-pages 5` | Max pages to scrape on Naukri |
+| `--naukri-max-jobs 20` | Max jobs to collect on Naukri |
+| `--naukri-headless` | Run the Naukri browser headlessly |
+| `--naukri-detail-pages` | Fetch Naukri detail pages for richer skills and education |
+| `--indeed-location India` | Indeed search location |
+| `--indeed-max-jobs 50` | Max Indeed jobs per keyword |
+| `--indeed-max-age-hours 168` | Only accept Indeed jobs posted this recently |
+
+**Common examples:**
+```powershell
+# LinkedIn only
+python main.py --source linkedin
+
+# Naukri only
+python main.py --source naukri --naukri-detail-pages
+
+# 1 hour freshness, all sources
+python main.py --source all --indeed-max-age-hours 1 --linkedin-max-age-hours 1
+
+# 5 jobs only per source
+python main.py --source all --linkedin-max-jobs 5 --indeed-max-jobs 5
 
 # Skip ML enrichment
 python main.py --source both --no-enrichment
@@ -322,7 +373,7 @@ A healthy audit looks like a long list of `[PASS]` lines with `0` problems found
 
 ## 🗄️ SQLite Database
 
-The pipeline automatically syncs your CSV into `csv_output/jobs.db` at the end of every run — you normally don't need to do anything manually.
+The pipeline automatically syncs your CSV into `Data/jobs.db` at the end of every run — you normally don't need to do anything manually.
 
 If you ever need to manually rebuild it from the CSV:
 ```bash
