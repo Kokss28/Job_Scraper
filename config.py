@@ -126,6 +126,9 @@ DEFAULT_SEARCH_KEYWORDS = [
     "Python developer","python engineer","python backend developer","python backend engineer",
 ]
 
+# DEFAULT_SEARCH_KEYWORDS = [
+#    "data analyst","data engineer"
+# ]
 # Environment variable priority:
 #
 # 1. SEARCH_KEYWORDS
@@ -193,6 +196,11 @@ LINKEDIN_MAX_AGE_HOURS = _int(
 
 NAUKRI_JOB_TITLES = list(
     SEARCH_KEYWORDS
+)
+
+NAUKRI_LOCATION = os.getenv(
+    "NAUKRI_LOCATION",
+    "India"
 )
 
 NAUKRI_MAX_PAGES = _int(
@@ -299,6 +307,7 @@ __all__ = [
     "LINKEDIN_JOBS_PER_PAGE",
     "LINKEDIN_MAX_AGE_HOURS",
     "NAUKRI_JOB_TITLES",
+    "NAUKRI_LOCATION",
     "NAUKRI_MAX_PAGES",
     "NAUKRI_MAX_JOBS",
     "NAUKRI_MAX_TOTAL",
@@ -369,6 +378,10 @@ if __name__ == "__main__":
     print(
         "  Job titles          :",
         NAUKRI_JOB_TITLES
+    )
+    print(
+        "  Location            :",
+        NAUKRI_LOCATION
     )
     print(
         "  Max pages           :",

@@ -446,3 +446,5 @@ Licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
 **Pravin Kumar A.**
 GitHub: [@Pravink1005](https://github.com/Pravink1005)
 Project: [Job_Scraper](https://github.com/Pravink1005/Job_Scraper)
+
+streamlit run dashboard.py

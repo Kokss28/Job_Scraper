@@ -55,6 +55,7 @@ CSV_FIELDS = [
     "country",
     "min_experience_years",
     "max_experience_years",
+    "experience_review",
     "skills",
     "degree_required",
     "specialization_required",
@@ -121,6 +122,7 @@ class UnifiedJob:
 
     min_experience_years: str = NOT_SPECIFIED
     max_experience_years: str = NOT_SPECIFIED
+    experience_review: str = ""
 
     # --------------------------------------------------------
     # REQUIREMENTS

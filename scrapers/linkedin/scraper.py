@@ -1295,6 +1295,9 @@ def extract_experience_from_text(
 
         value = match.group(1)
 
+        if "+" in match.group(0):
+            return f"{value}+ years"
+
         if value:
             return (
                 f"{value} years"

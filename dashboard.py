@@ -3,11 +3,18 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+from config import SEARCH_KEYWORDS
+from pipeline.orchestrator import run_pipeline
+from pipeline.storage import JobStore
+from scrapers.linkedin.scraper import collect_linkedin_jobs
+from scrapers.naukri.scraper import collect_naukri_jobs
+from scrapers.indeed.scraper import collect_indeed_jobs
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "Data" / "jobs.db"
@@ -24,6 +31,7 @@ DEFAULT_COLUMNS = [
     "country",
     "min_experience_years",
     "max_experience_years",
+    "experience_review",
     "skills",
     "degree_required",
     "specialization_required",
@@ -119,7 +127,7 @@ st.markdown(
 )
 
 
-@st.cache_data
+@st.cache_data(ttl=30)
 def load_jobs() -> pd.DataFrame:
     if not DB_PATH.exists():
         return pd.DataFrame()
@@ -137,6 +145,88 @@ def load_jobs() -> pd.DataFrame:
     df["collected_at"] = pd.to_datetime(df["collected_at"], errors="coerce", utc=True)
     df["collected_at"] = df["collected_at"].dt.tz_localize(None)
     return df
+
+
+# State abbreviation to full name mapping (India + common countries)
+STATE_ABBREVIATIONS = {
+    "AN": "Andaman and Nicobar Islands",
+    "AP": "Andhra Pradesh",
+    "AR": "Arunachal Pradesh",
+    "AS": "Assam",
+    "BR": "Bihar",
+    "CG": "Chhattisgarh",
+    "CH": "Chandigarh",
+    "CT": "Chhattisgarh",
+    "DD": "Daman and Diu",
+    "DL": "Delhi",
+    "DN": "Dadra and Nagar Haveli",
+    "GA": "Goa",
+    "GJ": "Gujarat",
+    "HR": "Haryana",
+    "HP": "Himachal Pradesh",
+    "JK": "Jammu and Kashmir",
+    "JH": "Jharkhand",
+    "KA": "Karnataka",
+    "KL": "Kerala",
+    "LA": "Ladakh",
+    "LD": "Lakshadweep",
+    "MP": "Madhya Pradesh",
+    "MH": "Maharashtra",
+    "MN": "Manipur",
+    "ML": "Meghalaya",
+    "MZ": "Mizoram",
+    "NL": "Nagaland",
+    "OD": "Odisha",
+    "OR": "Odisha",
+    "PB": "Punjab",
+    "PY": "Puducherry",
+    "RJ": "Rajasthan",
+    "SK": "Sikkim",
+    "TN": "Tamil Nadu",
+    "TR": "Tripura",
+    "TS": "Telangana",
+    "TG": "Telangana",
+    "UP": "Uttar Pradesh",
+    "UK": "Uttarakhand",
+    "WB": "West Bengal",
+    "IN": "India",
+    "PK": "Pakistan",
+    "BD": "Bangladesh",
+    "US": "United States",
+    "CA": "Canada",
+    "UK": "United Kingdom",
+    "AU": "Australia",
+    "AE": "United Arab Emirates",
+    "SG": "Singapore",
+}
+
+
+def format_location(city: str = "", state: str = "", country: str = "") -> str:
+    """
+    Format city, state, country into a readable location string.
+    Replaces abbreviations with full names.
+    """
+    parts = []
+    
+    # Process city
+    if city and city != "Not Specified" and str(city).strip():
+        parts.append(str(city).strip())
+    
+    # Process state - convert abbreviation to full name
+    if state and state != "Not Specified" and str(state).strip():
+        state_str = str(state).strip().upper()
+        full_state = STATE_ABBREVIATIONS.get(state_str, state_str)
+        if full_state not in parts:  # Avoid duplicates
+            parts.append(full_state)
+    
+    # Process country - convert abbreviation to full name
+    if country and country != "Not Specified" and str(country).strip():
+        country_str = str(country).strip().upper()
+        full_country = STATE_ABBREVIATIONS.get(country_str, country_str)
+        if full_country not in parts:  # Avoid duplicates
+            parts.append(full_country)
+    
+    return ", ".join(parts) if parts else "Not Specified"
 
 
 def parse_csv_list(value: str) -> List[str]:
@@ -268,8 +358,9 @@ def render_dashboard(df: pd.DataFrame):
     st.session_state.setdefault("dashboard_locations", "")
     st.session_state.setdefault("dashboard_title_terms", "")
     st.session_state.setdefault("dashboard_exp_range", (0.0, 10.0))
+    st.session_state.setdefault("dashboard_filter_experience", False)
     st.session_state.setdefault("dashboard_last_hours", 24)
-    st.session_state.setdefault("dashboard_time_mode", "Last N hours")
+    st.session_state.setdefault("dashboard_time_mode", "All time")
 
     def reset_dashboard_filters():
         st.session_state["dashboard_sources"] = source_options
@@ -277,8 +368,9 @@ def render_dashboard(df: pd.DataFrame):
         st.session_state["dashboard_locations"] = ""
         st.session_state["dashboard_title_terms"] = ""
         st.session_state["dashboard_exp_range"] = (0.0, 10.0)
+        st.session_state["dashboard_filter_experience"] = False
         st.session_state["dashboard_last_hours"] = 24
-        st.session_state["dashboard_time_mode"] = "Last N hours"
+        st.session_state["dashboard_time_mode"] = "All time"
 
     with st.sidebar:
         selected_sources = st.multiselect(
@@ -305,18 +397,27 @@ def render_dashboard(df: pd.DataFrame):
             key="dashboard_title_terms",
             placeholder="Python Developer, Data Analyst",
         )
-        exp_min, exp_max = st.slider(
-            "Experience range (years)",
-            min_value=0.0,
-            max_value=20.0,
-            value=st.session_state.get("dashboard_exp_range", (0.0, 10.0)),
-            step=0.5,
-            key="dashboard_exp_range",
+        filter_experience = st.checkbox(
+            "Filter by experience",
+            key="dashboard_filter_experience",
         )
+        if filter_experience:
+            exp_min, exp_max = st.slider(
+                "Experience range (years)",
+                min_value=0.0,
+                max_value=20.0,
+                value=st.session_state.get("dashboard_exp_range", (0.0, 10.0)),
+                step=0.5,
+                key="dashboard_exp_range",
+            )
+        else:
+            exp_min = exp_max = None
         time_mode = st.radio(
             "Timing",
-            ["Last N hours", "Date range"],
-            index=0 if st.session_state.get("dashboard_time_mode", "Last N hours") == "Last N hours" else 1,
+            ["All time", "Last N hours", "Date range"],
+            index={"All time": 0, "Last N hours": 1, "Date range": 2}.get(
+                st.session_state.get("dashboard_time_mode", "All time"), 0
+            ),
             horizontal=True,
             key="dashboard_time_mode",
         )
@@ -331,7 +432,7 @@ def render_dashboard(df: pd.DataFrame):
             )
             start_date = None
             end_date = None
-        else:
+        elif time_mode == "Date range":
             last_hours = 0
             today = datetime.today().date()
             default_start = today - timedelta(days=30)
@@ -341,6 +442,10 @@ def render_dashboard(df: pd.DataFrame):
                 min_value=datetime(2020, 1, 1).date(),
                 max_value=today,
             )
+        else:
+            last_hours = 0
+            start_date = None
+            end_date = None
 
         st.button("Reset Filters", on_click=reset_dashboard_filters)
 
@@ -384,7 +489,19 @@ def render_dashboard(df: pd.DataFrame):
     city_counts = filtered["city"].replace("Not Specified", "").str.strip()
     city_counts = city_counts[city_counts != ""]
     if not city_counts.empty:
-        city_df = city_counts.value_counts().head(10).reset_index()
+        # Get city/state/country and format them properly
+        city_indices = city_counts.index
+        formatted_locations = []
+        for idx in city_indices:
+            loc = format_location(
+                city=filtered.loc[idx, "city"],
+                state=filtered.loc[idx, "state"],
+                country=filtered.loc[idx, "country"]
+            )
+            formatted_locations.append(loc)
+        
+        location_series = pd.Series(formatted_locations, index=city_indices)
+        city_df = location_series.value_counts().head(10).reset_index()
         city_df.columns = ["City", "Jobs"]
         fig2 = px.bar(city_df, x="City", y="Jobs", title="Top Cities")
     else:
@@ -445,168 +562,171 @@ def render_dashboard(df: pd.DataFrame):
 
 
 def render_extract(df: pd.DataFrame):
-    if df.empty:
-        st.info("No data available to extract. Run the scraper first.")
-        return
+    """Live data extraction with real-time scraping."""
+    st.subheader("Extract Live Data")
+    st.caption("Scrape fresh job data from multiple sources in real-time.")
 
-    st.subheader("Export Data")
-    st.caption("Select the filters you want, then preview and download the result as CSV.")
-
-    source_options = sorted(df["source"].dropna().unique().tolist())
-    title_options = sorted(df["title"].dropna().unique().tolist())
-
-    st.session_state.setdefault("extract_sources", source_options)
-    st.session_state.setdefault("extract_titles", title_options)
-    st.session_state.setdefault("extract_locations", "")
-    st.session_state.setdefault("extract_title_terms", "")
-    st.session_state.setdefault("extract_exp_range", (0.0, 10.0))
-
-    def reset_extract_filters():
-        st.session_state["extract_sources"] = source_options
-        st.session_state["extract_titles"] = title_options
-        st.session_state["extract_locations"] = ""
-        st.session_state["extract_title_terms"] = ""
-        st.session_state["extract_exp_range"] = (0.0, 10.0)
-        st.session_state["extract_last_hours"] = 24
-        st.session_state["extract_time_mode"] = "Last N hours"
-
-    with st.form("extract_form"):
-        st.markdown("<div class='filter-card'>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-
-        with col1:
-            selected_sources = st.multiselect(
-                "Sources",
-                source_options,
-                default=st.session_state["extract_sources"],
-                key="extract_sources",
-            )
-            selected_titles = st.multiselect(
-                "Job Titles",
-                title_options,
-                default=st.session_state["extract_titles"],
-                key="extract_titles",
-            )
-            time_mode = st.radio(
-                "Timing",
-                ["Last N hours", "Date range"],
-                index=0 if st.session_state.get("extract_time_mode", "Last N hours") == "Last N hours" else 1,
-                horizontal=True,
-                key="extract_time_mode",
-            )
-
-            if time_mode == "Last N hours":
-                last_hours = st.slider(
-                    "Last N hours",
-                    min_value=1,
-                    max_value=720,
-                    value=st.session_state.get("extract_last_hours", 24),
-                    key="extract_last_hours",
-                )
-                start_date = None
-                end_date = None
-            else:
-                last_hours = 0
-                today = datetime.today().date()
-                default_start = today - timedelta(days=30)
-                start_date, end_date = st.date_input(
-                    "Date range",
-                    value=(default_start, today),
-                    min_value=datetime(2020, 1, 1).date(),
-                    max_value=today,
-                )
-
-        with col2:
-            location_input = st.text_input(
-                "Locations (comma-separated)",
-                value="",
-                placeholder="Bengaluru, Hyderabad, Pune",
-            )
-            title_input = st.text_input(
-                "Job titles (comma-separated)",
-                value="",
-                placeholder="Python Developer, Data Analyst",
-            )
-
-        st.markdown("</div>", unsafe_allow_html=True)
-        submit = st.form_submit_button("Preview & Extract")
-
-    if not submit:
-        return
-
-    filtered = apply_filters(
-        df,
-        selected_sources=selected_sources,
-        selected_titles=selected_titles,
-        title_terms=parse_csv_list(title_input) or None,
-        location_terms=parse_csv_list(location_input) or None,
-        start_date=start_date,
-        end_date=end_date,
-        last_hours=last_hours,
-    )
-
-    if filtered.empty:
-        st.warning("No jobs match your selected filters.")
-        return
-
-    estimated_minutes = estimate_time_in_minutes(len(filtered))
-    st.success(f"Estimated extraction time: {estimated_minutes} minute(s)")
-    st.info(f"{len(filtered)} jobs match your filters.")
-
-    preview_cols = [
-        "job_id",
-        "source",
-        "title",
-        "company",
-        "city",
-        "state",
-        "country",
-        "search_keyword",
-        "degree_required",
-        "collected_at",
-        "link",
-    ]
-    preview_df = filtered[preview_cols].head(50).copy()
-    preview_df["collected_at"] = preview_df["collected_at"].dt.strftime("%Y-%m-%d %H:%M")
-    preview_df["Open"] = preview_df["link"].apply(lambda url: f"[Open job]({url})" if str(url).startswith("http") else "")
-    preview_df["Apply"] = preview_df["link"].apply(lambda url: f"[Apply]({url})" if str(url).startswith("http") else "")
-    preview_df = preview_df[[
-        "source",
-        "title",
-        "company",
-        "city",
-        "search_keyword",
-        "degree_required",
-        "collected_at",
-        "Open",
-        "Apply",
-    ]]
-
-    st.dataframe(
-        preview_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Open": st.column_config.LinkColumn("Open", display_text="Open job"),
-            "Apply": st.column_config.LinkColumn("Apply", display_text="Apply"),
-        },
-    )
-
-    export_filename = "extracted_jobs_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv"
-    csv_data = filtered.to_csv(index=False, encoding="utf-8")
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.download_button(
-            label="Download CSV",
-            data=csv_data,
-            file_name=export_filename,
-            mime="text/csv",
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Source selection
+        sources = st.multiselect(
+            "Sources to scrape",
+            ["LinkedIn", "Naukri", "Indeed"],
+            default=["LinkedIn", "Naukri"],
+            help="Select which job sources to scrape"
         )
-    with col_b:
-        if st.button("Save to exports folder"):
-            saved_path = export_csv(filtered, export_filename)
-            st.success(f"Saved to: {saved_path}")
+    
+    with col2:
+        # Simple hours input
+        hours = st.number_input(
+            "Last N hours",
+            min_value=1,
+            max_value=720,
+            value=24,
+            step=1,
+            help="Extract jobs posted in the last N hours"
+        )
+    
+    with col3:
+        # Timezone display
+        st.markdown("<div style='padding-top: 10px'>", unsafe_allow_html=True)
+        st.caption("⏰ Local time filter")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Additional filters
+    filter_col1, filter_col2 = st.columns(2)
+    
+    with filter_col1:
+        job_title = st.text_input(
+            "Job title (optional)",
+            placeholder="e.g., Python Developer, Data Analyst",
+            help="Filter by job title keywords"
+        )
+    
+    with filter_col2:
+        location = st.text_input(
+            "Location (optional)",
+            placeholder="e.g., Tamil Nadu, Bangalore, Mumbai",
+            help="Filter by city or location"
+        )
+    
+    if st.button("🔄 Extract Live Data", use_container_width=True, type="primary"):
+        if not sources:
+            st.error("Please select at least one source.")
+            return
+        
+        with st.spinner("Scraping live data... This may take a few minutes..."):
+            try:
+                # Initialize storage
+                store = JobStore()
+                
+                # Set up collectors based on selected sources
+                linkedin_collector = collect_linkedin_jobs if "LinkedIn" in sources else None
+                naukri_collector = collect_naukri_jobs if "Naukri" in sources else None
+                indeed_collector = collect_indeed_jobs if "Indeed" in sources else None
+                
+                # Get kwargs for each collector
+                linkedin_kwargs = {
+                    "keywords": SEARCH_KEYWORDS,
+                    "max_age_hours": hours,
+                } if linkedin_collector else None
+                
+                naukri_kwargs = {
+                    "keywords": SEARCH_KEYWORDS,
+                    "max_age_hours": hours,
+                } if naukri_collector else None
+                
+                indeed_kwargs = {
+                    "keywords": SEARCH_KEYWORDS,
+                    "max_age_hours": hours,
+                } if indeed_collector else None
+                
+                # Run pipeline
+                report = run_pipeline(
+                    store=store,
+                    linkedin_collector=linkedin_collector,
+                    linkedin_kwargs=linkedin_kwargs,
+                    naukri_collector=naukri_collector,
+                    naukri_kwargs=naukri_kwargs,
+                    indeed_collector=indeed_collector,
+                    indeed_kwargs=indeed_kwargs,
+                )
+                
+                # Show results
+                st.success(f"✅ Scraping completed!")
+                st.info(report.summary())
+                
+                # Load and display results
+                scraped_df = load_jobs()
+                if not scraped_df.empty:
+                    # Filter by time if database has old data
+                    cutoff_time = datetime.now() - timedelta(hours=hours)
+                    scraped_df = scraped_df[scraped_df['collected_at'] >= cutoff_time]
+                    
+                    # Apply additional filters
+                    if job_title and job_title.strip():
+                        job_title_lower = job_title.lower()
+                        scraped_df = scraped_df[
+                            scraped_df["title"].str.lower().str.contains(job_title_lower, na=False)
+                        ]
+                    
+                    if location and location.strip():
+                        location_lower = location.lower()
+                        location_mask = (
+                            scraped_df["city"].str.lower().str.contains(location_lower, na=False) |
+                            scraped_df["state"].str.lower().str.contains(location_lower, na=False) |
+                            scraped_df["country"].str.lower().str.contains(location_lower, na=False)
+                        )
+                        scraped_df = scraped_df[location_mask]
+                    
+                    if not scraped_df.empty:
+                        st.success(f"📊 Found {len(scraped_df)} matching jobs")
+                        
+                        # Display preview
+                        preview_cols = [
+                            "source",
+                            "title",
+                            "company",
+                            "city",
+                            "search_keyword",
+                            "collected_at",
+                            "link",
+                        ]
+                        preview_df = scraped_df[preview_cols].head(50).copy()
+                        preview_df["collected_at"] = preview_df["collected_at"].dt.strftime("%Y-%m-%d %H:%M")
+                        preview_df["Open"] = preview_df["link"].apply(lambda url: f"[Link]({url})" if str(url).startswith("http") else "")
+                        preview_df = preview_df.drop("link", axis=1)
+                        
+                        st.dataframe(
+                            preview_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Open": st.column_config.LinkColumn("Link", display_text="View"),
+                            },
+                        )
+                        
+                        # Download option
+                        export_filename = "live_extract_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv"
+                        csv_data = scraped_df.to_csv(index=False, encoding="utf-8")
+                        st.download_button(
+                            label="⬇️ Download CSV",
+                            data=csv_data,
+                            file_name=export_filename,
+                            mime="text/csv",
+                        )
+                    else:
+                        if job_title or location:
+                            st.warning(f"No jobs match your filters (Title: '{job_title or 'all'}', Location: '{location or 'all'}').")
+                        else:
+                            st.warning("No new jobs found in the last {} hours.".format(hours))
+                else:
+                    st.warning("Could not load scraped data.")
+                    
+            except Exception as e:
+                st.error(f"❌ Scraping failed: {str(e)}")
+                st.info("Make sure all sources are properly configured.")
 
 
 def main():

@@ -21,5 +21,6 @@ python-jobspy
 
 # ---- Unified pipeline additions ----
 python-dotenv     # optional .env configuration loading (config.py)
+supabase          # Supabase sync worker for the Next.js admin dashboard
 pytest            # test suite
 pytest-mock       # convenient mocking in tests

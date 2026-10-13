@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     country TEXT,
     min_experience_years TEXT,
     max_experience_years TEXT,
+    experience_review TEXT,
     skills TEXT,
     degree_required TEXT,
     specialization_required TEXT,
@@ -76,7 +77,7 @@ def create_database():
     expected_columns = [
         "job_id", "source", "title", "company", "search_keyword",
         "city", "state", "country", "min_experience_years",
-        "max_experience_years", "skills", "degree_required",
+        "max_experience_years", "experience_review", "skills", "degree_required",
         "specialization_required", "collected_at", "link",
         "full_description",
     ]
@@ -144,6 +145,7 @@ def import_csv_to_database():
                 row.get("country", "Not Specified"),
                 row.get("min_experience_years", "Not Specified"),
                 row.get("max_experience_years", "Not Specified"),
+                row.get("experience_review", ""),
                 row.get("skills", "Not Specified"),
                 row.get("degree_required", "Not Specified"),
                 row.get("specialization_required", "Not Specified"),
@@ -165,6 +167,7 @@ def import_csv_to_database():
                     country,
                     min_experience_years,
                     max_experience_years,
+                    experience_review,
                     skills,
                     degree_required,
                     specialization_required,
@@ -172,7 +175,7 @@ def import_csv_to_database():
                     link,
                     full_description
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
                 ON CONFLICT(job_id)
                 DO UPDATE SET
@@ -185,6 +188,7 @@ def import_csv_to_database():
                     country = excluded.country,
                     min_experience_years = excluded.min_experience_years,
                     max_experience_years = excluded.max_experience_years,
+                    experience_review = excluded.experience_review,
                     skills = excluded.skills,
                     degree_required = excluded.degree_required,
                     specialization_required = excluded.specialization_required,
