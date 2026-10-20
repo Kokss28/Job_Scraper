@@ -1,6 +1,12 @@
 import csv
 import sqlite3
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from config import OUTPUT_DIR
 
@@ -96,17 +102,19 @@ def create_database():
 # IMPORT CSV → SQLITE
 # ============================================================
 
-def import_csv_to_database():
+def import_csv_to_database(target_csv=None):
 
-    if not CSV_PATH.exists():
-        print(f"[ERROR] CSV file not found: {CSV_PATH}")
+    csv_file = Path(target_csv) if target_csv else CSV_PATH
+
+    if not csv_file.exists():
+        print(f"[ERROR] CSV file not found: {csv_file}")
         return
 
     print("=" * 70)
-    print("CSV → SQLITE DATABASE IMPORT")
+    print("CSV -> SQLITE DATABASE IMPORT")
     print("=" * 70)
 
-    print(f"CSV: {CSV_PATH}")
+    print(f"CSV: {csv_file}")
     print(f"Database: {DB_PATH}")
     print()
 
@@ -118,7 +126,7 @@ def import_csv_to_database():
     skipped = 0
 
     with open(
-        CSV_PATH,
+        csv_file,
         "r",
         encoding="utf-8-sig",
         newline=""

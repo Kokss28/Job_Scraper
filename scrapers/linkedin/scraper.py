@@ -105,7 +105,7 @@ MAX_DELAY = float(
 MAX_PAGES = int(
     os.getenv(
         "LINKEDIN_MAX_PAGES",
-        "4"
+        "15"
     )
 )
 
@@ -780,41 +780,30 @@ def extract_posted_time(
 
 def is_recent_posted_time(
     posted_date,
-    max_age_hours
+    max_age_hours,
+    strict: bool = True,
 ):
-
     if not posted_date:
-        return True
+        return False if strict else True
 
     posted_date = clean_text(
         posted_date
     )
 
     if posted_date == NOT_SPECIFIED:
-        return True
+        return False if strict else True
 
-    parsed = parse_absolute_datetime(
-        posted_date
-    )
-
-    if parsed is None:
-        return True
-
-    age = (
-        datetime.now()
-        - parsed
-    )
-
-    if age.total_seconds() < 0:
-        return True
-
-    return (
-        age.total_seconds()
-        <= (
-            float(max_age_hours)
-            * 3600
-        )
-    )
+    try:
+        from pipeline.recency import is_job_within_recency
+        return is_job_within_recency(posted_date, max_age_hours=max_age_hours, strict=strict)
+    except Exception:
+        parsed = parse_absolute_datetime(posted_date)
+        if parsed is None:
+            return False if strict else True
+        age = datetime.now() - parsed
+        if age.total_seconds() < 0:
+            return True
+        return age.total_seconds() <= (float(max_age_hours) * 3600)
 
 
 # ============================================================
@@ -841,6 +830,7 @@ def build_search_url(
         + quote_plus(location)
         + "&f_TPR=r"
         + str(age_seconds)
+        + "&sortBy=DD"
         + "&start="
         + str(start)
     )
@@ -2344,13 +2334,14 @@ def collect_linkedin_jobs(
     # NORMALIZE CONFIGURATION
     # ========================================================
 
-    try:
-        max_jobs_per_keyword = max(
-            1,
-            int(max_jobs_per_keyword)
-        )
-    except Exception:
-        max_jobs_per_keyword = DEFAULT_MAX_JOBS
+    limit = None
+    if max_jobs_per_keyword is not None:
+        try:
+            val = int(max_jobs_per_keyword)
+            if val > 0:
+                limit = val
+        except Exception:
+            pass
 
     try:
         jobs_per_page = max(
@@ -2461,34 +2452,34 @@ def collect_linkedin_jobs(
 
         keyword_jobs = []
 
-        # ----------------------------------------------------
-        # PAGINATION
-        # ----------------------------------------------------
+        # Check all relevant pages until target limit recent jobs are found
+        # or until accessible matching results are exhausted
+        consecutive_empty_pages = 0
+        consecutive_no_new = 0
+        if limit:
+            max_search_pages = max(10, (limit // jobs_per_page) + 6)
+        else:
+            max_search_pages = 40  # LinkedIn public guest endpoint ceiling (~1,000 jobs)
 
-        for start in range(
-            0,
-            max_jobs_per_keyword,
-            jobs_per_page
-        ):
+        for page_idx in range(max_search_pages):
+            start = page_idx * jobs_per_page
+            page_number = page_idx + 1
 
-            page_number = (
-                start // jobs_per_page
-            ) + 1
-
-            if page_number > MAX_PAGES:
-
+            if limit and len(keyword_jobs) >= limit:
                 logger.info(
-                    "Reached MAX_PAGES=%s",
-                    MAX_PAGES
+                    "Reached limit=%s for '%s'",
+                    limit,
+                    keyword
                 )
-
                 break
 
+            total_target = f"{len(keyword_jobs)}/{limit}" if limit else f"{len(keyword_jobs)} (unlimited)"
             logger.info(
-                "LinkedIn page %s | start=%s | keyword=%s",
+                "LinkedIn page %s | start=%s | keyword=%s | accepted so far=%s",
                 page_number,
                 start,
-                keyword
+                keyword,
+                total_target,
             )
 
             try:
@@ -2520,13 +2511,20 @@ def collect_linkedin_jobs(
 
             if not jobs:
 
+                consecutive_empty_pages += 1
                 logger.info(
-                    "No jobs returned for start=%s",
-                    start
+                    "No jobs returned for start=%s (empty streak=%s)",
+                    start,
+                    consecutive_empty_pages
                 )
 
-                break
+                if consecutive_empty_pages >= 2:
+                    logger.info("2 consecutive empty pages encountered. Stopping pagination.")
+                    break
 
+                continue
+
+            consecutive_empty_pages = 0
             page_new = 0
 
             # ------------------------------------------------
@@ -2566,6 +2564,23 @@ def collect_linkedin_jobs(
                 )
 
                 # --------------------------------------------
+                # ROLE RELEVANCE VALIDATION
+                # --------------------------------------------
+                title_val = job.get("job_title") or ""
+                desc_val = job.get("job_description") or ""
+                try:
+                    from pipeline.role_matcher import is_job_role_relevant
+                    if not is_job_role_relevant(title_val, keyword, desc_val):
+                        logger.info(
+                            "Skipping LinkedIn job with irrelevant role: '%s' for keyword '%s'",
+                            title_val,
+                            keyword
+                        )
+                        continue
+                except Exception:
+                    pass
+
+                # --------------------------------------------
                 # ADD JOB
                 # --------------------------------------------
 
@@ -2579,83 +2594,59 @@ def collect_linkedin_jobs(
 
                 page_new += 1
 
+                total_status = f"{len(keyword_jobs)}/{limit}" if limit else f"{len(keyword_jobs)}"
                 logger.info(
-                    "Accepted LinkedIn job %s/%s: %s",
-                    len(keyword_jobs),
-                    max_jobs_per_keyword,
+                    "Accepted LinkedIn job %s: %s",
+                    total_status,
                     job.get(
                         "job_title"
                     )
                 )
 
-                # --------------------------------------------
-                # STRICT MAX JOB LIMIT
-                # --------------------------------------------
-
-                if (
-                    len(keyword_jobs)
-                    >= max_jobs_per_keyword
-                ):
-
+                if limit and len(keyword_jobs) >= limit:
                     break
 
+            total_display = f"{len(keyword_jobs)}/{limit}" if limit else f"{len(keyword_jobs)}"
             logger.info(
-                "Page %s completed | cards accepted=%s | keyword total=%s/%s",
+                "Page %s completed | cards accepted=%s | keyword total=%s",
                 page_number,
                 page_new,
-                len(keyword_jobs),
-                max_jobs_per_keyword
+                total_display
             )
 
-            # ------------------------------------------------
-            # STRICT MAX JOB LIMIT
-            # ------------------------------------------------
+            if page_new == 0:
+                consecutive_no_new += 1
+                if consecutive_no_new >= 2:
+                    logger.info("2 consecutive pages had no jobs matching time window. Ending pagination for '%s'.", keyword)
+                    break
+            else:
+                consecutive_no_new = 0
 
-            if (
-                len(keyword_jobs)
-                >= max_jobs_per_keyword
-            ):
-
+            if limit and len(keyword_jobs) >= limit:
                 logger.info(
-                    "Reached max_jobs_per_keyword=%s for '%s'",
-                    max_jobs_per_keyword,
+                    "Reached limit=%s for '%s'",
+                    limit,
                     keyword
                 )
-
-                break
-
-            # ------------------------------------------------
-            # NO NEW JOBS
-            # ------------------------------------------------
-
-            if page_new == 0:
-
-                logger.info(
-                    "No new jobs found on page %s. Stopping pagination.",
-                    page_number
-                )
-
                 break
 
             # ------------------------------------------------
             # DELAY BETWEEN PAGES
             # ------------------------------------------------
 
-            if start + jobs_per_page < max_jobs_per_keyword:
+            delay = random.uniform(
+                MIN_DELAY,
+                MAX_DELAY
+            )
 
-                delay = random.uniform(
-                    MIN_DELAY,
-                    MAX_DELAY
-                )
+            logger.info(
+                "Waiting %.2f seconds before checking next page...",
+                delay
+            )
 
-                logger.info(
-                    "Waiting %.2f seconds before next page...",
-                    delay
-                )
-
-                time.sleep(
-                    delay
-                )
+            time.sleep(
+                delay
+            )
 
         # ====================================================
         # KEYWORD SUMMARY

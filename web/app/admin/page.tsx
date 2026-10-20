@@ -1,32 +1,370 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, ShieldCheck, Users, BriefcaseBusiness, Building2 } from "lucide-react";
+import {
+  ShieldCheck,
+  Users,
+  BriefcaseBusiness,
+  Building2,
+  UserCheck,
+  Terminal,
+  Activity,
+  Sparkles,
+} from "lucide-react";
 
+import { AppNav } from "@/components/app-nav";
 import { AdminUserControls } from "@/components/admin-user-controls";
-import { LogoutButton } from "@/components/logout-button";
 import { QueueScrapeForm } from "@/components/queue-scrape-form";
 import { createClient } from "@/lib/supabase/server";
+import { hasEnvVars } from "@/lib/utils";
+import { getJobsCatalog } from "@/lib/data-service";
 
-type Profile = { id: string; display_name: string | null; created_at: string; is_active: boolean; user_roles: { role: string }[] };
+type Profile = {
+  id: string;
+  display_name: string | null;
+  created_at: string;
+  is_active: boolean;
+  user_roles: { role: string }[];
+};
 
 export default async function AdminPage() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/auth/login");
-  const { data: roleRow } = await supabase.from("user_roles").select("role").eq("user_id", auth.user.id).maybeSingle();
-  if (roleRow?.role !== "admin") redirect("/dashboard");
+  const { jobs, isCloudSupabase } = await getJobsCatalog();
 
-  const [{ data: users, error: usersError, count: usersCount }, { count: jobsCount }, { data: sources }, { data: runs, error: runsError }] = await Promise.all([
-    supabase.from("profiles").select("id,display_name,created_at,is_active,user_roles(role)", { count: "exact" }).order("created_at", { ascending: false }).limit(100),
-    supabase.from("jobs").select("job_id", { count: "exact", head: true }),
-    supabase.from("jobs").select("source"),
-    supabase.from("scrape_runs").select("id,source,status,max_age_hours,created_at,result_summary,error_message").order("created_at", { ascending: false }).limit(10),
-  ]);
-  const profiles = (users ?? []) as unknown as Profile[];
+  // If Supabase is configured, use live auth and DB
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) redirect("/auth/login");
+
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", auth.user.id)
+        .maybeSingle();
+
+      if (roleRow?.role !== "admin") redirect("/dashboard");
+
+      const [
+        { data: users, count: usersCount },
+        { count: jobsCount },
+        { data: sources },
+        { data: runs, error: runsError },
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id,display_name,created_at,is_active,user_roles(role)", { count: "exact" })
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase.from("jobs").select("job_id", { count: "exact", head: true }),
+        supabase.from("jobs").select("source"),
+        supabase
+          .from("scrape_runs")
+          .select("id,source,status,max_age_hours,created_at,result_summary,error_message")
+          .order("created_at", { ascending: false })
+          .limit(10),
+      ]);
+
+      const profiles = (users ?? []) as unknown as Profile[];
+      const sourceCounts = new Map<string, number>();
+      for (const item of sources ?? []) {
+        const key = item.source || "Other";
+        sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+      }
+
+      return renderAdminView({
+        userEmail: auth.user.email || "admin",
+        userId: auth.user.id,
+        usersCount: usersCount ?? profiles.length,
+        jobsCount: jobsCount ?? jobs.length,
+        sourceCounts,
+        profiles,
+        runs: runs ?? [],
+        isCloudSupabase: true,
+      });
+    } catch (e) {
+      console.warn("Live admin query failed, falling back to local admin mode:", e);
+    }
+  }
+
+  // Demo Admin Fallback Mode
+  const demoProfiles: Profile[] = [
+    {
+      id: "usr_admin_01",
+      display_name: "Lead System Admin",
+      created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+      is_active: true,
+      user_roles: [{ role: "admin" }],
+    },
+    {
+      id: "usr_recruiter_02",
+      display_name: "Pravin Kumar (Lead Recruiter)",
+      created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+      is_active: true,
+      user_roles: [{ role: "recruiter" }],
+    },
+    {
+      id: "usr_candidate_03",
+      display_name: "Arun Sharma (Job Seeker)",
+      created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+      is_active: true,
+      user_roles: [{ role: "user" }],
+    },
+  ];
+
   const sourceCounts = new Map<string, number>();
-  for (const item of sources ?? []) { const key = item.source || "Other"; sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1); }
+  for (const item of jobs) {
+    const key = item.source || "Other";
+    sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+  }
 
-  return <main className="app-shell"><aside className="sidebar"><Link href="/dashboard" className="brand"><span className="brand-mark">J</span><span>Job Intelligence</span></Link><div className="nav-label">Workspace</div><Link className="nav-item" href="/dashboard"><BriefcaseBusiness size={17} /> User dashboard</Link><div className="nav-label section-gap">Administration</div><Link className="nav-item active" href="/admin"><ShieldCheck size={17} /> Admin console</Link><div className="sidebar-bottom"><div className="user-chip"><div className="avatar">A</div><div className="user-copy"><strong>Administrator</strong><span>{auth.user.email}</span></div></div><LogoutButton /></div></aside><section className="main-panel"><header className="topbar"><div><p className="eyebrow">Administration / Overview</p><h1>System administration</h1></div><Link href="/dashboard" className="button button-muted"><ArrowLeft size={15}/> User view</Link></header><div className="content-wrap"><section className="welcome-row admin-welcome"><div><h2>Admin console</h2><p>Manage accounts and monitor the shared job catalog.</p></div><span className="welcome-icon"><ShieldCheck size={22}/></span></section><section className="metric-grid"><Metric label="User accounts" value={(usersCount ?? 0).toLocaleString()} note="Registered profiles" icon={<Users size={18}/>} /><Metric label="Jobs in catalog" value={(jobsCount ?? 0).toLocaleString()} note="Shared job records" icon={<BriefcaseBusiness size={18}/>} /><Metric label="Job sources" value={sourceCounts.size.toString()} note="Currently represented" icon={<Building2 size={18}/>} /><Metric label="Active users" value={profiles.filter((user)=>user.is_active).length.toString()} note="From latest 100 accounts" icon={<ShieldCheck size={18}/>} /></section><section className="panel source-panel"><div className="section-heading"><div><h3>Jobs by source</h3><p>Current catalog distribution</p></div></div><div className="source-bars">{[...sourceCounts.entries()].sort((a,b)=>b[1]-a[1]).map(([source,count])=><div className="source-bar-row" key={source}><div className="source-bar-label"><span>{source}</span><strong>{count}</strong></div><div className="bar-track"><span style={{width:`${Math.max(4,count/Math.max(1,Math.max(...sourceCounts.values()))*100)}%`}}/></div></div>)}</div></section><section className="panel jobs-panel"><div className="section-heading"><div><h3>Scraper queue</h3><p>Queue work for the separate Python worker</p></div></div><QueueScrapeForm userId={auth.user.id}/>{runsError ? <div className="inline-warning">Apply the included migration to enable scrape tracking.</div> : <div className="run-list">{(runs ?? []).map((run)=><div className="run-row" key={run.id}><span className={`status-pill status-${run.status}`}>{run.status}</span><strong>{run.source}</strong><span>Last {run.max_age_hours} hours</span><time>{new Date(run.created_at).toLocaleString()}</time><small>{run.error_message || run.result_summary || "Waiting for worker"}</small></div>)}</div>}</section><section className="panel jobs-panel"><div className="section-heading"><div><h3>User management</h3><p>Change roles or disable dashboard access</p></div><span className="section-tag">{profiles.length} shown</span></div>{usersError ? <div className="empty-state"><strong>Could not load users</strong><span>{usersError.message}. Apply the Supabase migration.</span></div> : <div className="user-table-wrap"><table className="user-table"><thead><tr><th>User</th><th>Joined</th><th>Status</th><th>Role and access</th></tr></thead><tbody>{profiles.map((profile)=><tr key={profile.id}><td><strong>{profile.display_name || "New user"}</strong><small>{profile.id}</small></td><td>{new Date(profile.created_at).toLocaleDateString()}</td><td><span className={`status-pill ${profile.is_active ? "status-active":"status-paused"}`}>{profile.is_active ? "Active":"Disabled"}</span></td><td><AdminUserControls userId={profile.id} role={profile.user_roles?.[0]?.role || "user"} active={profile.is_active}/></td></tr>)}</tbody></table></div>}</section></div></section></main>;
+  return renderAdminView({
+    userEmail: "admin@enterprise.local",
+    userId: "demo_admin_id",
+    usersCount: demoProfiles.length,
+    jobsCount: jobs.length,
+    sourceCounts,
+    profiles: demoProfiles,
+    runs: [
+      {
+        id: "run_sample_01",
+        source: "LinkedIn, Naukri, Indeed",
+        status: "completed",
+        max_age_hours: 24,
+        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+        result_summary: "Harvested and enriched 42 fresh Indian tech opportunities",
+        error_message: null,
+      },
+      {
+        id: "run_sample_02",
+        source: "LinkedIn",
+        status: "completed",
+        max_age_hours: 12,
+        created_at: new Date(Date.now() - 3600000 * 20).toISOString(),
+        result_summary: "Synced 18 Bangalore/Hyderabad Python and AI openings",
+        error_message: null,
+      },
+    ],
+    isCloudSupabase: false,
+  });
 }
 
-function Metric({label,value,note,icon}:{label:string;value:string;note:string;icon:React.ReactNode}) { return <article className="metric-card"><div className="metric-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{note}</small></article>; }
+function renderAdminView({
+  userEmail,
+  userId,
+  usersCount,
+  jobsCount,
+  sourceCounts,
+  profiles,
+  runs,
+  isCloudSupabase,
+}: {
+  userEmail: string;
+  userId: string;
+  usersCount: number;
+  jobsCount: number;
+  sourceCounts: Map<string, number>;
+  profiles: Profile[];
+  runs: any[];
+  isCloudSupabase: boolean;
+}) {
+  return (
+    <div className="flex min-h-screen bg-[#070b14] text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+      <AppNav
+        userEmail={userEmail}
+        role="admin"
+        isCloudSupabase={isCloudSupabase}
+      />
+      <main className="flex-1 min-w-0 flex flex-col p-8 space-y-8 max-w-7xl mx-auto">
+        {/* Hero Header */}
+        <div className="relative rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-8 shadow-2xl overflow-hidden">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold mb-3">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Role-Based Access Control &amp; System Administration
+              </div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                Admin Governance Console
+              </h1>
+              <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+                Manage user access tiers (Admin, Recruiter, Candidate), dispatch multi-source scraping jobs, and oversee pan-India catalog consistency.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                  isCloudSupabase
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/30"
+                }`}
+              >
+                {isCloudSupabase ? "Supabase Cloud RLS" : "Local Demo Storage"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-indigo-500">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Total Accounts
+            </div>
+            <div className="text-2xl font-black text-white mt-1">
+              {usersCount.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">RBAC user profiles</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-emerald-500">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Catalog Postings
+            </div>
+            <div className="text-2xl font-black text-white mt-1">
+              {jobsCount.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">Unified job records</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-violet-500">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Active Sourcing APIs
+            </div>
+            <div className="text-2xl font-black text-white mt-1">
+              {sourceCounts.size}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">LinkedIn, Naukri, Indeed</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-amber-500">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Active Accounts
+            </div>
+            <div className="text-2xl font-black text-white mt-1">
+              {profiles.filter((p) => p.is_active).length}
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">Unrestricted access</div>
+          </div>
+        </div>
+
+        {/* User Management & RBAC Roles Table */}
+        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-400" />
+                User Profiles &amp; RBAC Role Assignment
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Assign Candidate, Recruiter, or Administrator roles and enable/disable account access.
+              </p>
+            </div>
+            <span className="text-xs text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-lg">
+              {profiles.length} Profiles
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead>
+                <tr className="border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <th className="pb-3 px-3">Profile Name &amp; ID</th>
+                  <th className="pb-3 px-3">Created</th>
+                  <th className="pb-3 px-3">Status</th>
+                  <th className="pb-3 px-3">Role Tier &amp; Controls</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {profiles.map((profile) => (
+                  <tr key={profile.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-white">
+                        {profile.display_name || "Enterprise User"}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">
+                        {profile.id}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-xs text-slate-400">
+                      {new Date(profile.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          profile.is_active
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                            : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            profile.is_active ? "bg-emerald-400" : "bg-rose-400"
+                          }`}
+                        />
+                        {profile.is_active ? "Active" : "Disabled"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <AdminUserControls
+                        userId={profile.id}
+                        role={profile.user_roles?.[0]?.role || "user"}
+                        active={profile.is_active}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Live Ingestion Dispatcher Panel */}
+        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl space-y-6">
+          <div className="border-b border-slate-800/80 pb-4">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-violet-400" />
+              Scraper Queue Dispatcher
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Queue immediate scraping jobs to be executed by the Python background worker.
+            </p>
+          </div>
+
+          <QueueScrapeForm userId={userId} />
+
+          {/* Recent Runs Table */}
+          <div className="pt-4 border-t border-slate-800/80 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Recent Ingestion Runs
+            </h3>
+            <div className="space-y-2">
+              {runs.map((run) => (
+                <div
+                  key={run.id}
+                  className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="px-2 py-0.5 rounded font-bold uppercase text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      {run.status}
+                    </span>
+                    <strong className="text-white">{run.source}</strong>
+                    <span className="text-slate-400">Past {run.max_age_hours} hrs</span>
+                  </div>
+                  <div className="text-slate-400 flex items-center gap-4">
+                    <span className="text-slate-300">
+                      {run.result_summary || "Awaiting execution"}
+                    </span>
+                    <time className="text-slate-500">
+                      {new Date(run.created_at).toLocaleTimeString()}
+                    </time>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

@@ -30,7 +30,7 @@ create table if not exists public.profiles (
 
 create table if not exists public.user_roles (
   user_id uuid primary key references public.profiles(id) on delete cascade,
-  role text not null default 'user' check (role in ('user', 'admin'))
+  role text not null default 'user' check (role in ('user', 'recruiter', 'admin'))
 );
 
 create table if not exists public.saved_jobs (
@@ -142,7 +142,7 @@ as $$
 declare old_role text;
 begin
   if not public.is_admin() then raise exception 'admin role required' using errcode = '42501'; end if;
-  if new_role not in ('user', 'admin') then raise exception 'invalid role'; end if;
+  if new_role not in ('user', 'recruiter', 'admin') then raise exception 'invalid role'; end if;
   select role into old_role from public.user_roles where user_id = target_user_id for update;
   if old_role is null then raise exception 'user not found'; end if;
   if old_role = 'admin' and new_role = 'user'

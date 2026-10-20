@@ -63,6 +63,8 @@ class SourceResult:
 class RunReport:
     results: List[SourceResult] = field(default_factory=list)
     new_jobs_written: int = 0
+    new_jobs: List[UnifiedJob] = field(default_factory=list)
+    extracted_jobs: List[UnifiedJob] = field(default_factory=list)
 
     @property
     def total_collected(self) -> int:
@@ -821,6 +823,14 @@ def run_pipeline(
         UnifiedJob
     ] = []
 
+    all_extracted_jobs: List[
+        UnifiedJob
+    ] = []
+
+    batch_ids: Set[
+        str
+    ] = set()
+
     # ========================================================
     # BUILD SOURCE LIST
     # ========================================================
@@ -984,30 +994,40 @@ def run_pipeline(
         )
 
         # ====================================================
-        # DEDUPLICATION
+        # ROLE RELEVANCE FILTERING
         # ====================================================
 
-        fresh_jobs = _deduplicate_jobs(
-            normalized_jobs,
-            seen_ids,
-        )
+        role_matched_jobs: List[UnifiedJob] = []
+        for job in normalized_jobs:
+            search_kw = getattr(job, "search_keyword", "") or ""
+            title = getattr(job, "title", "") or ""
+            desc = getattr(job, "full_description", "") or ""
+            if search_kw and search_kw != NOT_SPECIFIED:
+                from .role_matcher import is_job_role_relevant
+                if not is_job_role_relevant(title, search_kw, desc):
+                    print(
+                        f"[RoleFilter] Filtered out irrelevant role for {display_name}: "
+                        f"'{title}' (query: '{search_kw}')"
+                    )
+                    result.skipped_invalid += 1
+                    continue
+            role_matched_jobs.append(job)
 
         print(
             f"[Pipeline] "
-            f"{display_name} new jobs after "
-            f"deduplication: "
-            f"{len(fresh_jobs)}"
+            f"{display_name} matched role relevance: "
+            f"{len(role_matched_jobs)} jobs"
         )
 
         # ====================================================
         # ENRICHMENT
         # ====================================================
 
-        if apply_enrichment and fresh_jobs:
+        if apply_enrichment and role_matched_jobs:
 
-            fresh_jobs = _enrich_jobs(
+            role_matched_jobs = _enrich_jobs(
                 display_name,
-                fresh_jobs,
+                role_matched_jobs,
             )
 
             print(
@@ -1023,32 +1043,39 @@ def run_pipeline(
             )
 
         # ====================================================
+        # DEDUPLICATION & BATCH EXTRACTION TRACKING
+        # ====================================================
+
+        fresh_jobs = []
+        for job in role_matched_jobs:
+            job_id = _clean(getattr(job, "job_id", ""))
+            if not job_id:
+                continue
+
+            # Keep in current session's extracted jobs (deduplicated within this run)
+            if job_id not in batch_ids:
+                batch_ids.add(job_id)
+                all_extracted_jobs.append(job)
+
+            # Check if new to historical storage
+            if job_id not in seen_ids:
+                fresh_jobs.append(job)
+                seen_ids.add(job_id)
+
+        print(
+            f"[Pipeline] "
+            f"{display_name} session jobs: "
+            f"{len([j for j in all_extracted_jobs if getattr(j, 'source', '') == display_name])}, "
+            f"new to catalog: {len(fresh_jobs)}"
+        )
+
+        # ====================================================
         # ADD TO FINAL BATCH
         # ====================================================
 
         all_new_jobs.extend(
             fresh_jobs
         )
-
-        # ====================================================
-        # UPDATE SEEN IDS
-        # ====================================================
-
-        for job in fresh_jobs:
-
-            job_id = _clean(
-                getattr(
-                    job,
-                    "job_id",
-                    "",
-                )
-            )
-
-            if job_id:
-
-                seen_ids.add(
-                    job_id
-                )
 
         # ====================================================
         # SAVE SOURCE RESULT
@@ -1082,6 +1109,8 @@ def run_pipeline(
     report.new_jobs_written = (
         written
     )
+    report.new_jobs = all_new_jobs
+    report.extracted_jobs = all_extracted_jobs
 
     # ========================================================
     # SAVE SEEN IDS

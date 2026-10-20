@@ -55,8 +55,11 @@ class JobStore:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        output_dir: Optional[str | Path] = None,
     ):
+        if output_dir is None:
+            output_dir = Path(__file__).resolve().parent.parent / "Data"
+
         self.output_dir = Path(
             output_dir
         )

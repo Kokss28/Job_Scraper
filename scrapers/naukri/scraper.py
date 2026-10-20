@@ -10,7 +10,7 @@ import time
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote_plus, urlparse, urlunparse
 
 try:
     from scrapling.fetchers import StealthyFetcher
@@ -639,15 +639,13 @@ def extract_posted_date(
 ) -> str:
 
     selectors = [
-
+        "span.job-post-day",
+        "[class*='job-post-day']",
+        "[class*='post-day']",
         "[class*='date']",
-
         "[class*='Date']",
-
         "[class*='posted']",
-
         "[class*='Posted']",
-
     ]
 
     text = first_text(
@@ -656,6 +654,13 @@ def extract_posted_date(
     )
 
     if text:
+        try:
+            from pipeline.recency import parse_job_posted_date
+            dt = parse_job_posted_date(text)
+            if dt:
+                return dt.strftime("%d/%m/%Y %H:%M:%S")
+        except Exception:
+            pass
 
         parsed = (
             parse_posted_date_text(
@@ -2161,45 +2166,56 @@ def build_page_url(
     if page_number <= 1:
         return url
 
-    separator = (
-        "&"
-        if "?" in url
-        else "?"
-    )
+    parsed = urlparse(url)
+    path = parsed.path.rstrip('/')
 
-    return (
-        f"{url}"
-        f"{separator}"
-        f"page={page_number}"
-    )
+    # Check if path already ends with a page suffix like -2
+    if re.search(r'-\d+$', path):
+        new_path = re.sub(r'-\d+$', f'-{page_number}', path)
+    else:
+        new_path = f"{path}-{page_number}"
+
+    return urlunparse(parsed._replace(path=new_path))
 
 
 # ============================================================
 # MAIN COLLECTOR
 # ============================================================
-
 def collect_naukri_jobs(
     search_urls: Optional[List[str]] = None,
     titles: Optional[List[str]] = None,
-    max_pages: int = 5,
-    max_total: int = 20,
+    max_pages: Optional[int] = None,
+    max_total: Optional[int] = None,
     max_jobs: Optional[int] = None,
     headless: bool = True,
     enable_detail_pages: bool = ENABLE_DETAIL_PAGES,
+    keywords: Optional[List[str]] = None,
+    max_age_hours: float = 24.0,
+    **kwargs: Any,
 ) -> List[Dict[str, Any]]:
 
     # --------------------------------------------------------
-    # Compatibility with main.py
+    # Compatibility with main.py & pipeline runners
     # --------------------------------------------------------
 
-    if max_jobs is not None:
-        max_total = max_jobs
+    if titles is None and keywords is not None:
+        titles = keywords
 
-    if max_total <= 0:
-        return []
+    if "freshness" in kwargs:
+        try:
+            max_age_hours = float(kwargs["freshness"])
+        except Exception:
+            pass
 
-    if max_pages <= 0:
-        max_pages = 1
+    limit: Optional[int] = None
+    if max_jobs is not None and max_jobs > 0:
+        limit = max_jobs
+    elif max_total is not None and max_total > 0:
+        limit = max_total
+
+    pages_cap: Optional[int] = None
+    if max_pages is not None and max_pages > 0:
+        pages_cap = max_pages
 
     logger.info(
         "Starting Naukri search extraction"
@@ -2207,12 +2223,12 @@ def collect_naukri_jobs(
 
     logger.info(
         "Max pages: %s",
-        max_pages
+        pages_cap if pages_cap else "Unlimited (dynamic exhaustion)"
     )
 
     logger.info(
         "Max jobs: %s",
-        max_total
+        limit if limit else "Unlimited (all matching within time range)"
     )
 
     logger.info(
@@ -2258,17 +2274,25 @@ def collect_naukri_jobs(
                 continue
 
             slug = re.sub(
-                r"[^a-zA-Z0-9]+",
+                r"[^a-z0-9]+",
                 "-",
                 title.lower()
             ).strip("-")
 
-            if not slug:
-                continue
+            if max_age_hours <= 24:
+                age_param = "1"
+            elif max_age_hours <= 72:
+                age_param = "3"
+            elif max_age_hours <= 168:
+                age_param = "7"
+            elif max_age_hours <= 360:
+                age_param = "15"
+            else:
+                age_param = "30"
 
             url = (
                 f"{BASE_URL}/"
-                f"{slug}-jobs?jobAge=1"
+                f"{slug}-jobs?k={quote_plus(title)}&jobAge={age_param}"
             )
 
             if url not in urls:
@@ -2277,9 +2301,6 @@ def collect_naukri_jobs(
                     url
                 )
 
-            # Tag this URL with its keyword, whether it was
-            # just added above or already present from
-            # search_urls.
             url_keywords[url] = title
 
     if not urls:
@@ -2298,7 +2319,7 @@ def collect_naukri_jobs(
 
     for search_url in urls:
 
-        if len(all_jobs) >= max_total:
+        if limit and len(all_jobs) >= limit:
             break
 
         logger.info(
@@ -2306,12 +2327,20 @@ def collect_naukri_jobs(
             search_url
         )
 
-        for page_number in range(
-            1,
-            max_pages + 1
-        ):
+        consecutive_empty_pages = 0
+        consecutive_no_match_pages = 0
+        page_number = 1
 
-            if len(all_jobs) >= max_total:
+        while True:
+            if pages_cap and page_number > pages_cap:
+                logger.info(
+                    "Reached maximum page limit (%s) for %s.",
+                    pages_cap,
+                    search_url
+                )
+                break
+
+            if limit and len(all_jobs) >= limit:
                 break
 
             page_url = build_page_url(
@@ -2325,31 +2354,36 @@ def collect_naukri_jobs(
                 page_url
             )
 
-            remaining = (
-                max_total -
-                len(all_jobs)
-            )
-
             jobs = collect_from_search_page(
                 page_url,
                 headless=headless,
-                max_total=remaining
+                max_total=50
             )
 
             if not jobs:
 
+                consecutive_empty_pages += 1
                 logger.info(
-                    "No jobs found on page %s.",
-                    page_number
+                    "No jobs found on page %s (empty streak=%s).",
+                    page_number,
+                    consecutive_empty_pages
                 )
 
+                if consecutive_empty_pages >= 2:
+                    logger.info(
+                        "No more job cards available on Naukri for this query. Finished pagination."
+                    )
+                    break
+
+                page_number += 1
                 continue
 
+            consecutive_empty_pages = 0
             new_jobs_on_page = 0
 
             for job in jobs:
 
-                if len(all_jobs) >= max_total:
+                if limit and len(all_jobs) >= limit:
                     break
 
                 job_id = job.get(
@@ -2361,6 +2395,28 @@ def collect_naukri_jobs(
 
                 if job_id in seen_ids:
                     continue
+
+                # Strict recency validation: never accept an old or unverified job
+                posted_date_val = job.get("posted_date") or job.get("posted_time")
+                try:
+                    from pipeline.recency import is_job_within_recency
+                    if not is_job_within_recency(posted_date_val, max_age_hours=max_age_hours, strict=True):
+                        logger.info("Skipping old Naukri job: %s | posted=%s", job.get("title"), posted_date_val)
+                        continue
+                except Exception:
+                    pass
+
+                # Role relevance validation: ensure job matches the requested role
+                title_val = job.get("title") or job.get("job_title") or ""
+                keyword_val = url_keywords.get(search_url, "")
+                desc_val = job.get("description", "")
+                try:
+                    from pipeline.role_matcher import is_job_role_relevant
+                    if keyword_val and not is_job_role_relevant(title_val, keyword_val, desc_val):
+                        logger.info("Skipping Naukri job with irrelevant role: '%s' for keyword '%s'", title_val, keyword_val)
+                        continue
+                except Exception:
+                    pass
 
                 seen_ids.add(
                     job_id
@@ -2418,14 +2474,34 @@ def collect_naukri_jobs(
 
                 new_jobs_on_page += 1
 
+            total_status = f"{len(all_jobs)}/{limit}" if limit else f"{len(all_jobs)} total"
             logger.info(
-                "Page %s added %s new jobs.",
+                "Page %s added %s new matching jobs (%s).",
                 page_number,
-                new_jobs_on_page
+                new_jobs_on_page,
+                total_status,
             )
 
             if new_jobs_on_page == 0:
+                consecutive_no_match_pages += 1
+                if consecutive_no_match_pages >= 2:
+                    logger.info(
+                        "Consecutive pages had no jobs matching the requested time window (past %s hours). Pagination complete.",
+                        max_age_hours
+                    )
+                    break
+            else:
+                consecutive_no_match_pages = 0
+
+            if limit and len(all_jobs) >= limit:
                 break
+
+            # Safety cap of 50 pages (1,000+ jobs) to prevent endless infinite server loops
+            if page_number >= 50:
+                logger.info("Reached 50 pages on Naukri. Ending pagination.")
+                break
+
+            page_number += 1
 
     # --------------------------------------------------------
     # Final deduplication
@@ -2459,7 +2535,7 @@ def collect_naukri_jobs(
             job
         )
 
-        if len(final_jobs) >= max_total:
+        if limit and len(final_jobs) >= limit:
             break
 
     logger.info(

@@ -124,6 +124,44 @@ INDIAN_CITY_TO_STATE = {
     "Visakhapatnam": "Andhra Pradesh",
 }
 
+STATE_ABBR_MAP: Dict[str, str] = {
+    "KA": "Karnataka",
+    "TN": "Tamil Nadu",
+    "MH": "Maharashtra",
+    "DL": "Delhi",
+    "TG": "Telangana",
+    "TS": "Telangana",
+    "HR": "Haryana",
+    "UP": "Uttar Pradesh",
+    "WB": "West Bengal",
+    "GJ": "Gujarat",
+    "KL": "Kerala",
+    "AP": "Andhra Pradesh",
+    "MP": "Madhya Pradesh",
+    "RJ": "Rajasthan",
+    "PB": "Punjab",
+    "OR": "Odisha",
+    "OD": "Odisha",
+    "CH": "Chandigarh",
+    "JH": "Jharkhand",
+    "UT": "Uttarakhand",
+    "UK": "Uttarakhand",
+    "AS": "Assam",
+    "BR": "Bihar",
+    "GA": "Goa",
+    "HP": "Himachal Pradesh",
+    "JK": "Jammu and Kashmir",
+    "PY": "Puducherry",
+    "TR": "Tripura",
+    "ML": "Meghalaya",
+    "MN": "Manipur",
+    "NL": "Nagaland",
+    "MZ": "Mizoram",
+    "AR": "Arunachal Pradesh",
+    "SK": "Sikkim",
+    "CG": "Chhattisgarh",
+}
+
 
 # ============================================================
 # GENERIC CLEANING
@@ -283,13 +321,18 @@ def _match_known_state(
     value: str,
 ) -> Optional[str]:
     """
-    Match an exact value against a known Indian state.
+    Match an exact value against a known Indian state or abbreviation.
     """
 
     value = _clean(value)
 
     if not value:
         return None
+
+    # Check abbreviations (e.g. KA -> Karnataka, TN -> Tamil Nadu)
+    val_upper = value.upper().strip()
+    if val_upper in STATE_ABBR_MAP:
+        return STATE_ABBR_MAP[val_upper]
 
     for state in sorted(
         INDIAN_STATES,
@@ -652,6 +695,27 @@ def _normalize_separate_location_fields(
                 state = possible_state
 
             country = NOT_SPECIFIED
+
+    # --------------------------------------------------------
+    # CITY / STATE ABBREVIATION RESOLUTION
+    # --------------------------------------------------------
+    # If city is actually an Indian state code (e.g. KA, TN, HR) or state name
+    city_as_state = _match_known_state(city)
+    if city_as_state:
+        if not state or state.lower() == NOT_SPECIFIED.lower():
+            state = city_as_state
+        city = NOT_SPECIFIED
+    elif (not state or state.lower() == NOT_SPECIFIED.lower()) and city and city != NOT_SPECIFIED:
+        # Check if city maps to known state (e.g. Bengaluru -> Karnataka)
+        inferred_state = INDIAN_CITY_TO_STATE.get(city)
+        if inferred_state:
+            state = inferred_state
+
+    # Check if state itself is an abbreviation (e.g. KA -> Karnataka)
+    if state:
+        matched_state = _match_known_state(state)
+        if matched_state:
+            state = matched_state
 
     # --------------------------------------------------------
     # FINAL VALUES
