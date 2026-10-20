@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 PROJECT_ROOT = BASE_DIR.parent
 
-CSV_FILE = PROJECT_ROOT / "csv_output" / "unified_jobs.csv"
+CSV_FILE = PROJECT_ROOT / "Data" / "unified_jobs.csv"
 
 LABEL_FILE = BASE_DIR / "production_review_labeled.csv"
 

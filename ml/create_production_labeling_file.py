@@ -6,7 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 INPUT_FILE = (
     BASE_DIR
-    / "csv_output"
+    / "Data"
     / "unified_jobs.csv"
 )
 

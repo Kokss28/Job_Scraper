@@ -10,7 +10,7 @@ import joblib
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-CSV_FILE = BASE_DIR / "csv_output" / "unified_jobs.csv"
+CSV_FILE = BASE_DIR / "Data" / "unified_jobs.csv"
 ML_DIR = BASE_DIR / "ml"
 MODEL_DIR = ML_DIR / "models"
 

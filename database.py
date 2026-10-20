@@ -1,6 +1,12 @@
 import csv
 import sqlite3
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from config import OUTPUT_DIR
 
@@ -11,7 +17,7 @@ from config import OUTPUT_DIR
 # CSV_PATH / DB_PATH are derived from config.OUTPUT_DIR so that
 # this script always targets the same output directory as
 # main.py (respecting the PIPELINE_OUTPUT_DIR environment
-# variable / .env setting). Do not hardcode "csv_output" here
+# variable / .env setting). Do not hardcode "Data" here
 # again — that previously caused this script to silently sync
 # the wrong files whenever PIPELINE_OUTPUT_DIR was customized.
 # ============================================================
@@ -36,6 +42,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     country TEXT,
     min_experience_years TEXT,
     max_experience_years TEXT,
+    experience_review TEXT,
     skills TEXT,
     degree_required TEXT,
     specialization_required TEXT,
@@ -76,7 +83,7 @@ def create_database():
     expected_columns = [
         "job_id", "source", "title", "company", "search_keyword",
         "city", "state", "country", "min_experience_years",
-        "max_experience_years", "skills", "degree_required",
+        "max_experience_years", "experience_review", "skills", "degree_required",
         "specialization_required", "collected_at", "link",
         "full_description",
     ]
@@ -95,17 +102,19 @@ def create_database():
 # IMPORT CSV → SQLITE
 # ============================================================
 
-def import_csv_to_database():
+def import_csv_to_database(target_csv=None):
 
-    if not CSV_PATH.exists():
-        print(f"[ERROR] CSV file not found: {CSV_PATH}")
+    csv_file = Path(target_csv) if target_csv else CSV_PATH
+
+    if not csv_file.exists():
+        print(f"[ERROR] CSV file not found: {csv_file}")
         return
 
     print("=" * 70)
-    print("CSV → SQLITE DATABASE IMPORT")
+    print("CSV -> SQLITE DATABASE IMPORT")
     print("=" * 70)
 
-    print(f"CSV: {CSV_PATH}")
+    print(f"CSV: {csv_file}")
     print(f"Database: {DB_PATH}")
     print()
 
@@ -121,7 +130,7 @@ def import_csv_to_database():
     )
 
     with open(
-        CSV_PATH,
+        csv_file,
         "r",
         encoding="utf-8-sig",
         newline=""
@@ -153,6 +162,7 @@ def import_csv_to_database():
                 row.get("country", "Not Specified"),
                 row.get("min_experience_years", "Not Specified"),
                 row.get("max_experience_years", "Not Specified"),
+                row.get("experience_review", ""),
                 row.get("skills", "Not Specified"),
                 row.get("degree_required", "Not Specified"),
                 row.get("specialization_required", "Not Specified"),
@@ -174,6 +184,7 @@ def import_csv_to_database():
                     country,
                     min_experience_years,
                     max_experience_years,
+                    experience_review,
                     skills,
                     degree_required,
                     specialization_required,
@@ -181,7 +192,7 @@ def import_csv_to_database():
                     link,
                     full_description
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
                 ON CONFLICT(job_id)
                 DO UPDATE SET
@@ -194,6 +205,7 @@ def import_csv_to_database():
                     country = excluded.country,
                     min_experience_years = excluded.min_experience_years,
                     max_experience_years = excluded.max_experience_years,
+                    experience_review = excluded.experience_review,
                     skills = excluded.skills,
                     degree_required = excluded.degree_required,
                     specialization_required = excluded.specialization_required,

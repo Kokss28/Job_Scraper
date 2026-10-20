@@ -55,8 +55,11 @@ class JobStore:
 
     def __init__(
         self,
-        output_dir: str | Path,
+        output_dir: Optional[str | Path] = None,
     ):
+        if output_dir is None:
+            output_dir = Path(__file__).resolve().parent.parent / "Data"
+
         self.output_dir = Path(
             output_dir
         )
@@ -358,6 +361,28 @@ class JobStore:
                 f"{error}"
             ) from error
 
+    def _upgrade_csv_schema(self) -> None:
+        """Rewrite an older unified CSV header to the current schema."""
+        if self._csv_needs_header():
+            return
+        with open(self.csv_path, "r", newline="", encoding="utf-8-sig") as source:
+            reader = csv.DictReader(source)
+            old_fields = reader.fieldnames or []
+            if all(field in old_fields for field in UnifiedJob.fieldnames()):
+                return
+            rows = list(reader)
+
+        temp_path = self.csv_path.with_suffix(self.csv_path.suffix + ".tmp")
+        try:
+            with open(temp_path, "w", newline="", encoding="utf-8-sig") as target:
+                writer = csv.DictWriter(target, fieldnames=UnifiedJob.fieldnames())
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row)
+            os.replace(temp_path, self.csv_path)
+        except OSError as error:
+            raise StorageError(f"Could not upgrade CSV schema: {error}") from error
+
     # ========================================================
     # VALIDATE JOB
     # ========================================================
@@ -507,6 +532,8 @@ class JobStore:
                 exist_ok=True,
             )
 
+            self._upgrade_csv_schema()
+
             needs_header = (
                 self._csv_needs_header()
             )
@@ -624,7 +651,7 @@ def _run_storage_tests() -> None:
     Lightweight storage module test.
 
     Uses a temporary directory and does not touch the real
-    csv_output directory.
+    Data directory.
     """
 
     import tempfile

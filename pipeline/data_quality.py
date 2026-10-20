@@ -23,8 +23,8 @@ Run:
     python -m pipeline.data_quality
 
 Expected files:
-    csv_output/unified_jobs.csv
-    csv_output/jobs.db
+    Data/unified_jobs.csv
+    Data/jobs.db
 """
 
 from __future__ import annotations
@@ -44,8 +44,7 @@ from config import OUTPUT_DIR
 #
 # CSV_PATH / DB_PATH are derived from config.OUTPUT_DIR so this
 # audit always checks the same files main.py/database.py write
-# to (respecting PIPELINE_OUTPUT_DIR). Do not hardcode
-# "csv_output" here again.
+# to (respecting PIPELINE_OUTPUT_DIR).
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -53,7 +52,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CSV_PATH = OUTPUT_DIR / "unified_jobs.csv"
 DB_PATH = OUTPUT_DIR / "jobs.db"
 
-EXPECTED_SOURCES = {"linkedin", "naukri"}
+EXPECTED_SOURCES = {"linkedin", "naukri", "indeed"}
 
 NOT_SPECIFIED_VALUES = {
     "",

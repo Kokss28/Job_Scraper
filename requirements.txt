@@ -2,12 +2,13 @@
 numpy
 pandas
 joblib
-scikit-learn==1.6.1
+scikit-learn>=1.9.1
 beautifulsoup4
 
 # ---- LinkedIn scraper (from LinkedIn_Job_Pipeline) ----
 # Scrapling provides both a plain requests-style Fetcher and a
 # StealthyFetcher (headless-browser) mode used for anti-bot pages.
+scrapling[fetchers]
 "scrapling[all]"
 
 # ---- Naukri scraper (from Naukri-scraper) ----
@@ -16,7 +17,11 @@ beautifulsoup4
 # After installing requirements, also run: playwright install chromium
 playwright
 
+# ---- Indeed scraper (from the standalone Indeed project) ----
+python-jobspy
+
 # ---- Unified pipeline additions ----
 python-dotenv     # optional .env configuration loading (config.py)
+supabase          # Supabase sync worker for the Next.js admin dashboard
 pytest            # test suite
 pytest-mock       # convenient mocking in tests

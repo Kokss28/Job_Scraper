@@ -124,6 +124,44 @@ INDIAN_CITY_TO_STATE = {
     "Visakhapatnam": "Andhra Pradesh",
 }
 
+STATE_ABBR_MAP: Dict[str, str] = {
+    "KA": "Karnataka",
+    "TN": "Tamil Nadu",
+    "MH": "Maharashtra",
+    "DL": "Delhi",
+    "TG": "Telangana",
+    "TS": "Telangana",
+    "HR": "Haryana",
+    "UP": "Uttar Pradesh",
+    "WB": "West Bengal",
+    "GJ": "Gujarat",
+    "KL": "Kerala",
+    "AP": "Andhra Pradesh",
+    "MP": "Madhya Pradesh",
+    "RJ": "Rajasthan",
+    "PB": "Punjab",
+    "OR": "Odisha",
+    "OD": "Odisha",
+    "CH": "Chandigarh",
+    "JH": "Jharkhand",
+    "UT": "Uttarakhand",
+    "UK": "Uttarakhand",
+    "AS": "Assam",
+    "BR": "Bihar",
+    "GA": "Goa",
+    "HP": "Himachal Pradesh",
+    "JK": "Jammu and Kashmir",
+    "PY": "Puducherry",
+    "TR": "Tripura",
+    "ML": "Meghalaya",
+    "MN": "Manipur",
+    "NL": "Nagaland",
+    "MZ": "Mizoram",
+    "AR": "Arunachal Pradesh",
+    "SK": "Sikkim",
+    "CG": "Chhattisgarh",
+}
+
 
 # ============================================================
 # GENERIC CLEANING
@@ -283,13 +321,18 @@ def _match_known_state(
     value: str,
 ) -> Optional[str]:
     """
-    Match an exact value against a known Indian state.
+    Match an exact value against a known Indian state or abbreviation.
     """
 
     value = _clean(value)
 
     if not value:
         return None
+
+    # Check abbreviations (e.g. KA -> Karnataka, TN -> Tamil Nadu)
+    val_upper = value.upper().strip()
+    if val_upper in STATE_ABBR_MAP:
+        return STATE_ABBR_MAP[val_upper]
 
     for state in sorted(
         INDIAN_STATES,
@@ -654,6 +697,27 @@ def _normalize_separate_location_fields(
             country = NOT_SPECIFIED
 
     # --------------------------------------------------------
+    # CITY / STATE ABBREVIATION RESOLUTION
+    # --------------------------------------------------------
+    # If city is actually an Indian state code (e.g. KA, TN, HR) or state name
+    city_as_state = _match_known_state(city)
+    if city_as_state:
+        if not state or state.lower() == NOT_SPECIFIED.lower():
+            state = city_as_state
+        city = NOT_SPECIFIED
+    elif (not state or state.lower() == NOT_SPECIFIED.lower()) and city and city != NOT_SPECIFIED:
+        # Check if city maps to known state (e.g. Bengaluru -> Karnataka)
+        inferred_state = INDIAN_CITY_TO_STATE.get(city)
+        if inferred_state:
+            state = inferred_state
+
+    # Check if state itself is an abbreviation (e.g. KA -> Karnataka)
+    if state:
+        matched_state = _match_known_state(state)
+        if matched_state:
+            state = matched_state
+
+    # --------------------------------------------------------
     # FINAL VALUES
     # --------------------------------------------------------
 
@@ -939,12 +1003,12 @@ def _normalize_naukri_location(
 def _normalize_education(
     value: Any,
 ) -> str:
-    """
+    r"""
     Normalize education values.
 
     Examples:
 
-        B\.?E\., Bachelor(?:'s)?, degree
+        B\. ?E\., Bachelor(?:'s)?, degree
 
     becomes:
 
@@ -1276,8 +1340,8 @@ def _parse_experience_text(
     # Fresher
     # --------------------------------------------------------
 
-    if re.search(
-        r"\bfreshers?\b",
+    if re.search(r"\bfreshers?\b", text_lower, flags=re.I) and not re.search(
+        rf"\b({number})\s*(?:-|to|â€“|â€”|–|—)\s*({number})\s*(?:years?|yrs?)\b",
         text_lower,
         flags=re.I,
     ):
@@ -1381,7 +1445,7 @@ def _parse_experience_text(
 
         return (
             value,
-            value,
+            NOT_SPECIFIED,
         )
 
     # --------------------------------------------------------
@@ -1436,7 +1500,7 @@ def _parse_experience_text(
 
         return (
             value,
-            value,
+            NOT_SPECIFIED,
         )
 
     # --------------------------------------------------------
@@ -1471,7 +1535,7 @@ def _parse_experience_text(
 
         return (
             years_text,
-            years_text,
+            NOT_SPECIFIED,
         )
 
     # --------------------------------------------------------
@@ -1506,7 +1570,7 @@ def _parse_experience_text(
 
         return (
             years_text,
-            years_text,
+            NOT_SPECIFIED,
         )
 
     # --------------------------------------------------------
@@ -1531,7 +1595,7 @@ def _parse_experience_text(
         if float(value) <= 100:
             return (
                 value,
-                value,
+                NOT_SPECIFIED,
             )
 
     return None
@@ -1557,28 +1621,16 @@ def _extract_experience_range(
     The job description is the primary source.
     """
 
-    link = _first_value(
-        raw_job,
-        "link",
-        "url",
-        "job_url",
-        default="",
-    )
+    # ========================================================
+    # 1. DESCRIPTION EXPERIENCE (primary evidence)
+    # ========================================================
 
-    url_match = re.search(
-        r"(?:-|/)(\d+)-to-(\d+)-years?(?:-|/|$)",
-        link,
-        flags=re.I,
-    )
-
-    if url_match:
-        return (
-            url_match.group(1),
-            url_match.group(2),
-        )
+    description_result = _parse_experience_text(full_description)
+    if description_result:
+        return description_result
 
     # ========================================================
-    # 1. EXPLICIT STRUCTURED/SOURCE EXPERIENCE
+    # 2. EXPLICIT STRUCTURED/SOURCE EXPERIENCE
     # ========================================================
 
     minimum = _first_value(
@@ -1670,6 +1722,65 @@ def _extract_experience_range(
         NOT_SPECIFIED,
         NOT_SPECIFIED,
     )
+
+
+def _experience_review_reason(
+    raw_job: Dict[str, Any],
+    description: str,
+    minimum: str,
+    maximum: str,
+) -> str:
+    """Return a review note when experience wording is unclear or conflicts."""
+    text = _clean(description).lower()
+    if not text:
+        return ""
+
+    # Multiple experience figures often mix overall requirements with
+    # skill-specific or preferred requirements; avoid silently choosing one.
+    mentions = list(re.finditer(
+        r"\b\d+(?:\.\d+)?\s*(?:\+\s*)?(?:years?|yrs?|months?)\b",
+        text,
+        flags=re.I,
+    ))
+    if len(mentions) > 1:
+        return "Review: multiple experience figures in description"
+
+    # A bare duration does not say whether it is an exact range or minimum.
+    if mentions and not re.search(
+        r"(?:\d+(?:\.\d+)?\s*\+|\d+(?:\.\d+)?\s*(?:-|to|–|—)\s*\d+|\b(?:at\s+least|minimum|min\.?)\b)",
+        text,
+        flags=re.I,
+    ):
+        return "Review: experience duration has no explicit bound"
+
+    source_min = _clean_experience(_first_value(
+        raw_job, "min_experience_years", "min_experience", "experience_min", default=""
+    ))
+    source_max = _clean_experience(_first_value(
+        raw_job, "max_experience_years", "max_experience", "experience_max", default=""
+    ))
+    if source_min != NOT_SPECIFIED and source_max != NOT_SPECIFIED:
+        try:
+            if float(source_min) > float(source_max):
+                return "Review: minimum experience exceeds maximum"
+        except ValueError:
+            return "Review: malformed structured experience range"
+
+    description_range = _parse_experience_text(description)
+    link = _first_value(raw_job, "link", "url", "job_url", default="")
+    url_match = re.search(
+        r"(?:-|/)(\d+)-to-(\d+)-years?(?:-|/|$)", link, flags=re.I
+    )
+    if description_range and url_match and description_range != url_match.groups():
+        return "Review: URL experience range conflicts with description"
+
+    if description_range and source_min != NOT_SPECIFIED:
+        if source_min != description_range[0] or (
+            source_max != NOT_SPECIFIED and source_max != description_range[1]
+        ):
+            return "Review: structured experience conflicts with description"
+
+    return ""
 
 
 # ============================================================
@@ -1941,6 +2052,12 @@ def _extract_common_fields(
             full_description,
         )
     )
+    experience_review = _experience_review_reason(
+        raw_job,
+        full_description,
+        minimum,
+        maximum,
+    )
 
     # --------------------------------------------------------
     # SKILLS FALLBACK
@@ -1969,6 +2086,7 @@ def _extract_common_fields(
         ),
         "min_experience_years": minimum,
         "max_experience_years": maximum,
+        "experience_review": experience_review,
         "skills": _not_specified(skills),
         "degree_required": degree_required,
         "specialization_required": (
@@ -2039,6 +2157,8 @@ def normalize_linkedin_job(
         max_experience_years=fields[
             "max_experience_years"
         ],
+
+        experience_review=fields["experience_review"],
 
         skills=fields[
             "skills"
@@ -2187,6 +2307,8 @@ def normalize_naukri_job(
             "max_experience_years"
         ],
 
+        experience_review=fields["experience_review"],
+
         skills=fields[
             "skills"
         ],
@@ -2284,6 +2406,8 @@ def normalize(
         max_experience_years=fields[
             "max_experience_years"
         ],
+
+        experience_review=fields["experience_review"],
 
         skills=fields[
             "skills"
@@ -2886,9 +3010,14 @@ def _run_experience_tests():
         ),
         (
             "0.5",
-            "0.5",
+            NOT_SPECIFIED,
         ),
         "Experience 6 months",
+    )
+    _assert_equal(
+        job_4.experience_review,
+        "Review: experience duration has no explicit bound",
+        "Ambiguous duration is flagged for review",
     )
 
     # --------------------------------------------------------
