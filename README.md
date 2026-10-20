@@ -1,105 +1,270 @@
-# 🕸️ Job Scraper Pipeline
+# 🇮🇳 Job Intelligence System & Enterprise Scraper Pipeline
+### High-Performance Talent Analytics, ML Enrichment & Multi-Source Job Portal
 
-A Python pipeline that scrapes job postings from **LinkedIn**, **Naukri**, and **Indeed**, cleans and normalizes them into one unified format, enriches them using **Machine Learning**, removes duplicates, and stores everything in both **CSV** and **SQLite**.
+A complete end-to-end talent intelligence platform that scrapes tech job postings from **LinkedIn**, **Naukri**, and **Indeed**, normalizes them into a unified 17-column schema, enriches missing qualifications with **Machine Learning**, eliminates duplicates, and serves the dataset through both local databases (**CSV**, **SQLite**) and a premium **Next.js Enterprise Web Dashboard**.
 
-> **Goal:** Keep one clean, searchable job database — and make it easy to change what jobs you're searching for from a single file.
+> **🎯 Primary Goal:** Keep one clean, automated, and searchable database of tech opportunities across India with real-time analytics, career tier intelligence, and interactive scraping controls.
 
 ---
 
 ## 📚 Table of Contents
 
-- [How It Works (Diagram)](#-how-it-works-diagram)
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [Output Schema](#-output-schema)
-- [Requirements](#-requirements)
-- [Installation](#-installation)
-- [Changing Search Keywords](#-changing-search-keywords)
-- [Environment Variables](#-environment-variables)
-- [Running the Pipeline](#-running-the-pipeline)
-- [Command-Line Options](#-command-line-options)
-- [Testing & Data Quality](#-testing--data-quality)
-- [SQLite Database](#-sqlite-database)
-- [ML Enrichment](#-ml-enrichment)
-- [Deduplication Logic](#-deduplication-logic)
-- [Troubleshooting](#-troubleshooting)
-- [Responsible Scraping](#-responsible-scraping)
-- [License](#-license)
+- [🖼️ Architecture & Workflow (Diagram)](#️-architecture--workflow-diagram)
+- [🚀 How to Start](#-how-to-start)
+  - [1. Running the Python Scraper Pipeline](#1-running-the-python-scraper-pipeline)
+  - [2. Starting the Next.js Web Dashboard](#2-starting-the-nextjs-web-dashboard)
+- [🖥️ Web Application Workspaces (Screenshots)](#️-web-application-workspaces-screenshots)
+  - [Screen 1: Job Explorer & Application Hub](#-screen-1-job-explorer--application-hub)
+  - [Screen 2: Candidate Application Pipeline](#-screen-2-candidate-application-pipeline)
+  - [Screen 3: Experience & Career Intelligence](#-screen-3-experience--career-intelligence)
+  - [Screen 4: Market & Geographic Insights](#-screen-4-market--geographic-insights)
+  - [Screen 5: Scraper Studio & Live Ingestion](#-screen-5-scraper-studio--live-ingestion)
+  - [Screen 6: Admin Governance & RBAC Console](#-screen-6-admin-governance--rbac-console)
+- [✨ Key Features](#-key-features)
+- [🗂️ Project Structure](#️-project-structure)
+- [📊 Canonical 17-Column Schema](#-canonical-17-column-schema)
+- [🧰 Requirements & Installation](#-requirements--installation)
+- [🔑 Keyword Configuration](#-keyword-configuration)
+- [🌱 Environment Variables](#-environment-variables)
+- [🎛️ Pipeline Command-Line Options](#️-pipeline-command-line-options)
+- [🧪 Testing & Data Quality Audit](#-testing--data-quality-audit)
+- [🤖 Machine Learning Enrichment](#-machine-learning-enrichment)
+- [🛠️ Troubleshooting](#️-troubleshooting)
+- [⚖️ Responsible Scraping & License](#️-responsible-scraping--license)
 
 ---
 
-## 🖼️ How It Works (Diagram)
+## 🖼️ Architecture & Workflow (Diagram)
 
 ```mermaid
 flowchart TD
-    A["⚙️ config.py<br/>Search keywords & settings"] --> B["LinkedIn Scraper"]
-    A --> C["Naukri Scraper"]
-    A --> J["Indeed Scraper"]
+    subgraph SOURCING ["🌐 Multi-Source Job Ingestion"]
+        CFG["⚙️ config.py<br/>Search Keywords & Global Settings"]
+        LI["💼 LinkedIn Scraper<br/>(Scrapling / Anti-Bot Fetcher)"]
+        NK["🔷 Naukri Scraper<br/>(Playwright Headless Browser)"]
+        IN["🎯 Indeed Scraper<br/>(JobSpy Engine)"]
+        CFG --> LI
+        CFG --> NK
+        CFG --> IN
+    end
 
-    B --> D["🔄 Normalizer<br/>Converts to unified schema"]
-    C --> D
-    J --> D
+    subgraph PROCESSING ["⚡ Normalization & Enrichment Engine"]
+        NORM["🔄 Schema Normalizer<br/>Standardize 17 Columns & Indian Hubs"]
+        VAL["✅ Data Quality Validator<br/>Required Fields & Format Audit"]
+        ML["🤖 ML Enrichment<br/>Degree & Specialization Predictor"]
+        DEDUP["🧹 Smart Deduplication<br/>Unique ID & URL Cache Matching"]
+        
+        LI --> NORM
+        NK --> NORM
+        IN --> NORM
+        NORM --> VAL
+        VAL --> ML
+        ML --> DEDUP
+    end
 
-    D --> E["✅ Validator<br/>Checks required fields"]
-    E --> F["🤖 ML Enrichment<br/>Predicts degree & specialization"]
-    F --> G["🧹 Deduplication<br/>Skips jobs already saved"]
+    subgraph STORAGE ["💾 Data & Persistence Layer"]
+        CSV[("📄 Data/unified_jobs.csv<br/>(Excel & Analytics Snapshot)")]
+        SQL[("🗄️ Data/jobs.db (SQLite)<br/>(Full-Text Queryable Database)")]
+        SUPA[("☁️ Supabase Cloud (PostgreSQL)<br/>(Auth, RLS & RBAC Profiles)")]
+        
+        DEDUP --> CSV
+        DEDUP --> SQL
+        DEDUP -.->|Sync Worker| SUPA
+    end
 
-    G --> H[("📄 unified_jobs.csv")]
-    G --> I[("🗄️ jobs.db (SQLite)")]
+    subgraph WEBAPP ["🖥️ Next.js Enterprise Web Portal (Port 3000)"]
+        PORTAL["🌐 Next.js App Router (React 19 + Tailwind CSS)"]
+        CSV --> PORTAL
+        SQL --> PORTAL
+        SUPA --> PORTAL
 
-    style A fill:#4C6EF5,color:#fff
-    style B fill:#12B886,color:#fff
-    style C fill:#12B886,color:#fff
-    style D fill:#F59F00,color:#fff
-    style E fill:#F59F00,color:#fff
-    style F fill:#E64980,color:#fff
-    style G fill:#845EF7,color:#fff
-    style H fill:#495057,color:#fff
-    style I fill:#495057,color:#fff
+        P1["💼 Job Explorer<br/>Dual Experience Sliders & Drawer"]
+        P2["🔖 Saved Pipeline<br/>Kanban Status Application Tracker"]
+        P3["🎯 Experience Intel<br/>Distribution Curves & Career Tiers"]
+        P4["🏢 Market & Hubs<br/>Tech Corridors & Hiring Enterprises"]
+        P5["⚡ Scraper Studio<br/>Trigger Live Runs in Real-Time"]
+        P6["🛡️ Admin & RBAC<br/>User Management & Role Governance"]
+
+        PORTAL --> P1
+        PORTAL --> P2
+        PORTAL --> P3
+        PORTAL --> P4
+        PORTAL --> P5
+        PORTAL --> P6
+    end
+
+    style CFG fill:#4F46E5,color:#fff,stroke:#312E81
+    style LI fill:#0A66C2,color:#fff,stroke:#004182
+    style NK fill:#003366,color:#fff,stroke:#001F3F
+    style IN fill:#2164f3,color:#fff,stroke:#0d47a1
+    style NORM fill:#F59E0B,color:#fff,stroke:#D97706
+    style VAL fill:#10B981,color:#fff,stroke:#059669
+    style ML fill:#EC4899,color:#fff,stroke:#DB2777
+    style DEDUP fill:#8B5CF6,color:#fff,stroke:#7C3AED
+    style CSV fill:#059669,color:#fff,stroke:#047857
+    style SQL fill:#2563EB,color:#fff,stroke:#1D4ED8
+    style SUPA fill:#3ECF8E,color:#000,stroke:#2BA36D
+    style PORTAL fill:#0F172A,color:#fff,stroke:#38BDF8
+    style P1 fill:#1E293B,color:#fff,stroke:#64748B
+    style P2 fill:#1E293B,color:#fff,stroke:#64748B
+    style P3 fill:#1E293B,color:#fff,stroke:#64748B
+    style P4 fill:#1E293B,color:#fff,stroke:#64748B
+    style P5 fill:#1E293B,color:#fff,stroke:#64748B
+    style P6 fill:#1E293B,color:#fff,stroke:#64748B
 ```
-
-**In plain words:**
-1. You set your job search keywords once in `config.py`.
-2. The **LinkedIn**, **Naukri**, and **Indeed** scrapers collect raw job postings.
-3. The **normalizer** reshapes all three sources into one common 16-column format.
-4. The **validator** checks that required fields (title, company, link, etc.) are present and correct.
-5. **ML enrichment** fills in missing `degree_required` / `specialization_required` fields using trained models.
-6. **Deduplication** makes sure a job already in your database isn't added twice.
-7. Results are saved to a CSV file **and** synced into a SQLite database.
 
 ---
 
-## ✨ Features
+## 🚀 How to Start
 
-### 📥 Job Collection
-- Scrapes jobs from **LinkedIn**, **Naukri**, and **Indeed**
-- Supports multiple search keywords at once
-- LinkedIn: filter by location and how recently the job was posted
-- Naukri: multiple search URLs/titles, multiple pages
-- Optional detail-page scraping for richer descriptions
-- Limits like max jobs per keyword / max total jobs
+### 1. Running the Python Scraper Pipeline
 
-### 🔄 Data Processing
-- One unified schema for all three sources
-- Cleans up location, education, and experience fields
-- Fills missing values with `"Not Specified"` instead of leaving blanks
-- Validates job IDs and URLs
+The scraper collects job postings from LinkedIn, Naukri, and Indeed, enriches them with ML, and stores them in `Data/unified_jobs.csv` and `Data/jobs.db`.
 
-### 🤖 Machine Learning
-- Predicts `degree_required` and `specialization_required` when missing
-- Uses pre-trained models stored in `ml/models/`
+```powershell
+# 1. Activate the Python virtual environment
+.\.venv\Scripts\Activate.ps1
 
-### 💾 Storage
-- `unified_jobs.csv` — easy to open in Excel/Sheets
-- `jobs.db` — SQLite database for queries and other apps
+# 2. Run full scraper (all 3 sources)
+python main.py --source all
 
-### ✅ Quality Control
-Built-in audit that checks for:
-- Correct CSV structure (16 columns)
-- Duplicate job IDs
-- Missing required fields
-- Invalid/contaminated location or education data
-- CSV ↔ SQLite consistency
+# OR: Quick test run (up to 5 jobs per source)
+python main.py --source all --linkedin-max-jobs 5 --indeed-max-jobs 5 --naukri-max-jobs 5
+
+# OR: Specific source only
+python main.py --source linkedin
+python main.py --source naukri
+python main.py --source indeed
+```
+
+---
+
+### 2. Starting the Next.js Web Dashboard
+
+The web portal provides an interactive dashboard with search filters, market graphs, and application management.
+
+```powershell
+# 1. Navigate to the web folder
+cd web
+
+# 2. Run the development server
+npm run dev
+```
+
+Open your browser at **[http://localhost:3000](http://localhost:3000)**.
+
+> To run the production build:
+> ```powershell
+> cd web
+> npm run build
+> npm run start
+> ```
+
+---
+
+## 🖥️ Web Application Workspaces (Screenshots)
+
+The web dashboard is partitioned into **6 specialized workspaces** designed for job seekers, recruiters, and administrators:
+
+---
+
+### 💼 Screen 1: Job Explorer & Application Hub
+**URL:** `/dashboard`  
+The primary exploration workspace with precision dual min/max experience sliders, Indian IT tech hub filters (Bengaluru, Hyderabad, Pune, NCR, etc.), source selectors, keyword search, detailed job drawers, and direct application links.
+
+![Job Explorer & Application Hub](tests/screenshots/01_candidate_explorer.png)
+
+- **Dual-Range Experience Sliders**: Filter by exact years of experience (e.g., `2.0` to `5.0` years).
+- **Career Tier Presets**: One-click chips for Entry (0–2y), Mid (2–5y), Senior (5–8y), and Lead (8+y).
+- **Interactive Job Drawer**: View full job descriptions, required skills, and qualification metadata.
+- **Export to CSV**: Instant filtered export for offline recruiter tracking.
+
+---
+
+### 🔖 Screen 2: Candidate Application Pipeline
+**URL:** `/saved-jobs`  
+A personal candidate tracking pipeline to manage opportunities from discovery to interview.
+
+![Candidate Application Pipeline](tests/screenshots/02_candidate_pipeline.png)
+
+- **Workflow Statuses**: Organize saved opportunities across `Saved`, `Applied`, `Interviewing`, and `Archived`.
+- **Personal Notes**: Store company contact details, interview rounds, and follow-up reminders.
+- **Direct Apply Links**: Jump straight to original source postings on LinkedIn, Naukri, or Indeed.
+
+---
+
+### 🎯 Screen 3: Experience & Career Intelligence
+**URL:** `/dashboard/experience`  
+Quantitative analytics on experience requirements across the Indian tech ecosystem.
+
+![Experience & Career Intelligence](tests/screenshots/03_recruiter_experience_intel.png)
+
+- **Career Tier Market Share**: Pie chart distribution between Entry, Mid, Senior, and Leadership roles.
+- **0–15y Experience Curve**: Identifies market concentration peaks and industry hiring sweet spots.
+- **Skill Shift Analysis**: Discover how technical skill requirements evolve as seniority increases.
+
+---
+
+### 🏢 Screen 4: Market & Geographic Insights
+**URL:** `/dashboard/market`  
+Geographic corridor analysis and top hiring companies across India.
+
+![Market & Geographic Insights](tests/screenshots/04_recruiter_market_hubs.png)
+
+- **Top Indian IT Hubs**: Sourcing volume across Bengaluru, Hyderabad, Pune, Delhi NCR, Chennai, and Mumbai.
+- **Premier Hiring Enterprises**: Leaderboard ranking companies with the highest active postings (TCS, Infosys, Optum, Citi, etc.).
+- **Degree Distribution**: Market breakdown across B.Tech/B.E., MCA, Master's, and diplomas.
+
+---
+
+### ⚡ Screen 5: Scraper Studio & Live Ingestion
+**URL:** `/dashboard/scraper`  
+Trigger on-demand scraping directly from the web interface without using the command line.
+
+![Scraper Studio Overview](tests/screenshots/05_recruiter_scraper_studio.png)
+
+- **Multi-Source Toggles**: Select any combination of LinkedIn, Naukri, and Indeed.
+- **Freshness Window Slider**: Restrict collection from the last 1 hour up to 30 days.
+- **Live Output Table**: Real-time inspection of newly ingested jobs with links and verified badges.
+
+![Scraper Studio Live Run](tests/screenshots/05_recruiter_scraper_studio_live.png)
+
+---
+
+### 🛡️ Screen 6: Admin Governance & RBAC Console
+**URL:** `/admin`  
+Enterprise administration, user role assignments, access control, and audit logs.
+
+![Admin Governance & RBAC Console](tests/screenshots/06_admin_governance.png)
+
+- **Role-Based Access Control (RBAC)**: Manage user roles (`admin`, `recruiter`, `user`).
+- **User Governance**: Toggle user account status, view active sessions, and monitor usage.
+- **Audit Logs**: Track data exports, scraper dispatch runs, and system modifications.
+
+---
+
+## ✨ Key Features
+
+### 📥 1. Multi-Source Scraping
+- **LinkedIn**: Clean search using Scrapling anti-bot fetcher, customizable freshness hours, and pagination.
+- **Naukri**: High-fidelity browser automation via Playwright, detailed description parsing, and multi-page crawl.
+- **Indeed**: Broad coverage via JobSpy with location-based filtering.
+- **Centralized Keywords**: Define search queries once in `config.py` — shared across all three scrapers.
+
+### 🔄 2. Data Normalization & Cleaning
+- **Unified 17-Column Schema**: Every posting is structured into identical columns regardless of origin.
+- **Indian IT Corridor Normalization**: Standardizes non-uniform city/state names into canonical tech hubs.
+- **No Null Values**: Empty fields are cleanly populated with `"Not Specified"` to avoid blank records.
+
+### 🤖 3. Machine Learning Enrichment
+- Trained TF-IDF and Logistic Regression classifiers in `ml/models/`.
+- Automatically predicts `degree_required` and `specialization_required` when omitted by recruiters.
+- Safe inference: ML predictions never overwrite explicit data already present in job listings.
+
+### 💾 4. Multi-Layer Storage
+- **CSV (`Data/unified_jobs.csv`)**: Instant tabular view ready for Excel or Google Sheets.
+- **SQLite (`Data/jobs.db`)**: High-speed SQL query database with unique constraint indices on `job_id`.
+- **Supabase Cloud (PostgreSQL)**: Remote sync for user authentication, row-level security, and web portal persistence.
 
 ---
 
@@ -108,121 +273,115 @@ Built-in audit that checks for:
 ```
 Job_Scraper/
 │
-├── main.py                    # Entry point — run the whole pipeline from here
-├── config.py                  # Central settings (search keywords, limits, etc.)
-├── database.py                # Syncs the CSV into the SQLite database
+├── main.py                    # Master CLI entrypoint for pipeline runs
+├── config.py                  # Search keywords, locations, delays, and settings
+├── database.py                # CSV-to-SQLite database sync engine
 │
-├── pipeline/
-│   ├── normalizer.py          # Turns raw scraped data into the unified schema
-│   ├── schema.py               # Defines the unified job structure
-│   ├── storage.py              # Reads/writes CSV & SQLite
-│   ├── orchestrator.py         # Coordinates the full pipeline run
-│   ├── enrichment.py           # Connects to the ML models
-│   ├── data_quality.py         # Data audit & tests
-│   └── errors.py               # Custom error types
+├── pipeline/                  # Core processing modules
+│   ├── orchestrator.py        # Pipeline workflow coordinator
+│   ├── normalizer.py          # Unified schema transformation & location cleaning
+│   ├── schema.py              # 17-column data contract definition
+│   ├── storage.py             # CSV and SQLite read/write operations
+│   ├── enrichment.py          # Machine learning enrichment bridge
+│   ├── live_scrape_runner.py  # Headless live scraper runner for the web API
+│   ├── recency.py             # Time window filtering (1h - 30d)
+│   ├── role_matcher.py        # Keyword and title classification
+│   └── data_quality.py        # Automated schema and integrity audit
 │
-├── scrapers/
-│   ├── linkedin/scraper.py     # LinkedIn scraping logic
-│   └── naukri/scraper.py       # Naukri scraping logic
+├── scrapers/                  # Ingestion scrapers
+│   ├── linkedin/scraper.py    # LinkedIn scraper (Scrapling / Fetcher)
+│   ├── naukri/scraper.py      # Naukri scraper (Playwright browser automation)
+│   └── indeed/scraper.py      # Indeed scraper (JobSpy wrapper)
 │
-├── ml/
-│   ├── ml_predictor.py         # Loads models & makes predictions
-│   ├── train_models.py         # (Re)train the ML models
-│   └── models/                 # Saved model files (.pkl)
+├── ml/                        # Machine learning subsystem
+│   ├── ml_predictor.py        # Model loader and inference engine
+│   ├── train_models.py        # Training script for classifiers
+│   └── models/                # Serialized model checkpoints (.pkl)
 │
-├── tests/                      # Automated tests
-├── Data/
-│   ├── unified_jobs.csv        # Generated dataset (created after first run)
-│   ├── jobs.db                 # Generated SQLite database (created after first run)
-│   └── seen_job_ids.json       # Deduplication state
+├── web/                       # Next.js Enterprise Web Application
+│   ├── app/                   # App Router pages (/dashboard, /saved-jobs, /admin)
+│   ├── components/            # Reusable UI components, charts, and filter controls
+│   ├── lib/                   # Data service, taxonomy, and Supabase client
+│   ├── package.json           # Node.js dependencies
+│   ├── tailwind.config.ts     # Tailwind theme & color tokens
+│   └── tsconfig.json          # TypeScript path aliases
 │
-├── .env                        # Your local settings (never commit this)
-├── requirements.txt            # Python dependencies
-└── README.md
+├── Data/                      # Output directory (created after first run)
+│   ├── unified_jobs.csv       # Unified dataset
+│   ├── jobs.db                # SQLite database
+│   └── seen_job_ids.json      # Deduplication cache
+│
+├── tests/                     # Test suites
+│   ├── test_ui_flows.py       # Playwright end-to-end UI tests
+│   └── screenshots/           # UI walkthrough screenshots
+│
+├── requirements.txt           # Python dependencies
+├── .env.example               # Environment variables template
+└── README.md                  # Project documentation
 ```
 
 ---
 
-## 📊 Output Schema
+## 📊 Canonical 17-Column Schema
 
-Every job, no matter the source, is saved with these **16 columns**:
-
-| Column | Description |
-|---|---|
-| `job_id` | Unique identifier for the job |
-| `source` | Where it came from — `LinkedIn`, `Naukri`, or `Indeed` |
-| `title` | Job title |
-| `company` | Company name |
-| `search_keyword` | The search keyword that found this job (e.g. `data analyst`) |
-| `city` | Normalized city |
-| `state` | Normalized state |
-| `country` | Country |
-| `min_experience_years` | Minimum experience required |
-| `max_experience_years` | Maximum experience required |
-| `skills` | Extracted skills |
-| `degree_required` | Required degree (ML-enriched if missing) |
-| `specialization_required` | Required specialization (ML-enriched if missing) |
-| `collected_at` | When the pipeline scraped it |
-| `link` | Original job posting URL |
-| `full_description` | Full job description text |
-
-> Missing values are always written as `Not Specified` — never left blank.
+| # | Column Name | Type | Description |
+|:---:|---|---|---|
+| 1 | `job_id` | String | Unique hash or platform-specific identifier |
+| 2 | `source` | String | Sourcing origin (`LinkedIn`, `Naukri`, `Indeed`) |
+| 3 | `title` | String | Standardized job title |
+| 4 | `company` | String | Hiring organization name |
+| 5 | `search_keyword` | String | Keyword query used during collection |
+| 6 | `city` | String | Normalized Indian tech hub or city |
+| 7 | `state` | String | Normalized state or region |
+| 8 | `country` | String | Country name (`India`, etc.) |
+| 9 | `min_experience_years` | Float | Minimum required experience in years |
+| 10 | `max_experience_years` | Float | Maximum required experience in years |
+| 11 | `experience_review` | String | Parsed experience classification text |
+| 12 | `skills` | String | Comma-delimited extracted technical skills |
+| 13 | `degree_required` | String | Minimum qualification (ML-enriched if missing) |
+| 14 | `specialization_required` | String | Academic major (ML-enriched if missing) |
+| 15 | `collected_at` | Timestamp | ISO 8601 scraping timestamp |
+| 16 | `link` | String | Direct canonical URL to the posting |
+| 17 | `full_description` | String | Full job description text |
 
 ---
 
-## 🧰 Requirements
+## 🧰 Requirements & Installation
 
 - **Python 3.10+**
+- **Node.js 18+ & npm** (for the Web Dashboard)
 - **Git**
-- A working **internet connection**
-- A Python **virtual environment** (recommended)
+- **Windows PowerShell** (or Linux/macOS terminal)
 
-Developed and tested primarily on **Windows PowerShell**.
+### Setup Steps:
 
----
-
-## ⚙️ Installation
-
-**1. Clone the repository**
-```bash
+```powershell
+# 1. Clone repository
 git clone https://github.com/Pravink1005/Job_Scraper.git
 cd Job_Scraper
-```
 
-**2. Create and activate a virtual environment**
-
-Windows (PowerShell):
-```powershell
+# 2. Setup Python Virtual Environment
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
 
-macOS/Linux:
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-**3. Upgrade pip**
-```bash
+# 3. Install Python Dependencies
 python -m pip install --upgrade pip
-```
-
-**4. Install dependencies**
-```bash
 pip install -r requirements.txt
-```
 
-**5. Install the browser used for scraping (if prompted)**
-```bash
+# 4. Install Playwright Browser (Chromium)
 playwright install chromium
+
+# 5. Install Web Application Dependencies
+cd web
+npm install
+cd ..
 ```
 
 ---
 
-## 🔑 Changing Search Keywords
+## 🔑 Keyword Configuration
 
-All keywords live in **one place** — `config.py` — and are automatically used by LinkedIn, Naukri, and Indeed.
+All search keywords are maintained in a **single file** — [`config.py`](config.py):
 
 ```python
 DEFAULT_SEARCH_KEYWORDS = [
@@ -233,240 +392,112 @@ DEFAULT_SEARCH_KEYWORDS = [
 ]
 ```
 
-After editing, just re-run the pipeline:
-```bash
-python main.py
-```
-
-> ⚠️ Don't keep separate keyword lists anywhere else — this file is the single source of truth.
+Any changes made here automatically propagate across LinkedIn, Naukri, and Indeed on the next scrape run.
 
 ---
 
 ## 🌱 Environment Variables
 
-Keep machine-specific or private settings in a `.env` file (never commit it). Example:
+Create a `.env` file in the project root to customize paths and scraper limits:
 
 ```env
 PIPELINE_OUTPUT_DIR=Data
 LINKEDIN_LOCATION=India
-LINKEDIN_MAX_JOBS_PER_KEYWORD=100
-LINKEDIN_JOBS_PER_PAGE=25
-LINKEDIN_MAX_AGE_HOURS=4
+LINKEDIN_MAX_JOBS_PER_KEYWORD=50
+LINKEDIN_MAX_AGE_HOURS=24
 NAUKRI_MAX_PAGES=5
-NAUKRI_MAX_JOBS=100
-NAUKRI_MAX_TOTAL=
-NAUKRI_DELAY_SECONDS=2.0
+NAUKRI_MAX_JOBS=50
 NAUKRI_HEADLESS=true
-NAUKRI_BROWSER=chromium
-NAUKRI_PROFILE_DIR=
 INDEED_LOCATION=India
 INDEED_MAX_JOBS_PER_KEYWORD=50
 INDEED_MAX_AGE_HOURS=168
 ```
 
-🚫 **Never commit:** API keys, cookies, browser session profiles, passwords, or personal tokens.
-
----
-
-## ▶️ Running the Pipeline
-
-Activate the virtual environment and run the scraper from the project root:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python main.py --source all
-```
-
-This runs the full flow: **LinkedIn + Naukri + Indeed → Normalize → Validate → ML Enrich → Deduplicate → CSV → SQLite**
-
-### ✅ Fast examples
-
-```powershell
-# 1-hour freshness, all sources
-.\.venv\Scripts\Activate.ps1
-python main.py --source all --indeed-max-age-hours 1 --linkedin-max-age-hours 1
-
-# 5 jobs only, all sources
-python main.py --source all --linkedin-max-jobs 5 --indeed-max-jobs 5
-
-# LinkedIn only
-python main.py --source linkedin
-
-# Naukri only
-python main.py --source naukri --naukri-detail-pages
-
-# Small test run (2 jobs, last 1 hour only)
-python main.py --source both --linkedin-max-jobs 2 --linkedin-max-age-hours 1
-
-# Skip ML enrichment
-python main.py --source both --no-enrichment
-```
-
-### 📁 Output location
-
-All generated results are stored in the shared folder:
-
-```text
-D:\Job_Scraper\Data\
-```
-
-Inside it you will find:
-- `unified_jobs.csv`
-- `jobs.db`
-- `seen_job_ids.json`
-
-### Every-four-hour collection
-
-Run the pipeline every four hours with:
-
-```powershell
-python main.py --source both --linkedin-max-age-hours 4
-```
-
-The pipeline loads job IDs from both `csv_output/seen_job_ids.json` and
-`unified_jobs.csv`. A job whose `job_id` was already saved is skipped, so an
-older posting found again by a scraper is not written a second time. The JSON
-file is a persistent deduplication cache, not a second job dataset. The CSV is
-also used as a fallback if the JSON file is missing or corrupt.
-
-On Windows, create a Task Scheduler task that runs this command every 4 hours.
-Set the task's **Start in** directory to the project folder so `csv_output`
-resolves correctly.
-
----
-
-## 🎛️ Command-Line Options
-
-| Option | What it does |
-|---|---|
-| `--source linkedin` / `naukri` / `indeed` / `both` / `all` | Which source(s) to scrape (`all` is the default; `both` keeps LinkedIn + Naukri) |
-| `--output-dir Data` | Where to save output files |
-| `--rebuild-output` | Rebuilds the dataset (use carefully!) |
-| `--no-enrichment` | Skips ML enrichment |
-| `--linkedin-max-jobs 5` | Max jobs per keyword on LinkedIn |
-| `--linkedin-max-age-hours 4` | Only accept LinkedIn jobs posted this recently |
-| `--naukri-max-pages 5` | Max pages to scrape on Naukri |
-| `--naukri-max-jobs 20` | Max jobs to collect on Naukri |
-| `--naukri-headless` | Run the Naukri browser headlessly |
-| `--naukri-detail-pages` | Fetch Naukri detail pages for richer skills and education |
-| `--indeed-location India` | Indeed search location |
-| `--indeed-max-jobs 50` | Max Indeed jobs per keyword |
-| `--indeed-max-age-hours 168` | Only accept Indeed jobs posted this recently |
-
-**Common examples:**
-```powershell
-# LinkedIn only
-python main.py --source linkedin
-
-# Naukri only
-python main.py --source naukri --naukri-detail-pages
-
-# 1 hour freshness, all sources
-python main.py --source all --indeed-max-age-hours 1 --linkedin-max-age-hours 1
-
-# 5 jobs only per source
-python main.py --source all --linkedin-max-jobs 5 --indeed-max-jobs 5
-
-# Skip ML enrichment
-python main.py --source both --no-enrichment
+For the web application, optional Supabase credentials can be added to `web/.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-anon-key
 ```
 
 ---
 
-## 🧪 Testing & Data Quality
+## 🎛️ Pipeline Command-Line Options
 
-**Run the built-in test suite:**
-```bash
+| Option | Argument | Description |
+|---|---|---|
+| `--source` | `all`, `both`, `linkedin`, `naukri`, `indeed` | Sourcing platform to target (default: `all`) |
+| `--output-dir` | `Data` | Directory for storing CSV, database, and cache |
+| `--no-enrichment` | *(Flag)* | Disables the ML model inference step |
+| `--rebuild-output` | *(Flag)* | Clears existing data before running |
+| `--linkedin-max-jobs` | Integer (e.g. `10`) | Limit LinkedIn jobs collected per keyword |
+| `--linkedin-max-age-hours` | Integer (e.g. `4`) | Collect LinkedIn postings from last N hours |
+| `--naukri-max-pages` | Integer (e.g. `3`) | Max pages crawled on Naukri |
+| `--naukri-max-jobs` | Integer (e.g. `20`) | Max postings scraped on Naukri |
+| `--naukri-detail-pages` | *(Flag)* | Visit detail pages for deeper skill extraction |
+| `--indeed-max-jobs` | Integer (e.g. `25`) | Limit Indeed postings collected per keyword |
+| `--indeed-max-age-hours` | Integer (e.g. `24`) | Postings freshness cutoff for Indeed |
+
+---
+
+## 🧪 Testing & Data Quality Audit
+
+**Run the automated test suite:**
+```powershell
 python main.py --test
 ```
 
-**Audit your real data** (checks structure, duplicates, missing fields, CSV/SQLite consistency):
-```bash
+**Run End-to-End Web UI Tests (Playwright):**
+```powershell
+python tests/test_ui_flows.py
+```
+
+**Run the Data Quality Auditor:**
+```powershell
 python -m pipeline.data_quality
 ```
-
-A healthy audit looks like a long list of `[PASS]` lines with `0` problems found.
-
----
-
-## 🗄️ SQLite Database
-
-The pipeline automatically syncs your CSV into `Data/jobs.db` at the end of every run — you normally don't need to do anything manually.
-
-SQLite uses `job_id` as its primary key. Each sync updates existing IDs and
-removes database rows that are no longer present in the CSV, so the database
-mirrors the current CSV instead of accumulating stale rows.
-
-If you ever need to manually rebuild it from the CSV:
-```bash
-python database.py
-```
-
-Useful when: you hand-edited the CSV, the `.db` file got deleted, or the two files fall out of sync.
+Verifies 17-column structural integrity, detects duplicate job IDs, checks required fields, and confirms SQLite $\leftrightarrow$ CSV consistency.
 
 ---
 
-## 🤖 ML Enrichment
+## 🤖 Machine Learning Enrichment
 
-Located in the `ml/` folder. It predicts:
-- `degree_required`
-- `specialization_required`
+Located in [`ml/`](ml/), this subsystem classifies missing educational requirements using pre-trained scikit-learn models:
+- **`ml/models/degree_model.pkl`**: Predicts educational tier (`B.Tech / B.E.`, `BCA / MCA`, `Master's`, etc.).
+- **`ml/models/specialization_model.pkl`**: Predicts academic domain (`Computer Science`, `Data Science`, `IT`, etc.).
 
-...whenever those fields are missing, using pre-trained models in `ml/models/`. It's designed to **never overwrite** already-valid data.
-
-To retrain or evaluate models:
-```bash
+To evaluate or retrain the models:
+```powershell
 python ml/train_models.py
 python ml/test_production_ml.py
 ```
 
 ---
 
-## 🧹 Deduplication Logic
-
-Jobs are matched by their **job ID / URL**, not just title + company — since two different postings can share a title and company but still be separate jobs.
-
----
-
 ## 🛠️ Troubleshooting
 
-| Problem | Fix |
+| Issue | Resolution |
 |---|---|
-| `ModuleNotFoundError` | Activate your virtual environment and run `pip install -r requirements.txt` |
-| Naukri `TypeError: unexpected keyword argument` | Check the current function signature: `python -c "import inspect; from scrapers.naukri.scraper import collect_naukri_jobs; print(inspect.signature(collect_naukri_jobs))"` |
-| LinkedIn shows many cards but accepts few | Normal — jobs outside your freshness window or past `--linkedin-max-jobs` are skipped |
-| Deprecated "Scrapling" warning | Safe to ignore if requests still succeed (HTTP 200) |
-| Naukri returns 0 jobs | Check your internet connection, whether Naukri is blocking requests, and whether selectors still match the page |
-| CSV and SQLite counts don't match | Run `python -m pipeline.data_quality`, then `python database.py` if needed (back up first!) |
-| Browser errors | Run `playwright install chromium` and try again |
+| `Cannot find module 'package.json'` | Ensure you ran `npm install` inside the `web/` directory. |
+| `playwright._impl._errors.Error: Executable doesn't exist` | Run `playwright install chromium` in your activated virtual environment. |
+| LinkedIn returns 0 jobs | LinkedIn results depend on recency filters; broaden `--linkedin-max-age-hours 24`. |
+| Naukri browser closes immediately | Verify `NAUKRI_HEADLESS=true` or run with `--naukri-headless true`. |
+| CSV and SQLite records differ | Run `python database.py` to resynchronize SQLite with `unified_jobs.csv`. |
 
 ---
 
-## ⚖️ Responsible Scraping
+## ⚖️ Responsible Scraping & License
 
-This project is meant for **lawful research and personal job-search automation**. Before scraping at scale:
+This software is provided for **educational, personal career tracking, and research purposes**. When scraping:
+- Respect target website Terms of Service and `robots.txt`.
+- Maintain modest concurrency and polite request intervals.
+- Do not attempt to bypass CAPTCHAs, authentication barriers, or paywalls.
 
-- ✅ Review the target site's Terms of Service
-- ✅ Respect `robots.txt` and site rules
-- ✅ Use reasonable request rates
-- ✅ Never bypass logins or access controls
-- ✅ Avoid collecting unnecessary personal data
-- ✅ Keep credentials/cookies secure
-
-Website structures change over time, so scrapers may need occasional maintenance.
-
----
-
-## 📄 License
-
-Licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for details.
 
 ---
 
 ## 👤 Author
 
-**Pravin Kumar A.**
-GitHub: [@Pravink1005](https://github.com/Pravink1005)
-Project: [Job_Scraper](https://github.com/Pravink1005/Job_Scraper)
-
-streamlit run dashboard.py
+**Pravin Kumar A.**  
+- GitHub: [@Pravink1005](https://github.com/Pravink1005)  
+- Repository: [Job_Scraper](https://github.com/Pravink1005/Job_Scraper)

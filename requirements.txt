@@ -2,14 +2,13 @@
 numpy
 pandas
 joblib
-scikit-learn>=1.9.1
+scikit-learn>=1.7.2
 beautifulsoup4
 
 # ---- LinkedIn scraper (from LinkedIn_Job_Pipeline) ----
 # Scrapling provides both a plain requests-style Fetcher and a
 # StealthyFetcher (headless-browser) mode used for anti-bot pages.
 scrapling[fetchers]
-"scrapling[all]"
 
 # ---- Naukri scraper (from Naukri-scraper) ----
 # Naukri's search/detail pages are JS-rendered, so this project uses a real

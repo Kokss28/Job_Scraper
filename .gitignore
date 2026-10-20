@@ -16,6 +16,10 @@ Data/
 *.csv
 *.db
 *.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!web/**/*.json
 
 # Machine learning models and checkpoints
 #ml/models/
