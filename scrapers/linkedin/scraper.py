@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Tuple
 # ============================================================
 # LinkedIn Job Scraper
 # Production / Stable Version
@@ -2880,3 +2881,33 @@ if __name__ == "__main__":
             f"{str(job.get('job_description', ''))[:300]}\n"
             f"URL         : {job.get('job_url')}\n"
         )
+
+
+def normalize_linkedin_job_url(url: Optional[str]) -> str:
+    if not url:
+        return "N/A"
+    clean = url.split("?", 1)[0].rstrip("/") + "/"
+    return clean
+
+
+def get_canonical_job_id(url: Optional[str]) -> str:
+    if not url:
+        return "linkedin_unknown"
+    match = re.search(r"/view/(\d+)", url)
+    if match:
+        return f"linkedin_{match.group(1)}"
+    import hashlib
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+    return f"linkedin_unknown_{digest}"
+
+
+def has_absolute_posted_time(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    return parse_absolute_datetime(text) is not None
+
+
+def parse_relative_posted_time(text: Optional[str]) -> Optional[datetime]:
+    if not text:
+        return None
+    return parse_relative_posted_text(text)

@@ -558,6 +558,15 @@ def parse_posted_date_text(
         )
 
     if re.search(
+        r"\b(?:today|just\s+now)\b",
+        text,
+        re.IGNORECASE
+    ):
+        return now.strftime(
+            "%d/%m/%Y %H:%M:%S"
+        )
+
+    if re.search(
         r"\byesterday\b",
         text,
         re.IGNORECASE
@@ -2674,3 +2683,83 @@ if __name__ == "__main__":
     print_job_summary(
         jobs
     )
+
+def slugify_title(title: Optional[str]) -> Optional[str]:
+    if not title or not str(title).strip():
+        return None
+    clean = re.sub(r"[^a-zA-Z0-9]+", "-", str(title).strip().lower()).strip("-")
+    return clean or None
+
+
+def build_search_urls_from_titles(titles: Any) -> List[str]:
+    if isinstance(titles, str):
+        title_list = [t.strip() for t in titles.split(",") if t.strip()]
+    elif isinstance(titles, (list, tuple, set)):
+        title_list = [str(t).strip() for t in titles if str(t).strip()]
+    else:
+        title_list = []
+    urls = []
+    for t in title_list:
+        slug = slugify_title(t)
+        if slug:
+            urls.append(f"https://www.naukri.com/{slug}-jobs?jobAge=1")
+    return urls
+
+
+def parse_posted_date(text: Optional[str]) -> Optional[str]:
+    if not text or not str(text).strip():
+        return None
+    res = parse_posted_date_text(text)
+    if res == NOT_SPECIFIED:
+        return text
+    return res
+
+
+def is_last_day_posting(text: Optional[str]) -> bool:
+    if not text or not str(text).strip():
+        return False
+    clean = str(text).strip().lower()
+    if re.search(r"\bposted\s+today\b|\bjust\s+now\b|\b\d+\s+hours?\s+ago\b", clean):
+        return True
+    m = re.search(r"\bposted\s+(\d+)\s+days?\s+ago\b", clean)
+    if m:
+        return int(m.group(1)) <= 1
+    return False
+
+
+def clean_company_name(text: Optional[str]) -> Optional[str]:
+    if text is None:
+        return None
+    clean = re.sub(r"(?i)[\r\n]+.*?(?:reviews?|ratings?).*$", "", str(text)).strip()
+    clean = clean_company(clean)
+    return clean or None
+
+
+def compact_text(text: Optional[str]) -> Optional[str]:
+    if not text or not str(text).strip():
+        return None
+    clean = clean_text(text)
+    return clean or None
+
+
+def clean_education(text: Optional[str]) -> Optional[str]:
+    if text is None:
+        return None
+    clean = re.sub(r"(?i)\beducation\b|\bug\s*:\s*|\bpg\s*:\s*", " ", str(text))
+    parts = [p.strip() for p in clean.split() if p.strip()]
+    return "; ".join(parts) if parts else None
+
+
+def clean_skills(skills: Any) -> str:
+    if not skills:
+        return "Not specified"
+    seen = set()
+    cleaned = []
+    for s in skills:
+        item = str(s).strip()
+        if item and item.lower() not in seen:
+            seen.add(item.lower())
+            cleaned.append(item)
+    if not cleaned:
+        return "Not specified"
+    return "; ".join(cleaned)

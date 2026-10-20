@@ -3,9 +3,9 @@ from pipeline.schema import CSV_FIELDS, UnifiedJob
 
 def test_unified_job_defaults():
     job = UnifiedJob(job_id="linkedin_123", source="LinkedIn", title="Backend Engineer", link="https://example.com/1")
-    assert job.company == "N/A"
+    assert job.company == "Not Specified"
     assert job.city == "Not Specified"
-    assert job.skills == "Not specified"
+    assert job.skills == "Not Specified"
     assert job.degree_required == "Not Specified"
 
 

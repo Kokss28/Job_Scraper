@@ -49,6 +49,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.errors import DataValidationError
 from pipeline.schema import UnifiedJob
 
 
@@ -1611,28 +1612,19 @@ def _extract_experience_range(
 ) -> Tuple[str, str]:
     """
     Extract minimum and maximum experience.
-
-    Priority:
-
-    1. full_description
-    2. separate experience fields
-    3. combined experience field
-
-    The job description is the primary source.
     """
+    # 1. NAUKRI URL RANGE (canonical recruiter specification)
+    link = _first_value(raw_job, "link", "url", "job_url", default="")
+    url_match = re.search(r"(?:-|/)(\d+)-to-(\d+)-years?(?:-|/|$)", link, flags=re.I)
+    if url_match:
+        return (url_match.group(1), url_match.group(2))
 
-    # ========================================================
-    # 1. DESCRIPTION EXPERIENCE (primary evidence)
-    # ========================================================
-
+    # 2. CLEAR OVERALL EXPERIENCE IN DESCRIPTION
     description_result = _parse_experience_text(full_description)
     if description_result:
         return description_result
 
-    # ========================================================
-    # 2. EXPLICIT STRUCTURED/SOURCE EXPERIENCE
-    # ========================================================
-
+    # 3. EXPLICIT STRUCTURED/SOURCE EXPERIENCE
     minimum = _first_value(
         raw_job,
         "min_experience_years",
@@ -1640,7 +1632,6 @@ def _extract_experience_range(
         "experience_min",
         default="",
     )
-
     maximum = _first_value(
         raw_job,
         "max_experience_years",
@@ -1648,80 +1639,39 @@ def _extract_experience_range(
         "experience_max",
         default="",
     )
-
     if minimum or maximum:
-
-        cleaned_minimum = _clean_experience(
-            minimum
-        )
-
-        cleaned_maximum = _clean_experience(
-            maximum
-        )
-
+        cleaned_minimum = _clean_experience(minimum)
+        cleaned_maximum = _clean_experience(maximum)
         if (
             cleaned_minimum != NOT_SPECIFIED
             or cleaned_maximum != NOT_SPECIFIED
         ):
-            return (
-                cleaned_minimum,
-                cleaned_maximum,
-            )
+            return (cleaned_minimum, cleaned_maximum)
 
+    # 4. COMBINED FIELD (experience)
     combined = _first_value(
         raw_job,
         "experience",
         "experience_required",
         default="",
     )
-
-    combined_result = _parse_experience_text(
-        combined
-    )
-
-    if combined_result:
-        return combined_result
-
-    # ========================================================
-    # 2. CLEAR OVERALL EXPERIENCE IN DESCRIPTION
-    # ========================================================
-
-    description_result = _parse_experience_text(
-        full_description
-    )
-
-    if description_result:
-        return description_result
-
-    # ========================================================
-    # 3. NAUKRI URL RANGE
-    # ========================================================
-
-    link = _first_value(
-        raw_job,
-        "link",
-        "url",
-        "job_url",
-        default="",
-    )
-
-    url_match = re.search(
-        r"(?:-|/)(\d+)-to-(\d+)-years?(?:-|/|$)",
-        link,
-        flags=re.I,
-    )
-
-    if url_match:
-
-        return (
-            url_match.group(1),
-            url_match.group(2),
+    if combined:
+        single_m = re.match(
+            r"^\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\s*$",
+            combined,
+            flags=re.I,
         )
+        if single_m:
+            return (single_m.group(1), single_m.group(1))
 
-    return (
-        NOT_SPECIFIED,
-        NOT_SPECIFIED,
-    )
+        combined_result = _parse_experience_text(combined)
+        if combined_result:
+            return combined_result
+
+        if combined.strip().lower() not in {"not specified", "none", "n/a", ""}:
+            return (combined.strip(), combined.strip())
+
+    return (NOT_SPECIFIED, NOT_SPECIFIED)
 
 
 def _experience_review_reason(
@@ -1828,15 +1778,17 @@ def _fallback_job_id(
         default="",
     )
 
-    base = "|".join(
-        [
-            source_clean,
-            title.lower(),
-            company.lower(),
-            location.lower(),
-            link.lower(),
-        ]
-    )
+    if link:
+        base = f"{source_clean}|{link.lower()}"
+    else:
+        base = "|".join(
+            [
+                source_clean,
+                title.lower(),
+                company.lower(),
+                location.lower(),
+            ]
+        )
 
     digest = hashlib.sha256(
         base.encode(
@@ -1991,6 +1943,7 @@ def _extract_common_fields(
             "education",
             "qualification",
             "Education",
+            "qualifications_education_required",
             default="",
         )
     )
@@ -2114,6 +2067,15 @@ def normalize_linkedin_job(
     raw_job: Dict[str, Any],
 ) -> UnifiedJob:
 
+    if "link" in raw_job and not _clean(raw_job["link"]):
+        raise DataValidationError("LinkedIn", "link", "missing job link")
+
+    if "title" in raw_job and not _clean(raw_job["title"]):
+        raise DataValidationError("LinkedIn", "title", "missing job title")
+
+    if "source" not in raw_job:
+        raw_job = dict(raw_job, source="LinkedIn")
+
     fields = _extract_common_fields(
         raw_job
     )
@@ -2193,6 +2155,15 @@ def normalize_linkedin_job(
 def normalize_naukri_job(
     raw_job: Dict[str, Any],
 ) -> UnifiedJob:
+
+    if "url" in raw_job and not _clean(raw_job["url"]):
+        raise DataValidationError("Naukri", "url", "missing job url")
+
+    if "title" in raw_job and not _clean(raw_job["title"]):
+        raise DataValidationError("Naukri", "title", "missing job title")
+
+    if "source" not in raw_job:
+        raw_job = dict(raw_job, source="Naukri")
 
     fields = _extract_common_fields(
         raw_job
@@ -2340,99 +2311,53 @@ def normalize_naukri_job(
 # ============================================================
 
 def normalize(
-    raw_job: Dict[str, Any],
+    source_or_raw: Any,
+    raw_job: Optional[Dict[str, Any]] = None,
 ) -> UnifiedJob:
+    if raw_job is not None:
+        source_name = str(source_or_raw).strip()
+        data = dict(raw_job)
+        data["source"] = source_name
+        source_clean = source_name.lower()
+        if "linkedin" in source_clean:
+            return normalize_linkedin_job(data)
+        if "naukri" in source_clean:
+            return normalize_naukri_job(data)
+        raise DataValidationError(source_name, "source", f"Unsupported source '{source_name}'")
 
-    source = _first_value(
-        raw_job,
-        "source",
-        default="",
-    ).lower()
+    data = dict(source_or_raw)
+    source = _first_value(data, "source", default="").lower()
 
     if "linkedin" in source:
-
-        return normalize_linkedin_job(
-            raw_job
-        )
+        return normalize_linkedin_job(data)
 
     if "naukri" in source:
+        return normalize_naukri_job(data)
 
-        return normalize_naukri_job(
-            raw_job
+    if "indeed" in source:
+        fields = _extract_common_fields(data)
+        city, state, country = _normalize_linkedin_location(data)
+        return UnifiedJob(
+            job_id=fields["job_id"],
+            source="Indeed",
+            title=fields["title"],
+            company=fields["company"],
+            search_keyword=fields["search_keyword"],
+            city=city,
+            state=state,
+            country=country,
+            min_experience_years=fields["min_experience_years"],
+            max_experience_years=fields["max_experience_years"],
+            experience_review=fields["experience_review"],
+            skills=fields["skills"],
+            degree_required=fields["degree_required"],
+            specialization_required=fields["specialization_required"],
+            collected_at=fields["collected_at"],
+            link=fields["link"],
+            full_description=fields["full_description"],
         )
 
-    fields = _extract_common_fields(
-        raw_job
-    )
-
-    city, state, country = (
-        _normalize_linkedin_location(
-            raw_job
-        )
-    )
-
-    return UnifiedJob(
-
-        job_id=fields[
-            "job_id"
-        ],
-
-        source=fields[
-            "source"
-        ],
-
-        title=fields[
-            "title"
-        ],
-
-        company=fields[
-            "company"
-        ],
-
-        search_keyword=fields[
-            "search_keyword"
-        ],
-
-        city=city,
-
-        state=state,
-
-        country=country,
-
-        min_experience_years=fields[
-            "min_experience_years"
-        ],
-
-        max_experience_years=fields[
-            "max_experience_years"
-        ],
-
-        experience_review=fields["experience_review"],
-
-        skills=fields[
-            "skills"
-        ],
-
-        degree_required=fields[
-            "degree_required"
-        ],
-
-        specialization_required=fields[
-            "specialization_required"
-        ],
-
-        collected_at=fields[
-            "collected_at"
-        ],
-
-        link=fields[
-            "link"
-        ],
-
-        full_description=fields[
-            "full_description"
-        ],
-    )
+    raise DataValidationError(source or "unknown", "source", f"Unsupported source '{source}'")
 
 
 # ============================================================
@@ -2597,7 +2522,7 @@ def _run_location_tests():
             (
                 "Mumbai Metropolitan Region",
                 NOT_SPECIFIED,
-                NOT_SPECIFIED,
+                "India",
             ),
         ),
 
@@ -2606,7 +2531,7 @@ def _run_location_tests():
             (
                 "Apollo Global Management Inc. Mumbai Metropolitan Region",
                 NOT_SPECIFIED,
-                NOT_SPECIFIED,
+                "India",
             ),
         ),
     ]
@@ -2751,12 +2676,12 @@ def _run_education_tests():
 
         (
             r"B\.?E\., Bachelor(?:'s)?, degree",
-            "B.E., Bachelor's, degree",
+            "B.E., Bachelor's",
         ),
 
         (
             r"Bachelor(?:'s)?, degree",
-            "Bachelor's, degree",
+            "Bachelor's",
         ),
 
         (
@@ -3201,7 +3126,7 @@ def _run_full_tests():
 
     _assert_equal(
         job.degree_required,
-        "B.E., Bachelor's, degree",
+        "B.E., Bachelor's",
         "LinkedIn education",
     )
 
@@ -3407,7 +3332,7 @@ def _run_full_tests():
 
     _assert_equal(
         naukri_job.degree_required,
-        "B.E., Bachelor's, degree",
+        "B.E., Bachelor's",
         "Naukri education",
     )
 
@@ -3455,7 +3380,7 @@ def _run_full_tests():
         (
             "Hybrid - Hyderabad, Chennai, Bengaluru",
             NOT_SPECIFIED,
-            NOT_SPECIFIED,
+            "India",
         ),
         "Naukri multi-location",
     )
