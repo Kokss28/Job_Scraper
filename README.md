@@ -144,10 +144,14 @@ python main.py --source indeed
 The web portal provides an interactive dashboard with search filters, market graphs, and application management.
 
 ```powershell
-# 1. Navigate to the web folder
-cd web
+# Option A: Run directly from root (convenience script)
+npm run dev
 
-# 2. Run the development server
+# Option B: Run with prefix from root
+npm run dev --prefix web
+
+# Option C: From the web folder
+cd web
 npm run dev
 ```
 
@@ -155,7 +159,6 @@ Open your browser at **[http://localhost:3000](http://localhost:3000)**.
 
 > To run the production build:
 > ```powershell
-> cd web
 > npm run build
 > npm run start
 > ```
@@ -219,13 +222,15 @@ Geographic corridor analysis and top hiring companies across India.
 
 ### ⚡ Screen 5: Scraper Studio & Live Ingestion
 **URL:** `/dashboard/scraper`  
-Trigger on-demand scraping directly from the web interface without using the command line.
+Trigger on-demand scraping directly from the web interface or terminal with granular control over platforms, freshness, and geographical scope.
 
 ![Scraper Studio Overview](tests/screenshots/05_recruiter_scraper_studio.png)
 
-- **Multi-Source Toggles**: Select any combination of LinkedIn, Naukri, and Indeed.
-- **Freshness Window Slider**: Restrict collection from the last 1 hour up to 30 days.
-- **Live Output Table**: Real-time inspection of newly ingested jobs with links and verified badges.
+- **Arbitrary Numeric Hours Input**: Directly input any freshness hour duration (e.g., `4`, `8`, `12`, `24`, `72` hours) without fixed button restrictions.
+- **Geographic Location Targeting**: Filter by custom location (e.g., `Bengaluru`, `Hyderabad`, `Pune`, `Mumbai`, `Delhi NCR`, `Remote`, `India`) with 1-click quick selection chips.
+- **Multi-Source Isolation & Selection**: Toggle any combination of LinkedIn, Naukri, and Indeed.
+- **Live Output Terminal & Platform Breakdown**: Real-time log streaming, breakdown metrics per source platform, and an immediate preview table of newly extracted jobs with direct application links.
+- **One-Click Batch Export**: Download the current batch of harvested postings directly as CSV.
 
 ![Scraper Studio Live Run](tests/screenshots/05_recruiter_scraper_studio_live.png)
 
@@ -436,6 +441,21 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-anon-key
 | `--naukri-detail-pages` | *(Flag)* | Visit detail pages for deeper skill extraction |
 | `--indeed-max-jobs` | Integer (e.g. `25`) | Limit Indeed postings collected per keyword |
 | `--indeed-max-age-hours` | Integer (e.g. `24`) | Postings freshness cutoff for Indeed |
+
+### Live Scraper Engine CLI (`pipeline/live_scrape_runner.py`)
+
+Run targeted, on-demand live extractions with precise hours and location targeting:
+
+```powershell
+python pipeline/live_scrape_runner.py --sources "LinkedIn,Naukri,Indeed" --keywords "Python developer" --freshness 8 --location "Bengaluru"
+```
+
+| Argument | Example | Description |
+|---|---|---|
+| `--sources` | `"LinkedIn,Naukri,Indeed"` | Comma-separated list of target platforms |
+| `--keywords` | `"Python developer"` | Search query / role title |
+| `--freshness` | `4` or `8` | Cutoff age in hours (e.g. `4` for last 4 hours) |
+| `--location` | `"Bengaluru"` or `"India"` | City or region for targeted geographical search |
 
 ---
 

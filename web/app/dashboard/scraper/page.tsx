@@ -2,22 +2,43 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Terminal, Play, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, ShieldCheck, Database, Download, FileSpreadsheet } from "lucide-react";
+import {
+  Terminal,
+  Play,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  ArrowRight,
+  ShieldCheck,
+  Database,
+  Download,
+  FileSpreadsheet,
+  MapPin,
+  Sparkles,
+  ExternalLink,
+  Briefcase
+} from "lucide-react";
 
 export default function ScraperStudioPage() {
   const [sources, setSources] = useState<string[]>(["LinkedIn", "Naukri", "Indeed"]);
-  const [freshness, setFreshness] = useState<number>(24);
-  const [keywords, setKeywords] = useState<string>("Python developer, data engineer");
+  const [freshness, setFreshness] = useState<number | string>(4);
+  const [location, setLocation] = useState<string>("India");
+  const [keywords, setKeywords] = useState<string>("Python developer");
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
   const [resultStats, setResultStats] = useState<{ newJobs: number; totalJobs: number; extractedJobs?: number } | null>(null);
+  const [bySourceStats, setBySourceStats] = useState<Record<string, number> | null>(null);
+  const [sampleJobs, setSampleJobs] = useState<any[]>([]);
 
   const toggleSource = (src: string) => {
     setSources((prev) =>
       prev.includes(src) ? prev.filter((s) => s !== src) : [...prev, src]
     );
   };
+
+  const locationPresets = ["All India", "Bengaluru", "Hyderabad", "Pune", "Mumbai", "Delhi NCR", "Remote"];
+  const keywordPresets = ["Python developer", "Data Analyst", "Data Engineer", "AI / ML Engineer", "Full Stack Developer"];
 
   const handleTriggerScrape = async () => {
     if (sources.length === 0) {
@@ -28,6 +49,8 @@ export default function ScraperStudioPage() {
     setStatusMessage("Executing live scraping run across selected platforms...");
     setLogs(["Connecting to live scraper engine...", "Dispatching crawler process..."]);
     setResultStats(null);
+    setBySourceStats(null);
+    setSampleJobs([]);
 
     try {
       const res = await fetch("/api/scraper/live", {
@@ -35,8 +58,9 @@ export default function ScraperStudioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sources,
-          freshness,
+          freshness: Number(freshness) || 4,
           keywords,
+          location,
         }),
       });
 
@@ -52,6 +76,12 @@ export default function ScraperStudioPage() {
         const newCount = data.result?.new_jobs ?? 0;
         const total = data.result?.total_jobs ?? 0;
         setResultStats({ newJobs: newCount, totalJobs: total, extractedJobs: extractedCount });
+        if (data.result?.by_source) {
+          setBySourceStats(data.result.by_source);
+        }
+        if (data.result?.sample_jobs) {
+          setSampleJobs(data.result.sample_jobs);
+        }
         setStatusMessage(
           `Live scrape successful! Harvested ${extractedCount} verified jobs (${newCount} new to catalog). Catalog updated to ${total} total postings.`
         );
@@ -90,12 +120,12 @@ export default function ScraperStudioPage() {
           title="Download all currently extracted jobs as CSV"
         >
           <Download className="w-4 h-4 text-emerald-400" />
-          Download Extracted Jobs (CSV)
+          Download Last Scraped Batch
         </a>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Scrape Controls Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Scraper Configuration Form */}
         <div className="lg:col-span-2 rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-white">Configure Scrape Job</h2>
@@ -191,14 +221,14 @@ export default function ScraperStudioPage() {
             </p>
           </div>
 
-          {/* Manual Posting Freshness Window */}
+          {/* Search Time Range (in Hours) - Pure numeric input as requested */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                 Search Time Range (in Hours)
               </label>
               <span className="text-indigo-400 text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/30">
-                Past {freshness} Hour{freshness === 1 ? "" : "s"}
+                Past {freshness || 0} Hour{Number(freshness) === 1 ? "" : "s"}
               </span>
             </div>
             <div className="relative">
@@ -210,40 +240,98 @@ export default function ScraperStudioPage() {
                 value={freshness || ""}
                 onChange={(e) => {
                   const val = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
-                  setFreshness(isNaN(val) ? 24 : Math.max(1, val));
+                  setFreshness(e.target.value === "" ? "" : Math.max(1, val));
                 }}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 font-medium"
-                placeholder="Enter number of hours (e.g. 1, 6, 24, 72)"
+                placeholder="Enter number of hours (e.g. 4, 8, 12, 24, 72)"
               />
               <div className="absolute right-4 top-2.5 text-xs text-slate-500 pointer-events-none font-medium">
                 Hours
               </div>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Enter any number of hours to fetch jobs posted within that timeframe (e.g., <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">1</code> for past hour, <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">6</code> for past 6 hours, <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">24</code> for past 24 hours, <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">72</code> for past 72 hours). Calculates the dynamic time cutoff from the current moment.
+              Enter any hour value to precisely target jobs posted within that duration (e.g. <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">4</code> for past 4 hours, <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">8</code> for past 8 hours, <code className="text-indigo-300 font-mono bg-slate-800/80 px-1 py-0.5 rounded">24</code> for past 24 hours).
             </p>
+          </div>
+
+          {/* Target Location Filter */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                Target Search Location
+              </label>
+              <span className="text-slate-400 text-[11px]">
+                Active: <span className="text-white font-medium">{location || "India"}</span>
+              </span>
+            </div>
+            <input
+              type="text"
+              data-testid="scrape-location-input"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 font-medium"
+              placeholder="e.g. India, Bengaluru, Pune, Hyderabad, Remote"
+            />
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">Quick Cities:</span>
+              {locationPresets.map((loc) => (
+                <button
+                  key={loc}
+                  type="button"
+                  onClick={() => setLocation(loc === "All India" ? "India" : loc)}
+                  className={`text-[11px] px-2.5 py-0.5 rounded-lg border transition-all ${
+                    (loc === "All India" && (location === "India" || !location)) || location === loc
+                      ? "bg-indigo-600 text-white border-indigo-500 font-bold"
+                      : "bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  {loc}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Keywords */}
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-              Search Keywords (comma-separated)
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                Search Keywords (comma-separated)
+              </label>
+            </div>
             <input
               type="text"
               data-testid="scrape-keywords-input"
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-sm focus:outline-none focus:border-indigo-500"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 font-medium"
               placeholder="e.g. Python developer, data analyst, AWS cloud engineer"
             />
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">Suggested Roles:</span>
+              {keywordPresets.map((kw) => (
+                <button
+                  key={kw}
+                  type="button"
+                  onClick={() => setKeywords(kw)}
+                  className={`text-[11px] px-2.5 py-0.5 rounded-lg border transition-all ${
+                    keywords === kw
+                      ? "bg-indigo-600 text-white border-indigo-500 font-bold"
+                      : "bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  {kw}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Unlimited Job Scope Badge (Max Job Limit Removed) */}
+          {/* Scope Badge */}
           <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             <div className="text-slate-300 leading-relaxed">
-              <span className="text-emerald-400 font-bold">Comprehensive Extraction (No Fixed Job Limit):</span> The engine retrieves all accessible matching jobs within your specified <span className="text-white font-semibold">{freshness} hour{freshness === 1 ? "" : "s"}</span> window across pages until all current listings are exhausted, while removing duplicates.
+              <span className="text-emerald-400 font-bold">Comprehensive Live Harvesting:</span> Scrapes real-time matching jobs in <span className="text-white font-semibold">{location || "India"}</span> within your <span className="text-white font-semibold">{freshness} hour{freshness === 1 ? "" : "s"}</span> window across pages, cleans roles, and syncs directly to SQLite and CSV.
             </div>
           </div>
 
@@ -251,7 +339,7 @@ export default function ScraperStudioPage() {
           {status !== "idle" && (
             <div
               data-testid="scrape-status-banner"
-              className={`p-4 rounded-xl text-xs flex flex-col gap-2 border ${
+              className={`p-4 rounded-xl text-xs flex flex-col gap-3 border ${
                 status === "running"
                   ? "bg-indigo-500/10 text-indigo-300 border-indigo-500/30"
                   : status === "success"
@@ -259,7 +347,7 @@ export default function ScraperStudioPage() {
                   : "bg-rose-500/10 text-rose-300 border-rose-500/30"
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   {status === "running" && <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />}
                   {status === "success" && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
@@ -276,17 +364,84 @@ export default function ScraperStudioPage() {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm transition-all"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      Download Extracted Jobs (CSV)
+                      Download Extracted CSV
                     </a>
                     <Link
                       href="/dashboard"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all"
                     >
-                      Explore Newly Scraped Jobs
+                      Explore All Jobs
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                   </div>
                 )}
+              </div>
+
+              {/* Platform breakdown card */}
+              {status === "success" && bySourceStats && (
+                <div className="grid grid-cols-3 gap-2.5 pt-1 border-t border-emerald-500/20">
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">LinkedIn</span>
+                    <span className="text-base font-extrabold text-blue-400">
+                      {bySourceStats["LinkedIn"] ?? bySourceStats["linkedin"] ?? 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Naukri</span>
+                    <span className="text-base font-extrabold text-emerald-400">
+                      {bySourceStats["Naukri"] ?? bySourceStats["naukri"] ?? 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Indeed</span>
+                    <span className="text-base font-extrabold text-indigo-400">
+                      {bySourceStats["Indeed"] ?? bySourceStats["indeed"] ?? 0}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sample Jobs Quick Preview */}
+          {sampleJobs.length > 0 && (
+            <div className="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
+                  Extracted Jobs Preview ({sampleJobs.length} sample records)
+                </span>
+                <span className="text-[10px] text-slate-500">Synced to jobs.db</span>
+              </div>
+              <div className="divide-y divide-slate-800/60">
+                {sampleJobs.map((job, idx) => (
+                  <div key={idx} className="py-2 flex items-center justify-between gap-3 text-xs">
+                    <div className="truncate">
+                      <span className="font-bold text-slate-200 block truncate">{job.title}</span>
+                      <span className="text-[11px] text-slate-400">{job.company} • {job.city || "India"}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        job.source === "LinkedIn" ? "bg-blue-500/10 text-blue-400 border border-blue-500/30" :
+                        job.source === "Naukri" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" :
+                        "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30"
+                      }`}>
+                        {job.source}
+                      </span>
+                      {job.link && (
+                        <a
+                          href={job.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-slate-400 hover:text-white"
+                          title="Open posting"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

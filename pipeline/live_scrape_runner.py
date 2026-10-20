@@ -65,6 +65,7 @@ def parse_args():
     parser.add_argument("--sources", type=str, default="LinkedIn,Naukri,Indeed", help="Comma-separated sources")
     parser.add_argument("--keywords", type=str, default="Python developer", help="Comma-separated keywords")
     parser.add_argument("--freshness", type=float, default=24.0, help="Manual time range in hours (e.g. 1, 6, 24, 72)")
+    parser.add_argument("--location", type=str, default="India", help="Target search location (e.g. India, Bengaluru, Pune)")
     parser.add_argument("--max-jobs", type=int, default=None, help="Optional max jobs limit (omitted for unlimited)")
     return parser.parse_args()
 
@@ -74,12 +75,16 @@ def main():
     sources = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
     keywords = [k.strip() for k in args.keywords.split(",") if k.strip()]
     freshness = max(0.1, float(args.freshness))
+    location = args.location.strip() if getattr(args, "location", None) else "India"
+    if not location:
+        location = "India"
     max_jobs = args.max_jobs if (args.max_jobs is not None and args.max_jobs > 0) else None
 
     limit_desc = f"Max {max_jobs} jobs" if max_jobs else "All accessible matching jobs (Unlimited)"
     log(f"Initializing Live Scraper Engine...")
     log(f"Target Platforms: {', '.join([s.capitalize() for s in sources])}")
     log(f"Keywords ({len(keywords)}): {', '.join(keywords)}")
+    log(f"Location: {location}")
     log(f"Posting Freshness: Past {freshness:g} Hours | Scope: {limit_desc}")
 
     store = JobStore(output_dir=OUTPUT_DIR)
@@ -94,13 +99,15 @@ def main():
 
     lk_kwargs = {
         "keywords": keywords,
-        "location": LINKEDIN_LOCATION,
+        "location": location,
         "max_jobs_per_keyword": max_jobs,
         "max_age_hours": freshness,
+        "enable_detail_pages": False,
     } if use_linkedin else None
 
     nk_kwargs = {
         "titles": keywords,
+        "location": location,
         "max_pages": None,  # Paginate dynamically until matching jobs are exhausted
         "max_jobs": max_jobs,
         "max_total": max_jobs,
@@ -110,6 +117,7 @@ def main():
 
     id_kwargs = {
         "keywords": keywords,
+        "location": location,
         "max_jobs": max_jobs,
         "max_jobs_per_keyword": max_jobs,
         "max_age_hours": freshness,
@@ -146,8 +154,6 @@ def main():
         unified_csv = ROOT_DIR / "Data" / "unified_jobs.csv"
         if unified_csv.exists():
             import_csv_to_database(unified_csv)
-        if latest_csv.exists():
-            import_csv_to_database(latest_csv)
 
         # Check total count in SQLite
         import sqlite3
@@ -171,15 +177,38 @@ def main():
             except Exception as sb_err:
                 log(f"Supabase sync note: {sb_err}")
 
+        def _get_val(obj, key, default=""):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        by_source = {}
+        for j in extracted_batch:
+            src = _get_val(j, "source", "Unknown")
+            by_source[src] = by_source.get(src, 0) + 1
+
+        sample_jobs = []
+        for j in extracted_batch[:8]:
+            sample_jobs.append({
+                "title": _get_val(j, "title", ""),
+                "company": _get_val(j, "company", ""),
+                "city": _get_val(j, "city", ""),
+                "source": _get_val(j, "source", ""),
+                "link": _get_val(j, "link", ""),
+            })
+
         summary_json = {
             "status": "success",
             "extracted_jobs": len(extracted_batch),
             "new_jobs": new_count,
             "total_jobs": total_jobs,
             "sources": sources,
+            "by_source": by_source,
             "freshness": freshness,
             "keywords": keywords,
+            "location": location,
             "latest_csv": "latest_extracted_jobs.csv",
+            "sample_jobs": sample_jobs,
         }
         print(f"__RESULT_JSON__{json.dumps(summary_json)}", flush=True)
 

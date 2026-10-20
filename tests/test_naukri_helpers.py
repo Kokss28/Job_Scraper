@@ -136,3 +136,13 @@ def test_clean_skills_dedupes_case_insensitively_preserving_order():
 
 def test_clean_skills_empty_list_returns_not_specified():
     assert clean_skills([]) == "Not specified"
+
+
+def test_build_search_urls_from_titles_custom_job_age():
+    urls = build_search_urls_from_titles(['python developer'], job_age=3)
+    assert urls == ['https://www.naukri.com/python-developer-jobs?jobAge=3']
+
+
+def test_build_search_urls_from_titles_no_job_age():
+    urls = build_search_urls_from_titles(['python developer'], job_age=None)
+    assert urls == ['https://www.naukri.com/python-developer-jobs']

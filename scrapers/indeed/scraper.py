@@ -69,7 +69,7 @@ def collect_indeed_jobs(
         if not keyword:
             continue
 
-        results_wanted = limit if limit else 500
+        results_wanted = limit if limit else 100
         print(
             f"[Indeed] Searching {keyword!r} in {location!r} "
             f"(last {max_age_int} hours, {'max ' + str(limit) if limit else 'all accessible jobs'})"
@@ -91,12 +91,13 @@ def collect_indeed_jobs(
         for record in frame.to_dict(orient="records"):
             job = {key: _value(value) for key, value in record.items()}
 
-            # Strict recency check on Indeed results
+            # Recency check on Indeed results
             posted_val = job.get("date_posted") or job.get("posted_date")
             try:
                 from pipeline.recency import is_job_within_recency
-                if not is_job_within_recency(posted_val, max_age_hours=max_age_hours, strict=True):
-                    continue
+                if posted_val is not None:
+                    if not is_job_within_recency(posted_val, max_age_hours=max_age_hours, strict=False):
+                        continue
             except Exception:
                 pass
 

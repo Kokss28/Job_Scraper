@@ -683,7 +683,7 @@ def extract_posted_time(
     ]
 
     # --------------------------------------------------------
-    # Visible relative time
+    # 1. Visible relative time (exact hours/minutes: '30 minutes ago', '2 hours ago')
     # --------------------------------------------------------
 
     for selector in selectors:
@@ -718,7 +718,7 @@ def extract_posted_time(
                 )
 
     # --------------------------------------------------------
-    # Complete card text
+    # 2. Complete card text fallback
     # --------------------------------------------------------
 
     try:
@@ -741,7 +741,7 @@ def extract_posted_time(
         pass
 
     # --------------------------------------------------------
-    # datetime attribute
+    # 3. Datetime attribute (ISO format or date attribute)
     # --------------------------------------------------------
 
     for selector in selectors:
@@ -771,6 +771,10 @@ def extract_posted_time(
             )
 
             if parsed:
+                # If date-only without time (midnight 00:00:00) and matches today,
+                # anchor it to current time so it is not treated as 17 hours old
+                if parsed.time() == datetime.min.time() and parsed.date() == datetime.now().date():
+                    parsed = datetime.now()
 
                 return parsed.strftime(
                     "%d-%m-%Y %H:%M"
@@ -2221,24 +2225,21 @@ def scrape_search_page(
 
                 continue
 
-            if not is_recent_posted_time(
-                job.get(
-                    "posted_date"
-                ),
-                max_age_hours
-            ):
-
-                logger.info(
-                    "Skipping old job: %s | %s",
-                    job.get(
-                        "job_title"
-                    ),
-                    job.get(
-                        "posted_date"
+            posted_val = job.get("posted_date")
+            if posted_val and posted_val != NOT_SPECIFIED:
+                if not is_recent_posted_time(
+                    posted_val,
+                    max_age_hours,
+                    strict=False
+                ):
+                    logger.info(
+                        "Skipping old job: %s | %s",
+                        job.get(
+                            "job_title"
+                        ),
+                        posted_val
                     )
-                )
-
-                continue
+                    continue
 
             logger.info(
                 "Queued job: %s | %s | %s",
@@ -2519,8 +2520,8 @@ def collect_linkedin_jobs(
                     consecutive_empty_pages
                 )
 
-                if consecutive_empty_pages >= 2:
-                    logger.info("2 consecutive empty pages encountered. Stopping pagination.")
+                if consecutive_empty_pages >= 4:
+                    logger.info("4 consecutive empty pages encountered. Stopping pagination.")
                     break
 
                 continue
@@ -2617,8 +2618,8 @@ def collect_linkedin_jobs(
 
             if page_new == 0:
                 consecutive_no_new += 1
-                if consecutive_no_new >= 2:
-                    logger.info("2 consecutive pages had no jobs matching time window. Ending pagination for '%s'.", keyword)
+                if consecutive_no_new >= 4:
+                    logger.info("Consecutive pages (%s) had no jobs matching time window. Ending pagination for '%s'.", consecutive_no_new, keyword)
                     break
             else:
                 consecutive_no_new = 0

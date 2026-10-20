@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       : "LinkedIn,Naukri,Indeed";
     const keywords = (body.keywords && String(body.keywords).trim()) || "Python developer";
     const freshness = Number(body.freshness) > 0 ? Number(body.freshness) : 24;
+    const location = (body.location && String(body.location).trim()) || "India";
 
     let rootDir = process.cwd();
     if (!fs.existsSync(path.join(rootDir, "pipeline", "live_scrape_runner.py"))) {
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
       keywords,
       "--freshness",
       String(freshness),
+      "--location",
+      location,
     ];
 
     if (body.maxJobs && Number(body.maxJobs) > 0) {

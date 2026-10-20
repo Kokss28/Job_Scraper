@@ -649,6 +649,12 @@ def extract_posted_date(
 
     selectors = [
         "span.job-post-day",
+        "span[class*='job-post-day']",
+        "span[class*='post-day']",
+        "span[class*='posted-date']",
+        "span[class*='postedDate']",
+        "span[class*='postDate']",
+        "span[class*='jobPostDay']",
         "[class*='job-post-day']",
         "[class*='post-day']",
         "[class*='date']",
@@ -661,6 +667,17 @@ def extract_posted_date(
         element,
         selectors
     )
+
+    if not text:
+        full_text = get_element_text(element)
+        if full_text:
+            match = re.search(
+                r"\b(just\s+now|few\s+hours\s+ago|today|yesterday|\d+\+?\s*(?:days?|d|hours?|hrs?|h|minutes?|mins?|m)\s+ago)\b",
+                full_text,
+                re.IGNORECASE,
+            )
+            if match:
+                text = match.group(1)
 
     if text:
         try:
@@ -1846,6 +1863,10 @@ def extract_search_cards(
 
     selectors = [
 
+        "div.srp-jobtuple-wrapper",
+
+        "div[class*='srp-jobtuple-wrapper']",
+
         "div.cust-job-tuple",
 
         "div[class*='cust-job-tuple']",
@@ -1853,6 +1874,10 @@ def extract_search_cards(
         "article[class*='jobTuple']",
 
         "div[class*='jobTuple']",
+
+        "div[data-job-id]",
+
+        "article[data-job-id]",
 
     ]
 
@@ -2200,6 +2225,7 @@ def collect_naukri_jobs(
     enable_detail_pages: bool = ENABLE_DETAIL_PAGES,
     keywords: Optional[List[str]] = None,
     max_age_hours: float = 24.0,
+    location: Optional[str] = None,
     **kwargs: Any,
 ) -> List[Dict[str, Any]]:
 
@@ -2299,10 +2325,17 @@ def collect_naukri_jobs(
             else:
                 age_param = "30"
 
-            url = (
-                f"{BASE_URL}/"
-                f"{slug}-jobs?k={quote_plus(title)}&jobAge={age_param}"
-            )
+            loc = location or kwargs.get("search_location")
+            if loc and clean_text(loc).lower() not in ("india", "all india"):
+                url = (
+                    f"{BASE_URL}/"
+                    f"{slug}-jobs?k={quote_plus(title)}&l={quote_plus(clean_text(loc))}&jobAge={age_param}"
+                )
+            else:
+                url = (
+                    f"{BASE_URL}/"
+                    f"{slug}-jobs?k={quote_plus(title)}&jobAge={age_param}"
+                )
 
             if url not in urls:
 
@@ -2405,13 +2438,14 @@ def collect_naukri_jobs(
                 if job_id in seen_ids:
                     continue
 
-                # Strict recency validation: never accept an old or unverified job
+                # Recency validation: verify if job is within requested window
                 posted_date_val = job.get("posted_date") or job.get("posted_time")
                 try:
                     from pipeline.recency import is_job_within_recency
-                    if not is_job_within_recency(posted_date_val, max_age_hours=max_age_hours, strict=True):
-                        logger.info("Skipping old Naukri job: %s | posted=%s", job.get("title"), posted_date_val)
-                        continue
+                    if posted_date_val and posted_date_val != NOT_SPECIFIED:
+                        if not is_job_within_recency(posted_date_val, max_age_hours=max_age_hours, strict=False):
+                            logger.info("Skipping old Naukri job: %s | posted=%s", job.get("title"), posted_date_val)
+                            continue
                 except Exception:
                     pass
 
@@ -2493,9 +2527,10 @@ def collect_naukri_jobs(
 
             if new_jobs_on_page == 0:
                 consecutive_no_match_pages += 1
-                if consecutive_no_match_pages >= 2:
+                if consecutive_no_match_pages >= 4:
                     logger.info(
-                        "Consecutive pages had no jobs matching the requested time window (past %s hours). Pagination complete.",
+                        "Consecutive pages (%s) had no jobs matching the requested time window (past %s hours). Pagination complete.",
+                        consecutive_no_match_pages,
                         max_age_hours
                     )
                     break
@@ -2691,7 +2726,7 @@ def slugify_title(title: Optional[str]) -> Optional[str]:
     return clean or None
 
 
-def build_search_urls_from_titles(titles: Any) -> List[str]:
+def build_search_urls_from_titles(titles: Any, job_age: Optional[int] = 1) -> List[str]:
     if isinstance(titles, str):
         title_list = [t.strip() for t in titles.split(",") if t.strip()]
     elif isinstance(titles, (list, tuple, set)):
@@ -2702,7 +2737,10 @@ def build_search_urls_from_titles(titles: Any) -> List[str]:
     for t in title_list:
         slug = slugify_title(t)
         if slug:
-            urls.append(f"https://www.naukri.com/{slug}-jobs?jobAge=1")
+            if job_age is not None and job_age > 0:
+                urls.append(f"https://www.naukri.com/{slug}-jobs?jobAge={job_age}")
+            else:
+                urls.append(f"https://www.naukri.com/{slug}-jobs")
     return urls
 
 
