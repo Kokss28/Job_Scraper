@@ -193,12 +193,15 @@ def main():
             by_source[src] = by_source.get(src, 0) + 1
 
         sample_jobs = []
-        for j in extracted_batch[:8]:
+        for j in extracted_batch[:12]:
             sample_jobs.append({
                 "title": _get_val(j, "title", ""),
                 "company": _get_val(j, "company", ""),
                 "city": _get_val(j, "city", ""),
                 "source": _get_val(j, "source", ""),
+                "degree_required": _get_val(j, "degree_required", "Not Specified"),
+                "min_experience_years": _get_val(j, "min_experience_years", ""),
+                "max_experience_years": _get_val(j, "max_experience_years", ""),
                 "link": _get_val(j, "link", ""),
             })
 
