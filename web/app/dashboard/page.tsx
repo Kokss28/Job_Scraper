@@ -1,8 +1,8 @@
 import { getJobsCatalog } from "@/lib/data-service";
-import { JobExplorerClient } from "@/components/job-explorer-client";
+import { TalentPulseDashboard } from "@/components/talent-pulse-dashboard";
 
 export default async function DashboardPage() {
-  const { jobs } = await getJobsCatalog();
+  const { jobs, isCloudSupabase } = await getJobsCatalog();
 
-  return <JobExplorerClient initialJobs={jobs} />;
+  return <TalentPulseDashboard initialJobs={jobs} isCloudSupabase={isCloudSupabase} />;
 }

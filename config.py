@@ -297,6 +297,16 @@ DATABASE_FILE = "indeed_jobs.sqlite3"
 TABLE_NAME = "jobs"
 CSV_FILE = "indeed_jobs.csv"
 
+
+# ============================================================================
+# SUPABASE CONFIGURATION (Option A)
+# ============================================================================
+
+SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_ANON_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") or os.getenv("SUPABASE_ANON_KEY", "")
+IS_SUPABASE_CONFIGURED = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+
 __all__ = [
     "BASE_DIR",
     "OUTPUT_DIR",
@@ -327,6 +337,10 @@ __all__ = [
     "DATABASE_FILE",
     "TABLE_NAME",
     "CSV_FILE",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_ANON_KEY",
+    "IS_SUPABASE_CONFIGURED",
 ]
 
 
