@@ -48,13 +48,19 @@ if str(ML_DIR) not in sys.path:
 # ============================================================
 
 try:
-    from ml_predictor import predict_job_details
+    from ml_predictor import (
+        predict_job_details,
+        extract_skills,
+        extract_experience_years,
+    )
 
     _ML_AVAILABLE = True
     _ML_IMPORT_ERROR = None
 
 except Exception as error:  # pragma: no cover
     predict_job_details = None
+    extract_skills = None
+    extract_experience_years = None
     _ML_AVAILABLE = False
     _ML_IMPORT_ERROR = error
 
@@ -176,112 +182,78 @@ def enrich_job(
     # Determine missing fields
     # --------------------------------------------------------
 
-    needs_degree = _is_unset(
-        job.degree_required
-    )
-
-    needs_specialization = _is_unset(
-        job.specialization_required
-    )
+    needs_degree = _is_unset(job.degree_required)
+    needs_specialization = _is_unset(job.specialization_required)
+    needs_skills = _is_unset(job.skills)
+    needs_min_exp = _is_unset(job.min_experience_years)
+    needs_max_exp = _is_unset(job.max_experience_years)
 
     # Nothing to enrich
-    if not (
-        needs_degree
-        or needs_specialization
-    ):
+    if not (needs_degree or needs_specialization or needs_skills or needs_min_exp):
         return job
 
     # --------------------------------------------------------
-    # Validate description
+    # Validate description & title
     # --------------------------------------------------------
 
-    description = (
-        str(
-            job.full_description
-            or ""
-        ).strip()
-    )
+    description = str(job.full_description or "").strip()
+    if description.lower() in {"n/a", "not specified", "none", "null"}:
+        description = ""
 
-    if not description:
-        return job
-
-    if description.lower() in {
-        "n/a",
-        "not specified",
-        "none",
-        "null",
-    }:
-        return job
+    title = str(job.title or "").strip()
 
     # --------------------------------------------------------
-    # Run ML prediction
+    # Skills Enrichment
     # --------------------------------------------------------
-
-    try:
-
-        predictions = predict_job_details(
-            description
-        )
-
-    except Exception as error:
-
-        print(
-            "[Enrichment Warning] "
-            f"ML prediction failed for job "
-            f"{job.job_id}: {error}"
-        )
-
-        return job
+    if needs_skills and extract_skills:
+        if description:
+            extracted_s = extract_skills(description)
+            if not _is_unset(extracted_s):
+                job.skills = extracted_s
+        if _is_unset(job.skills) and title:
+            extracted_s = extract_skills(title)
+            if not _is_unset(extracted_s):
+                job.skills = extracted_s
 
     # --------------------------------------------------------
-    # Validate prediction object
+    # Experience Enrichment
     # --------------------------------------------------------
-
-    if not isinstance(
-        predictions,
-        dict,
-    ):
-        print(
-            "[Enrichment Warning] "
-            f"Unexpected ML prediction format "
-            f"for job {job.job_id}"
-        )
-
-        return job
-
-    # --------------------------------------------------------
-    # Degree prediction
-    # --------------------------------------------------------
-
-    if needs_degree:
-
-        predicted_degree = _clean_prediction(
-            predictions.get(
-                "predicted_degree"
-            )
-        )
-
-        if predicted_degree:
-            job.degree_required = (
-                predicted_degree
-            )
+    if needs_min_exp and extract_experience_years:
+        if description:
+            e_min, e_max = extract_experience_years(description)
+            if not _is_unset(e_min):
+                job.min_experience_years = e_min
+                if needs_max_exp and not _is_unset(e_max):
+                    job.max_experience_years = e_max
+        if _is_unset(job.min_experience_years) and title:
+            e_min, e_max = extract_experience_years(title)
+            if not _is_unset(e_min):
+                job.min_experience_years = e_min
+                if needs_max_exp and not _is_unset(e_max):
+                    job.max_experience_years = e_max
 
     # --------------------------------------------------------
-    # Specialization prediction
+    # Degree & Specialization ML Enrichment
     # --------------------------------------------------------
+    if (needs_degree or needs_specialization) and predict_job_details:
+        predictions = None
+        try:
+            predictions = predict_job_details(description, title=title)
+        except TypeError:
+            predictions = predict_job_details(description)
+        except Exception as error:
+            print(f"[Enrichment Warning] ML prediction failed for job {job.job_id}: {error}")
 
-    if needs_specialization:
+        if isinstance(predictions, dict):
+            if needs_degree:
+                predicted_degree = _clean_prediction(predictions.get("predicted_degree"))
+                if predicted_degree:
+                    job.degree_required = predicted_degree
 
-        predicted_specialization = _clean_prediction(
-            predictions.get(
-                "predicted_specialization"
-            )
-        )
-
-        if predicted_specialization:
-            job.specialization_required = (
-                predicted_specialization
-            )
+            if needs_specialization:
+                predicted_specialization = _clean_prediction(predictions.get("predicted_specialization"))
+                if predicted_specialization:
+                    job.specialization_required = predicted_specialization
 
     return job
 

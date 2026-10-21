@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from config import OUTPUT_DIR
+from pipeline.schema import CSV_FIELDS
 
 
 # ============================================================
@@ -70,24 +71,7 @@ NOT_SPECIFIED_VALUES = {
 # EXPECTED CSV COLUMNS
 # ============================================================
 
-EXPECTED_COLUMNS = [
-    "job_id",
-    "source",
-    "title",
-    "company",
-    "search_keyword",
-    "city",
-    "state",
-    "country",
-    "min_experience_years",
-    "max_experience_years",
-    "skills",
-    "degree_required",
-    "specialization_required",
-    "collected_at",
-    "link",
-    "full_description",
-]
+EXPECTED_COLUMNS = list(CSV_FIELDS)
 
 
 # ============================================================
@@ -1311,7 +1295,7 @@ def run_module_tests():
     print("[PASS] Experience validation")
 
     # Expected columns
-    assert len(EXPECTED_COLUMNS) == 16
+    assert len(EXPECTED_COLUMNS) == len(CSV_FIELDS)
 
     print("[PASS] CSV schema definition")
 

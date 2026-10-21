@@ -39,6 +39,12 @@ export async function POST(req: NextRequest) {
       args.push("--max-jobs", String(body.maxJobs));
     }
 
+    if (body.enableDetails === false) {
+      args.push("--no-details");
+    } else {
+      args.push("--enable-details");
+    }
+
     const logs: string[] = [];
     let resultJson: any = null;
 
