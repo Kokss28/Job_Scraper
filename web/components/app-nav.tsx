@@ -49,116 +49,78 @@ export function AppNav({
 
   const navItems = [
     {
-      id: "nav-job-explorer",
-      label: "Job Explorer",
+      id: "nav-overview",
+      label: "Overview Dashboard",
       href: "/dashboard",
-      icon: Briefcase,
-      badge: "1,082",
     },
     {
-      id: "nav-experience",
-      label: "Experience Intel",
-      href: "/dashboard/experience",
-      icon: Compass,
-      badge: "Tiers",
-    },
-    {
-      id: "nav-market",
-      label: "Market & Hubs",
-      href: "/dashboard/market",
-      icon: Building2,
-      badge: "India",
-    },
-    {
-      id: "nav-saved-jobs",
-      label: "Saved Jobs",
-      href: "/saved-jobs",
-      icon: Bookmark,
-      badge: "Pipeline",
-    },
-    {
-      id: "nav-scraper",
-      label: "Scraper Studio",
+      id: "nav-live-extraction",
+      label: "Live Extraction",
       href: "/dashboard/scraper",
-      icon: Terminal,
-      badge: "Live",
-      recruiterOrAdmin: true,
     },
     {
-      id: "nav-admin",
-      label: "Admin & RBAC",
+      id: "nav-india-map",
+      label: "India Job Map",
+      href: "/dashboard/market",
+    },
+    {
+      id: "nav-jobs-directory",
+      label: "All Jobs Directory",
+      href: "/dashboard#directory",
+    },
+    {
+      id: "nav-csv-exports",
+      label: "CSV Exports",
+      href: "/dashboard#export",
+    },
+    {
+      id: "nav-extraction-history",
+      label: "Extraction History",
       href: "/admin",
-      icon: ShieldCheck,
-      badge: "Console",
-      adminOnly: true,
+    },
+    {
+      id: "nav-settings",
+      label: "Settings",
+      href: "/setup",
     },
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-[#090e1a] border-r border-slate-800/80 flex flex-col min-h-screen">
+    <aside className="w-64 flex-shrink-0 bg-[#0B1120] border-r border-slate-800/80 flex flex-col min-h-screen">
       {/* Brand Header */}
-      <div className="p-6 border-b border-slate-800/80">
+      <div className="p-6">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-            💼
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+            IN
           </div>
-          <div>
-            <div className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-              Job Intelligence
-              <span className="text-[10px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                IN
-              </span>
-            </div>
-            <div className="text-xs text-slate-400 font-medium">Enterprise Portal</div>
+          <div className="text-lg font-bold text-white tracking-tight">
+            TalentPulse
           </div>
         </Link>
       </div>
 
       {/* Navigation Links */}
-      <div className="flex-1 py-6 px-3 space-y-1">
-        <div className="px-3 pb-2 text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center justify-between">
-          <span>Workspaces</span>
-          <span className="text-[9px] text-slate-600 font-mono">6 PANELS</span>
-        </div>
+      <div className="flex-1 py-2 px-3 space-y-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
-          const Icon = item.icon;
-          const isLocked = item.adminOnly && activeRole !== "admin";
 
           return (
             <Link
-              key={item.href}
+              key={item.id}
               href={item.href}
               data-testid={item.id}
-              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 isActive
-                  ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/20"
-                  : isLocked
-                  ? "text-slate-500 hover:text-slate-400 hover:bg-slate-900/40 opacity-75"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                  ? "bg-[#1E293B] text-white shadow-xs"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Icon className={`w-4 h-4 ${isActive ? "text-white" : isLocked ? "text-slate-600" : "text-slate-400"}`} />
-                <span>{item.label}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {isLocked ? (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-500 border border-slate-800 flex items-center gap-0.5">
-                    <Lock className="w-2.5 h-2.5" /> Admin
-                  </span>
-                ) : item.badge ? (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      isActive
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-800 text-slate-400 border border-slate-700/50"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                ) : null}
-              </div>
+              <span
+                className={`w-2 h-2 rounded-full transition-all ${
+                  isActive ? "bg-indigo-400 ring-2 ring-indigo-400/40" : "bg-slate-600"
+                }`}
+              ></span>
+              <span>{item.label}</span>
             </Link>
           );
         })}
@@ -228,9 +190,20 @@ export function AppNav({
         </div>
       </div>
 
+      {/* Pipeline Status (Matching screenshot widget) */}
+      <div className="p-3.5 mx-3 mb-3 rounded-xl bg-[#0F172A] border border-slate-800/90 text-xs shadow-xs">
+        <div className="text-xs font-bold text-slate-200">
+          Pipeline Status
+        </div>
+        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1 font-medium">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>3 Live Feeds Connected</span>
+        </div>
+      </div>
+
       {/* Storage Engine Status */}
-      <div className="px-3 py-2.5 mx-3 mb-4 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] flex items-center justify-between">
-        <span className="text-slate-400 font-medium">Storage:</span>
+      <div className="px-3 py-2 mx-3 mb-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] flex items-center justify-between">
+        <span className="text-slate-400 font-medium">Database:</span>
         <span
           className={`font-bold ${
             isCloudSupabase ? "text-emerald-400" : "text-indigo-400"

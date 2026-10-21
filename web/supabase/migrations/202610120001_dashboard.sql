@@ -1,6 +1,20 @@
--- Job Intelligence dashboard schema.
--- Run in Supabase SQL Editor before importing Data/unified_jobs.csv.
+-- ============================================================================
+-- JOB INTELLIGENCE & SCRAPER PIPELINE: COMPLETE SUPABASE MIGRATION
+-- ============================================================================
+-- How to apply:
+-- 1. Open your Supabase Dashboard: https://supabase.com/dashboard/project/_
+-- 2. Click "SQL Editor" in the left sidebar.
+-- 3. Click "+ New query", paste this entire script, and click "Run".
+-- ============================================================================
 
+-- Enable required extensions
+create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
+
+-- ============================================================================
+-- 1. JOBS TABLE
+-- Canonical storage for all normalized job postings across LinkedIn, Naukri, Indeed
+-- ============================================================================
 create table if not exists public.jobs (
   job_id text primary key,
   source text,
@@ -18,9 +32,56 @@ create table if not exists public.jobs (
   specialization_required text,
   collected_at text,
   link text,
-  full_description text
+  full_description text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
+-- Full-Text Search generated column for fast search in dashboard
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' and table_name = 'jobs' and column_name = 'search_vector'
+  ) then
+    alter table public.jobs add column search_vector tsvector
+      generated always as (
+        to_tsvector('english',
+          coalesce(title, '') || ' ' ||
+          coalesce(company, '') || ' ' ||
+          coalesce(skills, '') || ' ' ||
+          coalesce(city, '') || ' ' ||
+          coalesce(search_keyword, '')
+        )
+      ) stored;
+  end if;
+end $$;
+
+-- Indexes for performance
+create index if not exists idx_jobs_source on public.jobs (source);
+create index if not exists idx_jobs_company on public.jobs (company);
+create index if not exists idx_jobs_city on public.jobs (city);
+create index if not exists idx_jobs_search_keyword on public.jobs (search_keyword);
+create index if not exists idx_jobs_collected_at on public.jobs (collected_at desc);
+create index if not exists idx_jobs_search_vector on public.jobs using gin (search_vector);
+
+-- Automatically update updated_at timestamp on edit
+create or replace function public.update_timestamp()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_jobs_updated_at on public.jobs;
+create trigger set_jobs_updated_at
+  before update on public.jobs
+  for each row execute function public.update_timestamp();
+
+-- ============================================================================
+-- 2. USER PROFILES & ROLE-BASED ACCESS CONTROL (RBAC)
+-- ============================================================================
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
@@ -55,7 +116,7 @@ create table if not exists public.audit_logs (
 
 create table if not exists public.scrape_runs (
   id uuid primary key default gen_random_uuid(),
-  requested_by uuid not null references auth.users(id) on delete restrict,
+  requested_by uuid references auth.users(id) on delete set null,
   source text not null check (source in ('linkedin', 'naukri', 'indeed', 'all')),
   max_age_hours integer not null default 24 check (max_age_hours between 1 and 720),
   status text not null default 'queued' check (status in ('queued', 'running', 'completed', 'failed')),
@@ -66,20 +127,22 @@ create table if not exists public.scrape_runs (
   finished_at timestamptz
 );
 
+-- Existing users backfill into profiles & user_roles
 insert into public.profiles (id, display_name)
 select id, nullif(raw_user_meta_data ->> 'full_name', '') from auth.users
 on conflict (id) do nothing;
+
 insert into public.user_roles (user_id, role)
 select id, 'user' from auth.users
 on conflict (user_id) do nothing;
 
-create index if not exists jobs_collected_at_idx on public.jobs (collected_at desc);
-create index if not exists jobs_source_idx on public.jobs (source);
-create index if not exists jobs_city_idx on public.jobs (city);
 create index if not exists saved_jobs_user_created_idx on public.saved_jobs (user_id, created_at desc);
 create index if not exists audit_logs_created_idx on public.audit_logs (created_at desc);
 create index if not exists scrape_runs_created_idx on public.scrape_runs (created_at desc);
 
+-- ============================================================================
+-- 3. HELPER FUNCTIONS & TRIGGERS
+-- ============================================================================
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -133,6 +196,26 @@ create trigger on_auth_user_created_job_dashboard
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+create or replace function public.claim_scrape_run()
+returns setof public.scrape_runs
+language sql
+security definer
+set search_path = ''
+as $$
+  with next_run as (
+    select id from public.scrape_runs
+    where status = 'queued'
+    order by created_at
+    for update skip locked
+    limit 1
+  )
+  update public.scrape_runs as run
+  set status = 'running', started_at = now()
+  from next_run
+  where run.id = next_run.id
+  returning run.*;
+$$;
+
 create or replace function public.admin_set_user_role(target_user_id uuid, new_role text)
 returns void
 language plpgsql
@@ -171,26 +254,9 @@ begin
 end;
 $$;
 
-create or replace function public.claim_scrape_run()
-returns setof public.scrape_runs
-language sql
-security definer
-set search_path = ''
-as $$
-  with next_run as (
-    select id from public.scrape_runs
-    where status = 'queued'
-    order by created_at
-    for update skip locked
-    limit 1
-  )
-  update public.scrape_runs as run
-  set status = 'running', started_at = now()
-  from next_run
-  where run.id = next_run.id
-  returning run.*;
-$$;
-
+-- ============================================================================
+-- 4. ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================================================================
 alter table public.jobs enable row level security;
 alter table public.profiles enable row level security;
 alter table public.user_roles enable row level security;
@@ -198,58 +264,67 @@ alter table public.saved_jobs enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.scrape_runs enable row level security;
 
-revoke all on public.jobs, public.profiles, public.user_roles, public.saved_jobs, public.audit_logs, public.scrape_runs from anon;
-revoke all on public.jobs, public.profiles, public.user_roles, public.saved_jobs, public.audit_logs, public.scrape_runs from authenticated;
-grant select on public.jobs to authenticated;
-grant select on public.profiles, public.user_roles, public.saved_jobs, public.audit_logs, public.scrape_runs to authenticated;
-grant insert, update, delete on public.saved_jobs to authenticated;
-grant insert on public.scrape_runs to authenticated;
-grant update (display_name) on public.profiles to authenticated;
+-- Grants
+grant usage on schema public to anon, authenticated, service_role;
+
+-- JOBS POLICIES:
+-- 1) Anyone (both anon visitors and logged in users) can search & view jobs
+grant select on public.jobs to anon, authenticated;
+drop policy if exists "allow public read on jobs" on public.jobs;
+create policy "allow public read on jobs" on public.jobs
+  for select using (true);
+
+-- 2) Service role (Python scraper / backend) has full access
+grant all on public.jobs to service_role;
+
+-- SAVED JOBS POLICIES:
+grant select, insert, update, delete on public.saved_jobs to authenticated;
 grant usage, select on sequence public.saved_jobs_id_seq to authenticated;
-grant usage, select on sequence public.audit_logs_id_seq to authenticated;
 
-drop policy if exists "active users can read jobs" on public.jobs;
-create policy "active users can read jobs" on public.jobs
-  for select to authenticated using ((select public.is_active_user()));
+drop policy if exists "users manage own saved jobs" on public.saved_jobs;
+create policy "users manage own saved jobs" on public.saved_jobs
+  for all to authenticated
+  using ((user_id = (select auth.uid()) and (select public.is_active_user())) or (select public.is_admin()))
+  with check ((user_id = (select auth.uid()) and (select public.is_active_user())) or (select public.is_admin()));
 
+-- PROFILES POLICIES:
+grant select on public.profiles to authenticated;
+grant update (display_name) on public.profiles to authenticated;
 drop policy if exists "users read own profile or admins read all" on public.profiles;
 create policy "users read own profile or admins read all" on public.profiles
   for select to authenticated using (id = (select auth.uid()) or (select public.is_admin()));
+
 drop policy if exists "users update own display name" on public.profiles;
 create policy "users update own display name" on public.profiles
   for update to authenticated using (id = (select auth.uid()) and (select public.is_active_user()))
   with check (id = (select auth.uid()) and (select public.is_active_user()));
 
+-- USER ROLES POLICIES:
+grant select on public.user_roles to authenticated;
 drop policy if exists "users read own role or admins read all" on public.user_roles;
 create policy "users read own role or admins read all" on public.user_roles
   for select to authenticated using (user_id = (select auth.uid()) or (select public.is_admin()));
 
-drop policy if exists "users manage own saved jobs and admins manage all" on public.saved_jobs;
-create policy "users manage own saved jobs and admins manage all" on public.saved_jobs
-  for all to authenticated
-  using ((user_id = (select auth.uid()) and (select public.is_active_user())) or (select public.is_admin()))
-  with check ((user_id = (select auth.uid()) and (select public.is_active_user())) or (select public.is_admin()));
+-- SCRAPE RUNS POLICIES:
+grant select, insert on public.scrape_runs to authenticated;
+drop policy if exists "admins read scrape runs" on public.scrape_runs;
+create policy "admins read scrape runs" on public.scrape_runs
+  for select to authenticated using ((select public.is_admin()));
 
+drop policy if exists "admins enqueue scrape runs" on public.scrape_runs;
+create policy "admins enqueue scrape runs" on public.scrape_runs
+  for insert to authenticated with check ((select public.is_admin()));
+
+-- AUDIT LOGS POLICIES:
+grant select on public.audit_logs to authenticated;
+grant usage, select on sequence public.audit_logs_id_seq to authenticated;
 drop policy if exists "admins read audit logs" on public.audit_logs;
 create policy "admins read audit logs" on public.audit_logs
   for select to authenticated using ((select public.is_admin()));
-drop policy if exists "admins read and enqueue scrape runs" on public.scrape_runs;
-create policy "admins read and enqueue scrape runs" on public.scrape_runs
-  for select to authenticated using ((select public.is_admin()));
-create policy "admins enqueue scrape runs" on public.scrape_runs
-  for insert to authenticated with check ((select public.is_admin()) and requested_by = (select auth.uid()));
 
-revoke all on function public.is_admin() from public, anon;
-revoke all on function public.is_active_user() from public, anon;
-revoke all on function public.admin_set_user_role(uuid, text) from public, anon;
-revoke all on function public.admin_set_user_active(uuid, boolean) from public, anon;
-revoke all on function public.claim_scrape_run() from public, anon, authenticated;
+-- Functions execution permissions
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_active_user() to authenticated;
+grant execute on function public.claim_scrape_run() to service_role;
 grant execute on function public.admin_set_user_role(uuid, text) to authenticated;
 grant execute on function public.admin_set_user_active(uuid, boolean) to authenticated;
-grant execute on function public.claim_scrape_run() to service_role;
-
--- Promote a trusted account after signing up. Replace the email first, then run:
--- update public.user_roles ur set role = 'admin'
--- from auth.users au where au.id = ur.user_id and au.email = 'your-admin@example.com';

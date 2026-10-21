@@ -88,11 +88,23 @@ function parseCsvLine(text: string): string[] {
   return result;
 }
 
+// In-memory cache for fast sub-millisecond responses
+let cachedCatalog: {
+  jobs: UnifiedJobRecord[];
+  isCloudSupabase: boolean;
+  timestamp: number;
+} | null = null;
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
 // Master loader: tries Supabase first; falls back cleanly to local CSV
 export async function getJobsCatalog(): Promise<{
   jobs: UnifiedJobRecord[];
   isCloudSupabase: boolean;
 }> {
+  if (cachedCatalog && Date.now() - cachedCatalog.timestamp < CACHE_TTL_MS) {
+    return { jobs: cachedCatalog.jobs, isCloudSupabase: cachedCatalog.isCloudSupabase };
+  }
+
   if (hasEnvVars) {
     try {
       const supabase = await createClient();
@@ -122,6 +134,7 @@ export async function getJobsCatalog(): Promise<{
             exp_display: formatExpDisplay(minExp, maxExp),
           };
         });
+        cachedCatalog = { jobs: enriched, isCloudSupabase: true, timestamp: Date.now() };
         return { jobs: enriched, isCloudSupabase: true };
       }
     } catch (e) {
@@ -130,5 +143,7 @@ export async function getJobsCatalog(): Promise<{
   }
 
   // Local fallback
-  return { jobs: loadJobsFromLocalCsv(), isCloudSupabase: false };
+  const localJobs = loadJobsFromLocalCsv();
+  cachedCatalog = { jobs: localJobs, isCloudSupabase: false, timestamp: Date.now() };
+  return { jobs: localJobs, isCloudSupabase: false };
 }
