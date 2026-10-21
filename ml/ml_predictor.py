@@ -209,50 +209,151 @@ def extract_skills(text):
 
 
 def extract_experience_years(text):
-    if not text or text == "N/A":
+    if not text or str(text).strip() in {"", "N/A", "Not Specified", "None", "null"}:
         return "Not Specified", "Not Specified"
 
-    normalized_text = str(text).replace("–", "-").replace("—", "-")
+    clean_text = str(text).replace("–", "-").replace("—", "-")
+
+    # 1. Explicit experience field / header: "Experience: 6-8", "Experience: 3 - 5 years", "Exp: 3+ yrs"
+    label_match = re.search(
+        r"(?:experience|exp|relevant\s+experience)\s*[:=-]\s*(?:min(?:imum)?\s*)?(\d+(?:\.\d+)?)\s*(?:(?:to|-)\s*(\d+(?:\.\d+)?))?\s*\+?(?:\s*(?:years?|yrs?))?",
+        clean_text,
+        re.IGNORECASE,
+    )
+    if label_match:
+        min_v = label_match.group(1)
+        max_v = label_match.group(2)
+        if max_v:
+            return min_v, max_v
+        if "+" in label_match.group(0):
+            return min_v, f"{min_v}+"
+        return min_v, min_v
+
+    # 2. Check for fresher mentions
+    if re.search(r"\b(?:freshers?\s+(?:can\s+apply|welcome)|for\s+freshers?|fresher\s+role|entry\s+level)\b", clean_text, re.IGNORECASE):
+        m = re.search(r"\b0\s*(?:to|-)\s*(\d+)\s*(?:years?|yrs?)\b", clean_text, re.IGNORECASE)
+        if m:
+            return "0", m.group(1)
+        return "0", "1"
+
+    # 3. Sentence-level search for candidate experience
     number = r"\d+(?:\.\d+)?"
-    patterns = [
-        rf"({number})\s*(?:to|-)\s*({number})\s*(?:years?|yrs?)",
-        rf"(?:at least|minimum|min)\s*({number})\s*(?:years?|yrs?)",
-        rf"({number})\s*\+\s*(?:years?|yrs?)",
-        rf"({number})\s*(?:years?|yrs?)\s+of\s+experience",
-        rf"experience\s*[:=-]\s*({number})\s*(?:years?|yrs?)",
+    exp_patterns = [
+        # 3 - 5 years of experience / 0 3 years of experience
+        (rf"\b({number})\s*(?:to|-|\s)\s*({number})\s*(?:years?|yrs?)(?:\s+(?:of\s+)?(?:overall\s+)?(?:it\s+)?experience)?\b", True),
+        # 3+ years of experience / 3+ yrs exp
+        (rf"\b({number})\s*\+\s*(?:years?|yrs?)(?:\s+(?:of\s+)?experience)?\b", False),
+        # minimum of 7 years / at least 3 years
+        (rf"\b(?:minimum|min|at least)\s+(?:of\s+)?({number})\s*(?:years?|yrs?)(?:\s+(?:of\s+)?experience)?\b", False),
+        # 3 years of experience / 3 yrs experience
+        (rf"\b({number})\s*(?:years?|yrs?)\s+(?:of\s+)?(?:overall\s+)?(?:it\s+)?experience\b", False),
+        # experience of 3 years
+        (rf"\bexperience\s+(?:of\s+)?({number})\s*(?:years?|yrs?)\b", False),
     ]
 
-    candidate_context = re.compile(
-        r"\b(?:experience|experienced|candidate|role|position|developer|analyst|"
-        r"engineer|consultant|professional|working|employment|years?\s+in)\b",
+    company_age_regex = re.compile(
+        r"\b(?:our\s+company|the\s+company|firm|organization)\s+(?:has|having|with)\s+\d+\s+years\b|"
+        r"\b\d+\s+years\s+(?:in\s+business|of\s+industry\s+presence|serving\s+clients|of\s+excellence|in\s+market)\b",
         re.IGNORECASE,
     )
-    company_context = re.compile(
-        r"\b(?:company|companies|founded|established|company history|years?\s+in\s+business|"
-        r"operating|serving|organization|employees|revenue|industry)\b",
-        re.IGNORECASE,
-    )
-    company_age_context = re.compile(
-        rf"\b(?:with|over|more\s+than|has|have)\s+{number}\s+years?\s+of\s+experience\b",
-        re.IGNORECASE,
-    )
-    sentences = re.split(r"\r?\n+|(?<=[.!?])\s+", normalized_text)
 
+    sentences = re.split(r"\r?\n+|(?<=[.!?])\s+", clean_text)
     for sentence in sentences:
-        if (
-            not candidate_context.search(sentence)
-            or company_context.search(sentence)
-            or company_age_context.search(sentence)
+        s_clean = sentence.strip()
+        if not s_clean:
+            continue
+
+        if company_age_regex.search(s_clean) and not re.search(
+            r"\b(?:candidate|developer|engineer|you|applicant|must|should|require|looking\s+for)\b",
+            s_clean,
+            re.IGNORECASE,
         ):
             continue
-        for pattern in patterns:
-            match = re.search(pattern, sentence, re.IGNORECASE)
-            if not match:
+
+        for pat, is_range in exp_patterns:
+            m = re.search(pat, s_clean, re.IGNORECASE)
+            if not m:
                 continue
-            values = match.groups()
-            if len(values) == 2:
-                return values[0], values[1]
-            return values[0], f"{values[0]}+"
+
+            if is_range:
+                min_val, max_val = m.group(1), m.group(2)
+                if float(min_val) <= 25 and float(max_val) <= 30 and float(min_val) <= float(max_val):
+                    return min_val, max_val
+            else:
+                val = m.group(1)
+                if float(val) <= 25:
+                    has_plus = "+" in m.group(0) or "+" in s_clean[m.end():m.end()+2]
+                    return val, (f"{val}+" if has_plus else val)
+
+    return "Not Specified", "Not Specified" 
+
+    clean_text = str(text).replace("–", "-").replace("—", "-")
+
+    # 1. Explicit experience field / header: "Experience: 3 - 5 years", "Exp: 3+ yrs"
+    label_match = re.search(
+        r"(?:experience|exp|relevant\s+experience)\s*[:=-]\s*(?:min(?:imum)?\s*)?(\d+(?:\.\d+)?)\s*(?:(?:to|-)\s*(\d+(?:\.\d+)?))?\s*\+?\s*(?:years?|yrs?)",
+        clean_text,
+        re.IGNORECASE,
+    )
+    if label_match:
+        min_v = label_match.group(1)
+        max_v = label_match.group(2)
+        if max_v:
+            return min_v, max_v
+        if "+" in label_match.group(0):
+            return min_v, f"{min_v}+"
+        return min_v, min_v
+
+    # 2. Check for fresher mentions
+    if re.search(r"\b(?:freshers?\s+(?:can\s+apply|welcome)|for\s+freshers?|fresher\s+role|entry\s+level)\b", clean_text, re.IGNORECASE):
+        m = re.search(r"\b0\s*(?:to|-)\s*(\d+)\s*(?:years?|yrs?)\b", clean_text, re.IGNORECASE)
+        if m:
+            return "0", m.group(1)
+        return "0", "1"
+
+    # 3. Sentence-level search for candidate experience
+    number = r"\d+(?:\.\d+)?"
+    exp_patterns = [
+        (rf"\b({number})\s*(?:to|-)\s*({number})\s*(?:years?|yrs?)(?:\s+(?:of\s+)?experience)?\b", True),
+        (rf"\b({number})\s*\+\s*(?:years?|yrs?)(?:\s+(?:of\s+)?experience)?\b", False),
+        (rf"\b(?:minimum|min|at least)\s+({number})\s*(?:years?|yrs?)(?:\s+(?:of\s+)?experience)?\b", False),
+        (rf"\b({number})\s*(?:years?|yrs?)\s+(?:of\s+)?experience\b", False),
+        (rf"\bexperience\s+(?:of\s+)?({number})\s*(?:years?|yrs?)\b", False),
+    ]
+
+    company_age_regex = re.compile(
+        r"\b(?:our\s+company|the\s+company|firm|organization)\s+(?:has|having|with)\s+\d+\s+years\b|"
+        r"\b\d+\s+years\s+(?:in\s+business|of\s+industry\s+presence|serving\s+clients|of\s+excellence|in\s+market)\b",
+        re.IGNORECASE,
+    )
+
+    sentences = re.split(r"\r?\n+|(?<=[.!?])\s+", clean_text)
+    for sentence in sentences:
+        s_clean = sentence.strip()
+        if not s_clean:
+            continue
+
+        if company_age_regex.search(s_clean) and not re.search(
+            r"\b(?:candidate|developer|engineer|you|applicant|must|should|require|looking\s+for)\b",
+            s_clean,
+            re.IGNORECASE,
+        ):
+            continue
+
+        for pat, is_range in exp_patterns:
+            m = re.search(pat, s_clean, re.IGNORECASE)
+            if not m:
+                continue
+
+            if is_range:
+                min_val, max_val = m.group(1), m.group(2)
+                if float(min_val) <= 25 and float(max_val) <= 30:
+                    return min_val, max_val
+            else:
+                val = m.group(1)
+                if float(val) <= 25:
+                    has_plus = "+" in m.group(0) or "+" in s_clean[m.end():m.end()+2]
+                    return val, (f"{val}+" if has_plus else val)
 
     return "Not Specified", "Not Specified"
 
@@ -265,8 +366,12 @@ DEGREE_PATTERNS = {
     "B.E/B.Tech": [
         r"\bB\.\s*E\.?\b",
         r"\bB\.?\s*Tech\.?\b",
+        r"\bBE\s*\([^)]*\)",
+        r"\bBTech\s*\([^)]*\)",
+        r"\bBE\s*/\s*B\.?Tech\b",
         r"\bBachelor\s+of\s+Engineering\b",
         r"\bBachelor\s+of\s+Technology\b",
+        r"\bEngineering\s+bachelor'?s(?:\s+degree)?\b",
     ],
     "B.Sc": [
         r"\bB\.?\s*Sc\.?\b",
@@ -314,12 +419,17 @@ DEGREE_PATTERNS = {
         r"\bEngineering\s+Diploma\b",
     ],
     "Any Bachelor's Degree": [
+        r"\b(?:any\s+graduate|any\s+graduation)\b",
+        r"\b(?:graduated|graduate|graduation)\s+in\b",
         r"\bBachelor'?s\s+or\s+Master'?s\s+degree\b",
         r"\bBachelor'?s\s+or\s+associate\s+degree\b",
         r"\bBachelor(?:'s)?\s+or\s+associate\s+degree\b",
         r"\bBachelor(?:'s)?\s+degree\b",
         r"\bBachelor'?s\s+degree\b",
         r"\bBachelor'?s\s+qualification\b",
+        r"\bBachelor\s+degree\b",
+        r"\bEngineering\s+degree\b",
+        r"\bTechnical\s+degree\b",
         r"\bAny\s+recognized\s+Bachelor'?s\s+degree\b",
     ],
     "Any Master's Degree": [
@@ -444,17 +554,39 @@ def extract_degree_text(job_description):
         return ""
 
     normalized_description = job_description.replace("’", "'").replace("‘", "'")
-    sentences = re.split(r"\r?\n+|(?<=[.!?])\s+", normalized_description)
-    degree_pattern = re.compile(
-        r"\b(?:degree\b(?!-)|qualification|education|bachelor(?:'s)?(?=\s+(?:degree|in|of|or))|master(?:'s)?(?=\s+(?:degree|in|of|or))|phd|doctorate|"
-        r"undergraduate|postgraduate|academic|major|field of study)\b",
+    lines = [line.strip() for line in normalized_description.splitlines() if line.strip()]
+    extracted = []
+
+    header_regex = re.compile(
+        r"^(?:educational\s+)?(?:qualification|education|eligibility|academics|degree|ug|pg)\s*[:\-]",
         re.IGNORECASE,
     )
-    return " ".join(
-        sentence.strip()
-        for sentence in sentences
-        if sentence.strip() and degree_pattern.search(sentence)
+    inline_degree_regex = re.compile(
+        r"\b(?:degree\b(?!-)|qualification|education|bachelor|master|phd|doctorate|"
+        r"b\.?tech|b\.?e\b|mca|bca|m\.?tech|b\.?sc|m\.?sc|mba|diploma|"
+        r"undergraduate|postgraduate|academic|major|field of study|graduate)\b",
+        re.IGNORECASE,
     )
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if header_regex.search(line):
+            extracted.append(line)
+            j = i + 1
+            while j < len(lines) and j <= i + 3:
+                next_line = lines[j]
+                if re.match(r"^(?:experience|skills|responsibilities|role|about|location|salary|benefits)\s*[:\-]", next_line, re.IGNORECASE):
+                    break
+                extracted.append(next_line)
+                j += 1
+            i = j
+            continue
+        elif inline_degree_regex.search(line):
+            extracted.append(line)
+        i += 1
+
+    return " \n ".join(extracted) if extracted else normalized_description
 
 
 def detect_explicit_degree(job_description):
@@ -463,11 +595,33 @@ def detect_explicit_degree(job_description):
 
     normalized_description = extract_degree_text(job_description)
     found = []
+
+    # Check compound pattern first: e.g. "Bachelor's or Master's degree"
+    if re.search(r"\b(?:bachelor'?s|b\.?e\.?|b\.?tech)\s*(?:or|\/|and)\s*(?:master'?s|m\.?e\.?|m\.?tech)\b", normalized_description, re.IGNORECASE):
+        found.append("Any Bachelor's Degree / Any Master's Degree")
+        return found
+
     for degree, patterns in DEGREE_PATTERNS.items():
+        if degree in {"Any Bachelor's Degree", "Any Master's Degree"} and found:
+            continue
         for pattern in patterns:
             if re.search(pattern, normalized_description, re.IGNORECASE):
                 found.append(degree)
                 break
+
+    # Fallback to scanning whole description for unambiguous tech degrees (B.Tech, B.E, MCA)
+    if not found:
+        for degree in ["B.E/B.Tech", "M.E/M.Tech", "MCA", "BCA"]:
+            for pattern in DEGREE_PATTERNS[degree]:
+                if re.search(pattern, job_description, re.IGNORECASE):
+                    found.append(degree)
+                    break
+
+    # Filter generic "Any Bachelor's" if specific degree is present
+    specific = [d for d in found if d not in {"Any Bachelor's Degree", "Any Master's Degree"}]
+    if specific:
+        return list(dict.fromkeys(specific))
+
     return list(dict.fromkeys(found))
 
 
@@ -1055,9 +1209,18 @@ def predict_degree(job_description):
     if explicit:
         return " / ".join(explicit)
 
+    # Detect common degree patterns that might not be in explicit dictionary
+    desc_lower = str(job_description).lower()
+    if re.search(r"\b(?:b\.?e\.?|b\.?tech|bachelor'?s(?:\s+degree)?)\s*(?:or|and|\/)\s*(?:m\.?e\.?|m\.?tech|master'?s(?:\s+degree)?)\b", desc_lower):
+        return "Any Bachelor's Degree / Any Master's Degree"
+    if re.search(r"\b(?:b\.?e\.?|b\.?tech|engineering\s+bachelor'?s(?:\s+degree)?)\b", desc_lower):
+        return "B.E/B.Tech"
+    if re.search(r"\b(?:bachelor'?s(?:\s+degree)?|bachelor\s+degree|any\s+graduate|any\s+graduation|graduated\s+in|graduate\s+in)\b", desc_lower):
+        return "Any Bachelor's Degree"
+    if re.search(r"\b(?:master'?s(?:\s+degree)?|master\s+degree)\b", desc_lower):
+        return "Any Master's Degree"
+
     degree_text = extract_degree_text(job_description)
-    if degree_text and re.search(r"\bdegree\s+in\b", degree_text, re.IGNORECASE):
-        return "Not Specified"
 
     if degree_model is not None and degree_vectorizer is not None:
         try:
@@ -1068,7 +1231,8 @@ def predict_degree(job_description):
             best_index = probabilities.argmax()
             predicted_degree = str(degree_model.classes_[best_index])
             confidence = probabilities[best_index] * 100
-            if confidence >= 60:
+            # Calibrated threshold for 14-class model (baseline uniform is 7.1%): >= 28%
+            if confidence >= 28 and predicted_degree != "Not Specified":
                 return predicted_degree
         except Exception as error:
             print(f"[ML Prediction Error] Degree inference failed: {error}")
@@ -1081,15 +1245,39 @@ def predict_degree(job_description):
 # SPECIALIZATION PREDICTION
 # ==============================
 
-def predict_specialization(job_description: str) -> str:
+def predict_specialization(job_description: str, title: str = "") -> str:
     """
     Predict job specialization.
 
     Priority:
-    1. Explicit/domain-aware rule detection
-    2. ML model prediction with confidence threshold
-    3. Not Specified
+    1. Title-based role detection (highest precision for domain)
+    2. Explicit/domain-aware rule detection from description
+    3. ML model prediction with calibrated confidence threshold
+    4. Not Specified
     """
+
+    # Title check if available
+    if title and str(title).strip():
+        title_clean = str(title).replace("_", " ").replace("-", " ")
+        explicit_title = detect_explicit_specialization(title_clean)
+        if explicit_title:
+            return "Artificial Intelligence" if explicit_title == "AI/ML" else explicit_title
+
+        t_lower = title_clean.lower()
+        if re.search(r"\b(?:ai|artificial\s+intelligence|machine\s+learning|ml\s+engineer|gen\s*ai|llm)\b", t_lower):
+            return "Artificial Intelligence"
+        if re.search(r"\b(?:data\s+scientist|data\s+science)\b", t_lower):
+            return "Data Science"
+        if re.search(r"\b(?:data\s+engineer|pyspark|etl|data\s+pipeline)\b", t_lower):
+            return "Data Engineering"
+        if re.search(r"\b(?:data\s+analyst|bi\s+analyst|business\s+analyst)\b", t_lower):
+            return "Data Analyst"
+        if re.search(r"\b(?:full\s*stack|web\s+developer|frontend)\b", t_lower):
+            return "Web Development"
+        if re.search(r"\b(?:cloud|devops|aws|azure|gcp|sre)\b", t_lower):
+            return "Cloud Computing"
+        if re.search(r"\b(?:software|developer|backend|python\s+developer|engineer|lead|consultant)\b", t_lower):
+            return "Software Engineering"
 
     if not job_description:
         return "Not Specified"
@@ -1106,7 +1294,7 @@ def predict_specialization(job_description: str) -> str:
     explicit_specialization = detect_explicit_specialization(text)
 
     if explicit_specialization:
-        return explicit_specialization
+        return "Artificial Intelligence" if explicit_specialization == "AI/ML" else explicit_specialization
 
     # ==========================================================
     # STEP 2: ML FALLBACK
@@ -1127,10 +1315,11 @@ def predict_specialization(job_description: str) -> str:
 
         confidence = probabilities[best_index]
 
-        prediction = specialization_model.classes_[best_index]
+        prediction = str(specialization_model.classes_[best_index])
 
-        if confidence >= 0.60:
-            return str(prediction)
+        # Calibrated threshold for 22-class model (baseline uniform is 4.5%): >= 25%
+        if confidence >= 0.25 and prediction != "Not Specified":
+            return prediction
 
     except Exception:
         return "Not Specified"
@@ -1141,21 +1330,13 @@ def predict_specialization(job_description: str) -> str:
 # COMPLETE JOB PREDICTION
 # ==============================
 
-def predict_job_details(job_description: str) -> dict:
+def predict_job_details(job_description: str, title: str = "") -> dict:
     """
-    Predict degree and specialization for a job description.
+    Predict degree and specialization for a job posting.
     """
 
     degree = predict_degree(job_description)
-
-    specialization = predict_specialization(job_description)
-
-    return {
-        "predicted_degree": degree,
-        "predicted_specialization": specialization,
-    }
-    degree = predict_degree(job_description)
-    specialization = predict_specialization(job_description)
+    specialization = predict_specialization(job_description, title=title)
 
     return {
         "predicted_degree": degree,

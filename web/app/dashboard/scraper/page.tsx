@@ -24,6 +24,7 @@ export default function ScraperStudioPage() {
   const [freshness, setFreshness] = useState<number | string>(4);
   const [location, setLocation] = useState<string>("India");
   const [keywords, setKeywords] = useState<string>("Python developer");
+  const [enableDetails, setEnableDetails] = useState<boolean>(true);
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
@@ -61,6 +62,7 @@ export default function ScraperStudioPage() {
           freshness: Number(freshness) || 4,
           keywords,
           location,
+          enableDetails,
         }),
       });
 
@@ -325,6 +327,28 @@ export default function ScraperStudioPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Full Page Enrichment Toggle */}
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+            <div>
+              <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                Full Page Fetching (Rich Descriptions & Degrees)
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                Opens full job posting URLs to extract complete job descriptions and exact education/degree tables.
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enableDetails}
+                onChange={(e) => setEnableDetails(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
           </div>
 
           {/* Scope Badge */}

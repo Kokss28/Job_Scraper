@@ -67,6 +67,8 @@ def parse_args():
     parser.add_argument("--freshness", type=float, default=24.0, help="Manual time range in hours (e.g. 1, 6, 24, 72)")
     parser.add_argument("--location", type=str, default="India", help="Target search location (e.g. India, Bengaluru, Pune)")
     parser.add_argument("--max-jobs", type=int, default=None, help="Optional max jobs limit (omitted for unlimited)")
+    parser.add_argument("--enable-details", dest="enable_details", action="store_true", default=True, help="Enable full detail page fetching for rich descriptions and education")
+    parser.add_argument("--no-details", dest="enable_details", action="store_false", help="Disable detail page fetching for faster card-only scraping")
     return parser.parse_args()
 
 
@@ -79,6 +81,7 @@ def main():
     if not location:
         location = "India"
     max_jobs = args.max_jobs if (args.max_jobs is not None and args.max_jobs > 0) else None
+    enable_details = bool(getattr(args, "enable_details", True))
 
     limit_desc = f"Max {max_jobs} jobs" if max_jobs else "All accessible matching jobs (Unlimited)"
     log(f"Initializing Live Scraper Engine...")
@@ -86,6 +89,7 @@ def main():
     log(f"Keywords ({len(keywords)}): {', '.join(keywords)}")
     log(f"Location: {location}")
     log(f"Posting Freshness: Past {freshness:g} Hours | Scope: {limit_desc}")
+    log(f"Full Page Fetching (Rich Details & Degree): {'ENABLED' if enable_details else 'DISABLED'}")
 
     store = JobStore(output_dir=OUTPUT_DIR)
     
@@ -102,7 +106,7 @@ def main():
         "location": location,
         "max_jobs_per_keyword": max_jobs,
         "max_age_hours": freshness,
-        "enable_detail_pages": False,
+        "enable_detail_pages": enable_details,
     } if use_linkedin else None
 
     nk_kwargs = {
@@ -112,6 +116,7 @@ def main():
         "max_jobs": max_jobs,
         "max_total": max_jobs,
         "max_age_hours": freshness,
+        "enable_detail_pages": enable_details,
         "headless": NAUKRI_HEADLESS,
     } if use_naukri else None
 
