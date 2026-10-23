@@ -96,6 +96,10 @@ let cachedCatalog: {
 } | null = null;
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
+export function invalidateJobsCache(): void {
+  cachedCatalog = null;
+}
+
 // Master loader: tries Supabase first; falls back cleanly to local CSV
 export async function getJobsCatalog(): Promise<{
   jobs: UnifiedJobRecord[];
@@ -108,13 +112,39 @@ export async function getJobsCatalog(): Promise<{
   if (hasEnvVars) {
     try {
       const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("*")
-        .order("collected_at", { ascending: false });
+      // Supabase / PostgREST limits single requests to 1,000 rows by default.
+      // Fetch in chunks of 1,000 to retrieve ALL extracted jobs without truncation.
+      const PAGE_SIZE = 1000;
+      let allRawJobs: any[] = [];
+      let page = 0;
 
-      if (!error && data && data.length > 0) {
-        const enriched: UnifiedJobRecord[] = data.map((j: any) => {
+      while (true) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        const { data, error } = await supabase
+          .from("jobs")
+          .select("*")
+          .order("collected_at", { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          console.warn("Supabase query page error:", error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allRawJobs.push(...data);
+          if (data.length < PAGE_SIZE) {
+            break;
+          }
+          page++;
+        } else {
+          break;
+        }
+      }
+
+      if (allRawJobs.length > 0) {
+        const enriched: UnifiedJobRecord[] = allRawJobs.map((j: any) => {
           const minExp = parseExpNumber(j.min_experience_years);
           const maxExp = parseExpNumber(j.max_experience_years);
           const edu = classifyEducation(j.degree_required);

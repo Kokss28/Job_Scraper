@@ -1020,14 +1020,81 @@ def run_pipeline(
         )
 
         # ====================================================
+        # LOCATION RELEVANCE FILTERING
+        # ====================================================
+
+        target_location = str(
+            kwargs.get("location") or kwargs.get("search_location") or ""
+        ).strip()
+        target_loc_clean = target_location.lower()
+
+        location_matched_jobs: List[UnifiedJob] = []
+
+        if target_loc_clean and target_loc_clean not in (
+            "india",
+            "all india",
+            "remote",
+            "any",
+            "not specified",
+        ):
+            from .normalizer import INDIAN_CITY_TO_STATE
+
+            expected_state = INDIAN_CITY_TO_STATE.get(target_location.title()) or ""
+
+            for job in role_matched_jobs:
+                city_val = str(getattr(job, "city", "") or "").lower()
+                state_val = str(getattr(job, "state", "") or "").lower()
+                norm_loc = str(getattr(job, "normalized_location", "") or "").lower()
+                link_val = str(getattr(job, "link", "") or "").lower()
+                desc_val = str(getattr(job, "full_description", "") or "").lower()
+
+                # Check if job matches the targeted location
+                is_loc_match = False
+                if target_loc_clean in city_val or target_loc_clean in norm_loc:
+                    is_loc_match = True
+                elif target_loc_clean in link_val:
+                    is_loc_match = True
+                elif (
+                    f"location :{target_loc_clean}" in desc_val
+                    or f"location: {target_loc_clean}" in desc_val
+                    or f"in {target_loc_clean}" in desc_val
+                    or target_loc_clean in desc_val[:400]
+                ):
+                    is_loc_match = True
+
+                if is_loc_match:
+                    # Enforce that the job's city is clearly tagged with the searched city
+                    # (Prevent multi-city or headquarter pollution like "Chennai, Bengaluru" or "Dubai")
+                    job.city = target_location.title()
+                    if expected_state and (getattr(job, "state", "") in (NOT_SPECIFIED, "", None)):
+                        job.state = expected_state
+                    if getattr(job, "country", "") in (NOT_SPECIFIED, "", None):
+                        job.country = "India"
+                    location_matched_jobs.append(job)
+                else:
+                    print(
+                        f"[LocationFilter] Filtered out {display_name} job: '{getattr(job, 'title', '')}' "
+                        f"in '{getattr(job, 'city', '')}' (did not match target location '{target_location}')"
+                    )
+                    result.skipped_invalid += 1
+        else:
+            location_matched_jobs = role_matched_jobs
+
+        print(
+            f"[Pipeline] "
+            f"{display_name} matched location relevance: "
+            f"{len(location_matched_jobs)} jobs"
+        )
+
+        # ====================================================
         # ENRICHMENT
         # ====================================================
 
-        if apply_enrichment and role_matched_jobs:
+        if apply_enrichment and location_matched_jobs:
 
-            role_matched_jobs = _enrich_jobs(
+            location_matched_jobs = _enrich_jobs(
                 display_name,
-                role_matched_jobs,
+                location_matched_jobs,
             )
 
             print(
@@ -1047,7 +1114,7 @@ def run_pipeline(
         # ====================================================
 
         fresh_jobs = []
-        for job in role_matched_jobs:
+        for job in location_matched_jobs:
             job_id = _clean(getattr(job, "job_id", ""))
             if not job_id:
                 continue

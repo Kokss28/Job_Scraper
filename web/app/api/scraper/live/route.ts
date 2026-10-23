@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { invalidateJobsCache } from "@/lib/data-service";
 
 export const dynamic = "force-dynamic";
 
@@ -45,91 +46,102 @@ export async function POST(req: NextRequest) {
       args.push("--enable-details");
     }
 
-    const logs: string[] = [];
+    const encoder = new TextEncoder();
     let resultJson: any = null;
 
-    return await new Promise<NextResponse>((resolve) => {
-      const child = spawn(pythonExe, args, {
-        cwd: rootDir,
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: "1",
-        },
-      });
+    const stream = new ReadableStream({
+      start(controller) {
+        const sendEvent = (event: string, data: any) => {
+          try {
+            const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+            controller.enqueue(encoder.encode(payload));
+          } catch {}
+        };
 
-      child.stdout.on("data", (chunk: Buffer) => {
-        const text = chunk.toString("utf-8");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        const child = spawn(pythonExe, args, {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            PYTHONUNBUFFERED: "1",
+          },
+        });
 
-        for (const line of lines) {
-          if (line.includes("__RESULT_JSON__")) {
-            const rawJson = line.split("__RESULT_JSON__")[1];
+        child.stdout.on("data", (chunk: Buffer) => {
+          const text = chunk.toString("utf-8");
+          const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+
+          for (const line of lines) {
+            if (line.includes("__RESULT_JSON__")) {
+              const rawJson = line.split("__RESULT_JSON__")[1];
+              try {
+                resultJson = JSON.parse(rawJson);
+              } catch {}
+            } else {
+              sendEvent("log", { text: line });
+            }
+          }
+        });
+
+        child.stderr.on("data", (chunk: Buffer) => {
+          const text = chunk.toString("utf-8");
+          const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+          for (const line of lines) {
+            if (
+              line.includes("InconsistentVersionWarning") ||
+              line.includes("UserWarning") ||
+              line.includes("FutureWarning")
+            ) {
+              continue;
+            }
+            if (line.includes("WARNING") || line.includes("WARN")) {
+              sendEvent("log", { text: `[WARN] ${line}` });
+            } else if (line.includes("ERROR") || line.includes("Failed")) {
+              sendEvent("log", { text: `[ERROR] ${line}` });
+            } else {
+              sendEvent("log", { text: line });
+            }
+          }
+        });
+
+        child.on("close", (code) => {
+          if (code === 0 && resultJson) {
             try {
-              resultJson = JSON.parse(rawJson);
+              invalidateJobsCache();
             } catch {}
-          } else {
-            logs.push(line);
-          }
-        }
-      });
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        const text = chunk.toString("utf-8");
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-        for (const line of lines) {
-          // ignore typical harmless deprecation warnings
-          if (
-            line.includes("InconsistentVersionWarning") ||
-            line.includes("UserWarning") ||
-            line.includes("FutureWarning")
-          ) {
-            continue;
-          }
-          if (line.includes("WARNING") || line.includes("WARN")) {
-            logs.push(`[WARN] ${line}`);
-          } else if (line.includes("ERROR") || line.includes("Failed")) {
-            logs.push(`[ERROR] ${line}`);
-          } else {
-            logs.push(line);
-          }
-        }
-      });
-
-      child.on("close", (code) => {
-        if (code === 0 && resultJson) {
-          resolve(
-            NextResponse.json({
+            sendEvent("done", {
               success: true,
               result: resultJson,
-              logs: logs.slice(-50), // return last 50 log lines
-            })
-          );
-        } else {
-          resolve(
-            NextResponse.json(
-              {
-                success: false,
-                error: resultJson?.message || `Scraper exited with code ${code}`,
-                logs: logs.slice(-50),
-              },
-              { status: 500 }
-            )
-          );
-        }
-      });
-
-      child.on("error", (err) => {
-        resolve(
-          NextResponse.json(
-            {
+            });
+          } else {
+            sendEvent("done", {
               success: false,
-              error: `Failed to spawn Python runner: ${err.message}`,
-              logs,
-            },
-            { status: 500 }
-          )
-        );
-      });
+              error: resultJson?.message || `Scraper exited with code ${code}`,
+            });
+          }
+          try {
+            controller.close();
+          } catch {}
+        });
+
+        child.on("error", (err) => {
+          sendEvent("done", {
+            success: false,
+            error: `Failed to spawn Python runner: ${err.message}`,
+          });
+          try {
+            controller.close();
+          } catch {}
+        });
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (err: any) {
     return NextResponse.json(

@@ -29,58 +29,58 @@ type Profile = {
 export default async function AdminPage() {
   const { jobs, isCloudSupabase } = await getJobsCatalog();
 
-  // If Supabase is configured, use live auth and DB
+  // If Supabase is configured and an admin user is logged in, use live auth and DB
   if (hasEnvVars) {
     try {
       const supabase = await createClient();
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) redirect("/auth/login");
+      if (auth?.user) {
+        const { data: roleRow } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", auth.user.id)
+          .maybeSingle();
 
-      const { data: roleRow } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", auth.user.id)
-        .maybeSingle();
+        if (roleRow?.role === "admin") {
+          const [
+            { data: users, count: usersCount },
+            { count: jobsCount },
+            { data: sources },
+            { data: runs },
+          ] = await Promise.all([
+            supabase
+              .from("profiles")
+              .select("id,display_name,created_at,is_active,user_roles(role)", { count: "exact" })
+              .order("created_at", { ascending: false })
+              .limit(100),
+            supabase.from("jobs").select("job_id", { count: "exact", head: true }),
+            supabase.from("jobs").select("source"),
+            supabase
+              .from("scrape_runs")
+              .select("id,source,status,max_age_hours,created_at,result_summary,error_message")
+              .order("created_at", { ascending: false })
+              .limit(10),
+          ]);
 
-      if (roleRow?.role !== "admin") redirect("/dashboard");
+          const profiles = (users ?? []) as unknown as Profile[];
+          const sourceCounts = new Map<string, number>();
+          for (const item of sources ?? []) {
+            const key = item.source || "Other";
+            sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+          }
 
-      const [
-        { data: users, count: usersCount },
-        { count: jobsCount },
-        { data: sources },
-        { data: runs, error: runsError },
-      ] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id,display_name,created_at,is_active,user_roles(role)", { count: "exact" })
-          .order("created_at", { ascending: false })
-          .limit(100),
-        supabase.from("jobs").select("job_id", { count: "exact", head: true }),
-        supabase.from("jobs").select("source"),
-        supabase
-          .from("scrape_runs")
-          .select("id,source,status,max_age_hours,created_at,result_summary,error_message")
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
-
-      const profiles = (users ?? []) as unknown as Profile[];
-      const sourceCounts = new Map<string, number>();
-      for (const item of sources ?? []) {
-        const key = item.source || "Other";
-        sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+          return renderAdminView({
+            userEmail: auth.user.email || "admin",
+            userId: auth.user.id,
+            usersCount: usersCount ?? profiles.length,
+            jobsCount: jobsCount ?? jobs.length,
+            sourceCounts,
+            profiles,
+            runs: runs ?? [],
+            isCloudSupabase: true,
+          });
+        }
       }
-
-      return renderAdminView({
-        userEmail: auth.user.email || "admin",
-        userId: auth.user.id,
-        usersCount: usersCount ?? profiles.length,
-        jobsCount: jobsCount ?? jobs.length,
-        sourceCounts,
-        profiles,
-        runs: runs ?? [],
-        isCloudSupabase: true,
-      });
     } catch (e) {
       console.warn("Live admin query failed, falling back to local admin mode:", e);
     }
@@ -168,25 +168,25 @@ function renderAdminView({
   isCloudSupabase: boolean;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#070b14] text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex min-h-screen bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       <AppNav
         userEmail={userEmail}
         role="admin"
         isCloudSupabase={isCloudSupabase}
       />
-      <main className="flex-1 min-w-0 flex flex-col p-8 space-y-8 max-w-7xl mx-auto">
+      <main className="flex-1 min-w-0 flex flex-col p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
         {/* Hero Header */}
-        <div className="relative rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-8 shadow-2xl overflow-hidden">
+        <div className="relative rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-xs overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold mb-3">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Role-Based Access Control &amp; System Administration
               </div>
-              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                 Admin Governance Console
               </h1>
-              <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              <p className="text-slate-600 text-xs md:text-sm mt-1 max-w-2xl font-medium">
                 Manage user access tiers (Admin, Recruiter, Candidate), dispatch multi-source scraping jobs, and oversee pan-India catalog consistency.
               </p>
             </div>
@@ -195,8 +195,8 @@ function renderAdminView({
               <span
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
                   isCloudSupabase
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/30"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-indigo-50 text-indigo-700 border-indigo-200"
                 }`}
               >
                 {isCloudSupabase ? "Supabase Cloud RLS" : "Local Demo Storage"}
@@ -207,99 +207,99 @@ function renderAdminView({
 
         {/* KPI Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-indigo-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-indigo-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Total Accounts
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {usersCount.toLocaleString()}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">RBAC user profiles</div>
+            <div className="text-xs text-slate-500 font-medium mt-0.5">RBAC user profiles</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-emerald-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-emerald-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Catalog Postings
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {jobsCount.toLocaleString()}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">Unified job records</div>
+            <div className="text-xs text-slate-500 font-medium mt-0.5">Unified job records</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-violet-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-violet-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Active Sourcing APIs
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {sourceCounts.size}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">LinkedIn, Naukri, Indeed</div>
+            <div className="text-xs text-slate-500 font-medium mt-0.5">LinkedIn, Naukri, Indeed</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-amber-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-amber-500 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Active Accounts
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {profiles.filter((p) => p.is_active).length}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">Unrestricted access</div>
+            <div className="text-xs text-slate-500 font-medium mt-0.5">Unrestricted access</div>
           </div>
         </div>
 
         {/* User Management & RBAC Roles Table */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
                 User Profiles &amp; RBAC Role Assignment
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
                 Assign Candidate, Recruiter, or Administrator roles and enable/disable account access.
               </p>
             </div>
-            <span className="text-xs text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-lg">
+            <span className="text-xs text-slate-700 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
               {profiles.length} Profiles
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-300">
+            <table className="w-full text-left text-sm text-slate-800">
               <thead>
-                <tr className="border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="pb-3 px-3">Profile Name &amp; ID</th>
-                  <th className="pb-3 px-3">Created</th>
-                  <th className="pb-3 px-3">Status</th>
-                  <th className="pb-3 px-3">Role Tier &amp; Controls</th>
+                <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <th className="py-3 px-3">Profile Name &amp; ID</th>
+                  <th className="py-3 px-3">Created</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Role Tier &amp; Controls</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-100">
                 {profiles.map((profile) => (
-                  <tr key={profile.id} className="hover:bg-slate-800/30 transition-colors">
+                  <tr key={profile.id} className="hover:bg-indigo-50/40 transition-colors">
                     <td className="py-3 px-3">
-                      <div className="font-bold text-white">
+                      <div className="font-bold text-slate-900">
                         {profile.display_name || "Enterprise User"}
                       </div>
-                      <div className="text-xs text-slate-500 font-mono">
+                      <div className="text-xs text-slate-500 font-mono font-medium">
                         {profile.id}
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-xs text-slate-400">
+                    <td className="py-3 px-3 text-xs text-slate-600 font-medium">
                       {new Date(profile.created_at).toLocaleDateString()}
                     </td>
                     <td className="py-3 px-3">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                           profile.is_active
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                            : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-rose-50 text-rose-700 border-rose-200"
                         }`}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            profile.is_active ? "bg-emerald-400" : "bg-rose-400"
+                            profile.is_active ? "bg-emerald-500" : "bg-rose-500"
                           }`}
                         />
                         {profile.is_active ? "Active" : "Disabled"}
@@ -320,13 +320,13 @@ function renderAdminView({
         </div>
 
         {/* Live Ingestion Dispatcher Panel */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl space-y-6">
-          <div className="border-b border-slate-800/80 pb-4">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-violet-400" />
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs space-y-6">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-indigo-600" />
               Scraper Queue Dispatcher
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
               Queue immediate scraping jobs to be executed by the Python background worker.
             </p>
           </div>
@@ -334,25 +334,25 @@ function renderAdminView({
           <QueueScrapeForm userId={userId} />
 
           {/* Recent Runs Table */}
-          <div className="pt-4 border-t border-slate-800/80 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <div className="pt-4 border-t border-slate-200 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
               Recent Ingestion Runs
             </h3>
             <div className="space-y-2">
               {runs.map((run) => (
                 <div
                   key={run.id}
-                  className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="px-2 py-0.5 rounded font-bold uppercase text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="px-2.5 py-0.5 rounded font-bold uppercase text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">
                       {run.status}
                     </span>
-                    <strong className="text-white">{run.source}</strong>
-                    <span className="text-slate-400">Past {run.max_age_hours} hrs</span>
+                    <strong className="text-slate-900 font-bold">{run.source}</strong>
+                    <span className="text-slate-500 font-medium">Past {run.max_age_hours} hrs</span>
                   </div>
-                  <div className="text-slate-400 flex items-center gap-4">
-                    <span className="text-slate-300">
+                  <div className="text-slate-600 flex items-center gap-4 font-medium">
+                    <span className="text-slate-800 font-semibold">
                       {run.result_summary || "Awaiting execution"}
                     </span>
                     <time className="text-slate-500">

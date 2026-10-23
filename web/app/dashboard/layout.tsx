@@ -33,13 +33,13 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex min-h-screen bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       <AppNav
         userEmail={userEmail}
         role={userRole}
         isCloudSupabase={isCloudSupabase}
       />
-      <main className="flex-1 min-w-0 flex flex-col bg-[#F8FAFC]">
+      <main className="flex-1 min-w-0 flex flex-col bg-[#F1F5F9]">
         {children}
       </main>
     </div>

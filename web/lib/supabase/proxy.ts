@@ -47,13 +47,10 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  // Only protect specific routes (like /admin, /saved-jobs, /protected)
-  // Public visitors can view the main dashboard and search jobs freely
+  // Only protect explicit private paths like /protected
+  // Public visitors can view the dashboard, scraper studio, market insights, admin console, and saved jobs freely
   const pathname = request.nextUrl.pathname;
-  const isProtectedPath =
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/saved-jobs") ||
-    pathname.startsWith("/protected");
+  const isProtectedPath = pathname.startsWith("/protected");
 
   if (isProtectedPath && !user) {
     const url = request.nextUrl.clone();

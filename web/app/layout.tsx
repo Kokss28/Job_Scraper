@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className={plusJakarta.className}>
-      <body className="bg-[#070b14] text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+      <body className="bg-[#F1F5F9] text-slate-900 antialiased selection:bg-indigo-500 selection:text-white">
         {children}
       </body>
     </html>

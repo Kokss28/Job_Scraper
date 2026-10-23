@@ -53,10 +53,11 @@ def test_dashboard():
         brand_text = page.locator("aside").inner_text()
         assert "TalentPulse" in brand_text, "Brand 'TalentPulse' not found in sidebar"
         assert "Overview Dashboard" in brand_text, "'Overview Dashboard' not found in sidebar"
-        assert "Pipeline Status" in brand_text, "'Pipeline Status' not found in sidebar"
-        assert "3 Live Feeds Connected" in brand_text, "'3 Live Feeds Connected' not found in sidebar"
+        assert "Live Extraction" in brand_text, "'Live Extraction' not found in sidebar"
+        assert "Active Role" not in brand_text, "'Active Role' should be removed from sidebar"
+        assert "Admin Supervisor" not in brand_text, "'Admin Supervisor' should be removed from sidebar"
         print("  ✓ Sidebar Branding: 'TalentPulse' with 'IN' circular badge verified")
-        print("  ✓ Sidebar Widget: 'Pipeline Status: 3 Live Feeds Connected' verified")
+        print("  ✓ Clean Navigation verified: All unwanted footer widgets successfully removed")
 
         # 2. Verify Top Header & KPI Cards
         print("[3/7] Verifying Header & 4 KPI Metric Cards...")
@@ -76,21 +77,21 @@ def test_dashboard():
         assert "Chennai" in page.locator("#dashboard-container").inner_text()
         print("  ✓ Default selected city is Chennai (matching model screenshot)")
 
-        # Click on 'Bengaluru' bubble
-        bengaluru_node = page.locator("text=Bengaluru").first
+        # Click on 'Bengaluru' cluster
+        bengaluru_node = page.locator("#city-cluster-bengaluru")
         bengaluru_node.click()
         page.wait_for_timeout(600)
         updated_text = page.locator("#dashboard-container").inner_text()
         assert "Bengaluru" in updated_text
-        print("  ✓ Clicked 'Bengaluru' bubble -> Drilldown & KPI updated to Bengaluru")
+        print("  ✓ Clicked 'Bengaluru' cluster -> Drilldown & KPI updated to Bengaluru")
 
-        # Click on 'Mumbai' bubble
-        mumbai_node = page.locator("text=Mumbai").first
+        # Click on 'Mumbai' cluster
+        mumbai_node = page.locator("#city-cluster-mumbai")
         mumbai_node.click()
         page.wait_for_timeout(600)
         updated_mumbai = page.locator("#dashboard-container").inner_text()
         assert "Mumbai" in updated_mumbai
-        print("  ✓ Clicked 'Mumbai' bubble -> Drilldown & KPI updated to Mumbai")
+        print("  ✓ Clicked 'Mumbai' cluster -> Drilldown & KPI updated to Mumbai")
 
         # Click 'Reset to India' button
         reset_btn = page.locator("#reset-to-india-btn")
@@ -101,7 +102,7 @@ def test_dashboard():
         print("  ✓ Clicked 'Reset to India' -> View reset to Pan-India")
 
         # Select Chennai back
-        chennai_node = page.locator("text=Chennai").first
+        chennai_node = page.locator("#city-cluster-chennai")
         chennai_node.click()
         page.wait_for_timeout(600)
         print("  ✓ Re-selected 'Chennai'")
