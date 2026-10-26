@@ -1,0 +1,94 @@
+name: 4-Hour Rolling Domain Job Scraper
+
+on:
+  schedule:
+    # Runs every hour at minute 0 (24/7 continuous rolling schedule)
+    # Slot 0 (Hours 0, 4, 8, 12, 16, 20): Data & Analytics
+    # Slot 1 (Hours 1, 5, 9, 13, 17, 21): Python Development
+    # Slot 2 (Hours 2, 6, 10, 14, 18, 22): Java Development
+    # Slot 3 (Hours 3, 7, 11, 15, 19, 23): Cloud & DevOps
+    - cron: '0 * * * *'
+
+  # Manual on-demand execution from GitHub Actions web interface
+  workflow_dispatch:
+    inputs:
+      target_slot:
+        description: 'Target Domain Slot (auto uses current hour modulo 4)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - '0 - Data & Analytics'
+          - '1 - Python Development'
+          - '2 - Java Development'
+          - '3 - Cloud & DevOps'
+      dry_run:
+        description: 'Dry run only (verify schedule without web scraping)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  rolling-domain-harvest:
+    name: Harvest & Sync Rolling Domain Jobs
+    runs-on: ubuntu-latest
+    environment: CORN_JOBS
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium Browser & OS Dependencies
+        run: |
+          playwright install chromium --with-deps
+
+      - name: Run Automated 4-Hour Rolling Extraction (No Job Limits)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NAUKRI_HEADLESS: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          SLOT_ARG=""
+          DRY_ARG=""
+
+          # Handle manual workflow dispatch input
+          if [ "${{ github.event.inputs.target_slot }}" = "0 - Data & Analytics" ]; then
+            SLOT_ARG="--slot 0"
+          elif [ "${{ github.event.inputs.target_slot }}" = "1 - Python Development" ]; then
+            SLOT_ARG="--slot 1"
+          elif [ "${{ github.event.inputs.target_slot }}" = "2 - Java Development" ]; then
+            SLOT_ARG="--slot 2"
+          elif [ "${{ github.event.inputs.target_slot }}" = "3 - Cloud & DevOps" ]; then
+            SLOT_ARG="--slot 3"
+          fi
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_ARG="--dry-run"
+          fi
+
+          echo "Executing automated domain extractor with: $SLOT_ARG $DRY_ARG"
+          python pipeline/automated_domain_extractor.py $SLOT_ARG $DRY_ARG
+
+      - name: Summary & Status
+        if: always()
+        run: |
+          echo "### 🚀 Automated Rolling Scraper Run Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Timestamp (UTC): $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "Freshness Window: Last 4 Hours (Gapless coverage)" >> $GITHUB_STEP_SUMMARY
+          echo "Job Limit: None (Unlimited Extraction)" >> $GITHUB_STEP_SUMMARY
