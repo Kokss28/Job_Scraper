@@ -41,6 +41,9 @@ ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
 
+from database import clean_job_record
+
+
 def supabase_client() -> Client:
     url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -59,8 +62,11 @@ def sync_jobs(client: Client) -> int:
         reader = csv.DictReader(source)
         batch: list[dict[str, Any]] = []
         for row in reader:
-            batch.append(row)
-            if len(batch) == 100:
+            record = clean_job_record(row)
+            if not record["job_id"]:
+                continue
+            batch.append(record)
+            if len(batch) >= 100:
                 client.table("jobs").upsert(batch, on_conflict="job_id").execute()
                 synced += len(batch)
                 batch.clear()

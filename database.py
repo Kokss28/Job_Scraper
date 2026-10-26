@@ -8,7 +8,12 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from config import OUTPUT_DIR
+from config import (
+    OUTPUT_DIR,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    IS_SUPABASE_CONFIGURED,
+)
 
 
 # ============================================================
@@ -293,8 +298,161 @@ def import_csv_to_database(target_csv=None):
 
 
 # ============================================================
+# SUPABASE HELPERS & SYNC (Option A)
+# ============================================================
+
+def get_supabase_client():
+    """
+    Returns an authenticated Supabase client using SUPABASE_SERVICE_ROLE_KEY.
+    Returns None if Supabase credentials are not configured or SDK is missing.
+    """
+    if not (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY):
+        return None
+
+    try:
+        from supabase import create_client
+        return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    except ImportError:
+        print("[Supabase] Notice: 'supabase' package is not installed. Run: pip install supabase")
+        return None
+    except Exception as e:
+        print(f"[Supabase] Error initializing client: {e}")
+        return None
+
+
+def clean_job_record(row: dict) -> dict:
+    """
+    Standardize a CSV row into a clean dictionary ready for Supabase upsert.
+    Ensures all expected database schema columns exist and defaults are applied.
+    """
+    return {
+        "job_id": (row.get("job_id") or "").strip(),
+        "source": row.get("source") or "Not Specified",
+        "title": row.get("title") or "Not Specified",
+        "company": row.get("company") or "Not Specified",
+        "search_keyword": row.get("search_keyword") or "Not Specified",
+        "city": row.get("city") or "Not Specified",
+        "state": row.get("state") or "Not Specified",
+        "country": row.get("country") or "Not Specified",
+        "min_experience_years": str(row.get("min_experience_years") or "Not Specified"),
+        "max_experience_years": str(row.get("max_experience_years") or "Not Specified"),
+        "experience_review": row.get("experience_review") or "",
+        "skills": row.get("skills") or "Not Specified",
+        "degree_required": row.get("degree_required") or "Not Specified",
+        "specialization_required": row.get("specialization_required") or "Not Specified",
+        "collected_at": row.get("collected_at") or "Not Specified",
+        "link": row.get("link") or "Not Specified",
+        "full_description": row.get("full_description") or "Not Specified",
+    }
+
+
+def sync_csv_to_supabase(target_csv=None, batch_size=100) -> dict:
+    """
+    Batch upsert unified_jobs.csv to Supabase Cloud using Option A (REST SDK).
+
+    Returns:
+        dict: {'synced': int, 'skipped': int, 'status': str}
+    """
+    client = get_supabase_client()
+    if not client:
+        print("[Supabase] Skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured in .env")
+        return {"synced": 0, "skipped": 0, "status": "unconfigured"}
+
+    csv_file = Path(target_csv) if target_csv else CSV_PATH
+
+    if not csv_file.exists():
+        print(f"[Supabase] ERROR: CSV file not found: {csv_file}")
+        return {"synced": 0, "skipped": 0, "status": "file_not_found"}
+
+    print("=" * 70)
+    print("CSV -> SUPABASE DATABASE SYNC (Option A)")
+    print("=" * 70)
+    print(f"CSV source  : {csv_file}")
+    print(f"Target      : {SUPABASE_URL}")
+    print(f"Batch size  : {batch_size}")
+    print()
+
+    batch = []
+    total_synced = 0
+    skipped = 0
+
+    with open(csv_file, "r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            record = clean_job_record(row)
+            if not record["job_id"]:
+                skipped += 1
+                continue
+
+            batch.append(record)
+
+            if len(batch) >= batch_size:
+                try:
+                    client.table("jobs").upsert(batch, on_conflict="job_id").execute()
+                    total_synced += len(batch)
+                    print(f"  [Supabase] Upserted {total_synced} jobs...")
+                except Exception as e:
+                    print(f"  [Supabase] Error uploading batch: {e}")
+                    raise
+                batch.clear()
+
+        if batch:
+            try:
+                client.table("jobs").upsert(batch, on_conflict="job_id").execute()
+                total_synced += len(batch)
+                print(f"  [Supabase] Upserted final batch. Total: {total_synced} jobs.")
+            except Exception as e:
+                print(f"  [Supabase] Error uploading final batch: {e}")
+                raise
+
+    print()
+    print("=" * 70)
+    print("SUPABASE SYNC COMPLETE")
+    print("=" * 70)
+    print(f"Total upserted : {total_synced}")
+    print(f"Skipped rows   : {skipped}")
+    print("=" * 70)
+    return {"synced": total_synced, "skipped": skipped, "status": "success"}
+
+
+def sync_all(target_csv=None):
+    """
+    Convenience method: Syncs to SQLite first, and if Supabase is configured,
+    syncs to Supabase Cloud as well.
+    """
+    import_csv_to_database(target_csv)
+    if IS_SUPABASE_CONFIGURED:
+        print()
+        sync_csv_to_supabase(target_csv)
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 if __name__ == "__main__":
-    import_csv_to_database()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Sync scraped jobs CSV to SQLite and/or Supabase Cloud."
+    )
+    parser.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to unified_jobs.csv (defaults to config.OUTPUT_DIR/unified_jobs.csv)",
+    )
+    parser.add_argument(
+        "--target",
+        choices=["all", "sqlite", "supabase"],
+        default="all",
+        help="Database target to sync to: all (default), sqlite, or supabase",
+    )
+    args = parser.parse_args()
+
+    if args.target == "sqlite":
+        import_csv_to_database(args.csv)
+    elif args.target == "supabase":
+        sync_csv_to_supabase(args.csv)
+    else:
+        sync_all(args.csv)

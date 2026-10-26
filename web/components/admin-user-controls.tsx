@@ -77,7 +77,7 @@ export function AdminUserControls({
         disabled={busy}
         onChange={(e) => updateRole(e.target.value)}
         aria-label="User role"
-        className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors"
+        className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 cursor-pointer shadow-xs transition-colors"
       >
         <option value="user">Candidate</option>
         <option value="recruiter">Recruiter</option>
@@ -88,10 +88,10 @@ export function AdminUserControls({
         type="button"
         disabled={busy}
         onClick={() => updateActive(!active)}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-xs ${
           active
-            ? "bg-slate-900 text-slate-300 border-slate-700 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30"
-            : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+            ? "bg-white text-slate-700 border-slate-300 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300"
+            : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
         }`}
       >
         {busy ? (
@@ -104,7 +104,7 @@ export function AdminUserControls({
       </button>
 
       {message && (
-        <span className="text-[11px] text-emerald-400 font-medium animate-in fade-in">
+        <span className="text-[11px] text-emerald-700 font-bold animate-in fade-in">
           {message}
         </span>
       )}

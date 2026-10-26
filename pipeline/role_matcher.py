@@ -92,6 +92,7 @@ def is_job_role_relevant(
     title: str,
     query: str,
     description: str = "",
+    is_card_stage: bool = False,
 ) -> bool:
     """
     Determine if a job title (and optional description) is genuinely relevant
@@ -101,6 +102,7 @@ def is_job_role_relevant(
         title: Extracted job title (e.g. 'Python Developer', 'Data Scientist')
         query: User search query (e.g. 'Python Developer', 'Data Analyst')
         description: Optional job description or snippet for ambiguous cases
+        is_card_stage: True if evaluating a search card before detail page enrichment
 
     Returns:
         True if the job is relevant to the queried role, False otherwise.
@@ -149,9 +151,6 @@ def is_job_role_relevant(
         is_conflicting_role = (
             _has_word(clean_title, "scientist")
             or _has_word(clean_title, "software engineer")
-            or _has_word(clean_title, "developer")
-            or _has_word(clean_title, "devops")
-            or _has_word(clean_title, "qa")
             or _has_word(clean_title, "sales")
             or _has_word(clean_title, "recruiter")
         )
@@ -188,7 +187,6 @@ def is_job_role_relevant(
 
         # If title explicitly has Python (or Django, FastAPI, Flask):
         if has_python_in_title:
-            # Must also be a developer/engineer/programmer/tech role or intern/fresher
             has_role_term = any(
                 _has_word(clean_title, term)
                 for term in [
@@ -200,24 +198,29 @@ def is_job_role_relevant(
             )
             return has_role_term
 
-        # If title is a generic backend/software developer (e.g. 'Backend Developer', 'Full Stack Engineer'):
-        # Check if Python is explicitly highlighted in description or title
+        # If title is a developer/software engineering role:
         is_dev_role = any(
             _has_word(clean_title, term)
-            for term in ["developer", "software engineer", "backend", "full stack", "fullstack", "programmer", "associate software"]
+            for term in [
+                "developer", "software engineer", "backend", "full stack", "fullstack",
+                "programmer", "associate software", "engineer", "coder", "architect",
+                "sde", "swe", "intern", "trainee", "lead", "specialist", "consultant", "automation"
+            ]
         )
         if is_dev_role:
-            # Exclude purely unrelated generic titles like "Custom Software Engineer"
-            # unless the description clearly has Python backend focus
-            if _has_word(clean_title, "custom software"):
-                return False
-            if clean_desc and ("python" in clean_desc or "django" in clean_desc or "fastapi" in clean_desc):
-                # Verify Python is prominent, not just a passing 1-word mention in a list of 10 languages
-                py_count = len(re.findall(r"\bpython\b", clean_desc))
-                if py_count >= 2 or "django" in clean_desc or "fastapi" in clean_desc or "flask" in clean_desc:
-                    return True
+            # 1. At card stage (where full description is not yet fetched):
+            # Accept valid developer/engineering roles returned by the platform's search engine
+            if is_card_stage or not clean_desc:
+                return True
 
-        # If no Python found in title and not a Python backend role, reject
+            # 2. When description IS available:
+            # Check for Python or common web/data frameworks:
+            py_terms = ["python", "django", "fastapi", "flask", "pyspark", "pandas", "numpy", "backend", "api"]
+            if any(_has_word(clean_desc, term) for term in py_terms):
+                return True
+            # Also allow general developer roles where python was the search term
+            return True
+
         return False
 
     # -------------------------------------------------------------------------

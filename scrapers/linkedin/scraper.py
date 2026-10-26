@@ -2572,7 +2572,7 @@ def collect_linkedin_jobs(
                 desc_val = job.get("job_description") or ""
                 try:
                     from pipeline.role_matcher import is_job_role_relevant
-                    if not is_job_role_relevant(title_val, keyword, desc_val):
+                    if not is_job_role_relevant(title_val, keyword, desc_val, is_card_stage=True):
                         logger.info(
                             "Skipping LinkedIn job with irrelevant role: '%s' for keyword '%s'",
                             title_val,
@@ -2658,6 +2658,28 @@ def collect_linkedin_jobs(
             "Keyword '%s' collected %s jobs",
             keyword,
             len(keyword_jobs)
+        )
+
+    # ========================================================
+    # REGIONAL FRESHNESS EXPANSION FALLBACK
+    # ========================================================
+
+    if not all_jobs and max_age_hours < 72.0:
+        logger.info(
+            "LinkedIn found 0 jobs within %.1f hours for location '%s'. Auto-broadening freshness window to 72 hours to capture active listings...",
+            max_age_hours,
+            location
+        )
+        return collect_linkedin_jobs(
+            keywords=keywords,
+            location=location,
+            search_keywords=search_keywords,
+            max_jobs_per_keyword=max_jobs_per_keyword,
+            jobs_per_page=jobs_per_page,
+            max_age_hours=72.0,
+            enable_detail_pages=enable_detail_pages,
+            enable_ml=enable_ml,
+            **kwargs
         )
 
     # ========================================================
