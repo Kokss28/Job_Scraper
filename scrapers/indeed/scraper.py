@@ -116,9 +116,44 @@ def collect_indeed_jobs(
                 job["job_id"] = f"indeed_{raw_id}"
             job["source"] = "Indeed"
             job["search_keyword"] = keyword
-            job["location"] = job.get("location") or location
+
+            # Standardize location so pipeline normalizer assigns target city
+            if location and location.strip().lower() not in ("india", "all india", "remote"):
+                target_city = location.strip().title()
+                from pipeline.normalizer import INDIAN_CITY_TO_STATE
+                target_state = INDIAN_CITY_TO_STATE.get(target_city, "Tamil Nadu")
+
+                curr_city = job.get("city")
+                if not curr_city or str(curr_city).lower() in ("none", "not specified", ""):
+                    job["city"] = target_city
+                curr_state = job.get("state")
+                if not curr_state or str(curr_state).lower() in ("none", "not specified", ""):
+                    job["state"] = target_state
+                curr_loc = str(job.get("location") or "")
+                if target_city.lower() not in curr_loc.lower():
+                    job["location"] = f"{target_city}, {curr_loc if curr_loc else target_state + ', India'}"
+            else:
+                job["location"] = job.get("location") or location
+
             if not job.get("job_url"):
                 job["job_url"] = job.get("job_url_direct") or ""
             collected.append(job)
+
+    # If 0 jobs collected within a narrow time window (< 72h),
+    # automatically expand to 72 hours so regional locations like Coimbatore
+    # always yield Indeed postings
+    if not collected and max_age_hours < 72:
+        print(
+            f"[Indeed] Found 0 jobs within {max_age_hours}h for {location!r}. "
+            f"Auto-expanding search window to 72 hours to capture active listings..."
+        )
+        return collect_indeed_jobs(
+            keywords=keywords,
+            location=location,
+            max_jobs=max_jobs,
+            max_age_hours=72,
+            max_jobs_per_keyword=max_jobs_per_keyword,
+            **kwargs,
+        )
 
     return collected

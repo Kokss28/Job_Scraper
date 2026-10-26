@@ -132,17 +132,17 @@ export function MarketInsightsClient({
   }, [jobs]);
 
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div>
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-bold mb-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold mb-2">
           <Building2 className="w-3.5 h-3.5" />
           Indian Market Landscape
         </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
           Market &amp; Geographic Hiring Hubs
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
+        <p className="text-slate-600 text-xs md:text-sm mt-1 font-medium max-w-2xl">
           Macro analytics across premier tech corridors, enterprise hiring organizations, and sourcing platform yield.
         </p>
       </div>
@@ -150,14 +150,14 @@ export function MarketInsightsClient({
       {/* Row 1: Hubs & Employers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Hubs Bar */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-600" />
                 Top Indian IT Hubs Concentration
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
                 Active job volume across major technology clusters
               </p>
             </div>
@@ -175,14 +175,17 @@ export function MarketInsightsClient({
                   textAnchor="end"
                   height={40}
                   tickLine={false}
+                  tick={{ fill: "#475569", fontWeight: 600 }}
                 />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} tick={{ fill: "#475569", fontWeight: 600 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
+                    backgroundColor: "#ffffff",
+                    borderColor: "#e2e8f0",
+                    borderRadius: "12px",
+                    color: "#0f172a",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                    fontWeight: 600,
                   }}
                   formatter={(val: any, name: any, item: any) => [
                     `${val} postings`,
@@ -196,14 +199,14 @@ export function MarketInsightsClient({
         </div>
 
         {/* Top Companies */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Award className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Award className="w-4 h-4 text-indigo-600" />
                 Premier Hiring Enterprises
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
                 Organizations with the highest volume of open tech vacancies
               </p>
             </div>
@@ -216,20 +219,23 @@ export function MarketInsightsClient({
                 layout="vertical"
                 margin={{ left: 50, right: 20 }}
               >
-                <XAxis type="number" stroke="#64748b" fontSize={11} />
+                <XAxis type="number" stroke="#94a3b8" fontSize={11} tick={{ fill: "#475569", fontWeight: 600 }} />
                 <YAxis
                   type="category"
                   dataKey="company"
                   stroke="#94a3b8"
                   fontSize={11}
                   width={140}
+                  tick={{ fill: "#475569", fontWeight: 600 }}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
+                    backgroundColor: "#ffffff",
+                    borderColor: "#e2e8f0",
+                    borderRadius: "12px",
+                    color: "#0f172a",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                    fontWeight: 600,
                   }}
                 />
                 <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} />
@@ -242,60 +248,60 @@ export function MarketInsightsClient({
       {/* Row 2: Macro Educational Clustering (4-Tier Hierarchy as in Streamlit) */}
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-violet-400" />
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-indigo-600" />
             Educational Qualifications &amp; Cluster Matrix
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">
             Macro clustering taxonomy: Undergraduate, Postgraduate, Doctorate, and Open entry tiers across India.
           </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-indigo-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-indigo-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Undergraduate / Any Graduate
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {eduClusterCounts.undergrad.toLocaleString()}
             </div>
-            <div className="text-xs text-indigo-400 font-semibold mt-0.5">
+            <div className="text-xs text-indigo-600 font-bold mt-0.5">
               {((eduClusterCounts.undergrad / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-violet-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-violet-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Postgraduate / Master&apos;s
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {eduClusterCounts.postgrad.toLocaleString()}
             </div>
-            <div className="text-xs text-violet-400 font-semibold mt-0.5">
+            <div className="text-xs text-violet-600 font-bold mt-0.5">
               {((eduClusterCounts.postgrad / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-emerald-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-emerald-600 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Doctorate &amp; Research
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {eduClusterCounts.doctorate.toLocaleString()}
             </div>
-            <div className="text-xs text-emerald-400 font-semibold mt-0.5">
+            <div className="text-xs text-emerald-600 font-bold mt-0.5">
               {((eduClusterCounts.doctorate / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-5 border-t-2 border-t-amber-500">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-amber-500 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
               Open / No Degree Required
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
               {eduClusterCounts.open.toLocaleString()}
             </div>
-            <div className="text-xs text-amber-400 font-semibold mt-0.5">
+            <div className="text-xs text-amber-600 font-bold mt-0.5">
               {((eduClusterCounts.open / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
             </div>
           </div>
@@ -305,13 +311,13 @@ export function MarketInsightsClient({
       {/* Row 3: Degrees & Platform Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Education Track Distribution */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-violet-400" />
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-violet-600" />
               Active Postings by Education Track
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
               Volume breakdown across tech engineering, general graduate, management, and diploma tracks
             </p>
           </div>
@@ -323,20 +329,23 @@ export function MarketInsightsClient({
                 layout="vertical"
                 margin={{ left: 40, right: 20 }}
               >
-                <XAxis type="number" stroke="#64748b" fontSize={11} />
+                <XAxis type="number" stroke="#94a3b8" fontSize={11} tick={{ fill: "#475569", fontWeight: 600 }} />
                 <YAxis
                   type="category"
                   dataKey="track"
                   stroke="#94a3b8"
                   fontSize={11}
                   width={140}
+                  tick={{ fill: "#475569", fontWeight: 600 }}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
+                    backgroundColor: "#ffffff",
+                    borderColor: "#e2e8f0",
+                    borderRadius: "12px",
+                    color: "#0f172a",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                    fontWeight: 600,
                   }}
                 />
                 <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
@@ -346,13 +355,13 @@ export function MarketInsightsClient({
         </div>
 
         {/* Platform Sourcing Share */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-6 shadow-xl flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-indigo-600" />
               Platform Sourcing Yield
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
               Job distribution across LinkedIn, Naukri, and Indeed
             </p>
           </div>
@@ -360,14 +369,16 @@ export function MarketInsightsClient({
           <div className="h-64 w-full pt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={platformStats}>
-                <XAxis dataKey="source" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
+                <XAxis dataKey="source" stroke="#94a3b8" fontSize={11} tick={{ fill: "#475569", fontWeight: 600 }} />
+                <YAxis stroke="#94a3b8" fontSize={11} tick={{ fill: "#475569", fontWeight: 600 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
+                    backgroundColor: "#ffffff",
+                    borderColor: "#e2e8f0",
+                    borderRadius: "12px",
+                    color: "#0f172a",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                    fontWeight: 600,
                   }}
                 />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -379,9 +390,9 @@ export function MarketInsightsClient({
             </ResponsiveContainer>
           </div>
 
-          <div className="pt-2 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+          <div className="pt-3 border-t border-slate-100 text-xs text-slate-600 flex items-center justify-between font-medium">
             <span>Total Catalog Opportunities</span>
-            <strong className="text-white">{jobs.length} Postings</strong>
+            <strong className="text-slate-900 font-bold">{jobs.length} Postings</strong>
           </div>
         </div>
       </div>
