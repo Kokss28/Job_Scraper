@@ -292,3 +292,84 @@ export function normalizeIndianHub(
   }
   return parts.length > 0 ? parts.join(", ") : "India (Not Specified)";
 }
+
+export const DELHI_TOKENS = [
+  "delhi",
+  "noida",
+  "gurugram",
+  "gurgaon",
+  "new delhi",
+  "delhi ncr",
+  "ghaziabad",
+  "greater noida",
+];
+
+export const MAJOR_HUBS_CONFIG: Record<string, string[]> = {
+  bengaluru: ["bengaluru", "bangalore"],
+  chennai: ["chennai"],
+  hyderabad: ["hyderabad"],
+  pune: ["pune"],
+  mumbai: ["mumbai", "navi mumbai"],
+  delhi: DELHI_TOKENS,
+  kolkata: ["kolkata", "calcutta"],
+  coimbatore: ["coimbatore"],
+};
+
+export const EXTERNAL_MIXED_TOKENS = [
+  "dubai",
+  "kuwait",
+  "united arab emirates",
+  "uae",
+  "madurai",
+  "salem",
+  "tiruppur",
+  "tiruchirappalli",
+  "ahmedabad",
+  "hosur",
+  "mysuru",
+  "chandigarh",
+  "nagpur",
+  "lucknow",
+  "jaipur",
+  "kochi",
+  "cochin",
+];
+
+/**
+ * Strict city filter: ensures a job exclusively matches targetCity,
+ * and does NOT contain other separate metro hubs or external mixed locations.
+ */
+export function isCityMatchStrict(
+  rawCity: string | undefined | null,
+  targetCity: string,
+  normalizedLocation?: string
+): boolean {
+  if (!targetCity || targetCity === "All India") return true;
+
+  const c = (String(rawCity || "") + " " + String(normalizedLocation || "")).trim().toLowerCase();
+  const t = targetCity.toLowerCase();
+
+  // 1. Get tokens for target city
+  const targetTokens = MAJOR_HUBS_CONFIG[t] || [t];
+  const hasTarget = targetTokens.some((tok) => c.includes(tok));
+  if (!hasTarget) return false;
+
+  // 2. Reject if it mentions any other major hub
+  for (const [hub, hubTokens] of Object.entries(MAJOR_HUBS_CONFIG)) {
+    if (hub !== t) {
+      if (hubTokens.some((tok) => c.includes(tok))) {
+        return false;
+      }
+    }
+  }
+
+  // 3. Reject if it mentions external mixed tokens (unless target itself is that token)
+  for (const ext of EXTERNAL_MIXED_TOKENS) {
+    if (t !== ext && c.includes(ext)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+

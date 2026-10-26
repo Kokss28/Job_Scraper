@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -16,9 +16,25 @@ import {
   Layers,
   ArrowUpRight,
   Filter,
-  X
+  X,
+  PieChart as PieIcon,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import type { UnifiedJobRecord } from "@/lib/taxonomy";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+import { type UnifiedJobRecord, isCityMatchStrict } from "@/lib/taxonomy";
 import { INDIA_STATES, INDIA_MAP_VIEWBOX } from "./india-map-paths";
 
 interface TalentPulseDashboardProps {
@@ -161,6 +177,134 @@ const TALENT_CORRIDORS = [
   { x1: 184, y1: 602, x2: 248, y2: 576 }, // Coimbatore - Chennai
 ];
 
+const CANONICAL_SKILL_MAP: Record<string, string> = {
+  python: "Python",
+  py: "Python",
+  sql: "SQL",
+  mysql: "MySQL",
+  postgresql: "PostgreSQL",
+  postgres: "PostgreSQL",
+  aws: "AWS",
+  cloud: "Cloud",
+  azure: "Azure",
+  gcp: "GCP",
+  git: "Git",
+  github: "GitHub",
+  docker: "Docker",
+  kubernetes: "Kubernetes",
+  k8s: "Kubernetes",
+  react: "React",
+  "react.js": "React",
+  reactjs: "React",
+  javascript: "JavaScript",
+  js: "JavaScript",
+  typescript: "TypeScript",
+  ts: "TypeScript",
+  node: "Node.js",
+  nodejs: "Node.js",
+  "node.js": "Node.js",
+  java: "Java",
+  django: "Django",
+  flask: "Flask",
+  fastapi: "FastAPI",
+  html: "HTML",
+  css: "CSS",
+  tailwind: "Tailwind CSS",
+  linux: "Linux",
+  c: "C",
+  "c++": "C++",
+  cpp: "C++",
+  "c#": "C#",
+  ai: "AI / ML",
+  ml: "AI / ML",
+  "machine learning": "Machine Learning",
+  "data analysis": "Data Analysis",
+  "data science": "Data Science",
+  spark: "Spark",
+  kafka: "Kafka",
+  redis: "Redis",
+  mongodb: "MongoDB",
+  nosql: "NoSQL",
+  powerbi: "Power BI",
+  "power bi": "Power BI",
+  tableau: "Tableau",
+  pandas: "Pandas",
+  devops: "DevOps",
+  "ci/cd": "CI/CD",
+};
+
+const IGNORED_SKILLS = new Set([
+  "not specified",
+  "none",
+  "n/a",
+  "na",
+  "null",
+  "undefined",
+  "others",
+  "other",
+  "general",
+  "skills",
+]);
+
+interface TooltipPayloadItem {
+  name: string;
+  value: number;
+  color?: string;
+  payload: {
+    name: string;
+    value: number;
+    percentage: number;
+    color?: string;
+    bracket?: string;
+    count?: number;
+    pct?: number;
+  };
+}
+
+function CustomPieTooltip({ active, payload }: { active?: boolean; payload?: TooltipPayloadItem[] }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white text-slate-900 text-xs rounded-xl p-3 shadow-xl border border-slate-200 space-y-1 z-50">
+        <div className="font-bold text-slate-900 flex items-center gap-2">
+          <span
+            className="w-2.5 h-2.5 rounded-full inline-block"
+            style={{ backgroundColor: data.color || payload[0].color }}
+          />
+          {data.name}
+        </div>
+        <div className="text-slate-600">
+          Openings: <span className="font-semibold text-slate-900">{data.value} jobs</span>
+        </div>
+        <div className="text-slate-500 text-[11px]">
+          Share: <span className="font-extrabold text-indigo-600">{data.percentage}%</span> of city tech skills
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function CustomExpTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white text-slate-900 text-xs rounded-xl p-3 shadow-xl border border-slate-200 space-y-1 z-50">
+        <div className="font-bold text-slate-900">
+          Seniority: <span className="text-indigo-600 font-extrabold">{label}</span>
+        </div>
+        <div className="text-slate-600">
+          Openings: <span className="font-bold text-slate-900">{data.count ?? data.value} jobs</span>
+        </div>
+        <div className="text-slate-500 text-[11px]">
+          Share: <span className="font-semibold text-indigo-600">{data.pct}%</span> of total openings
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function TalentPulseDashboard({
   initialJobs,
   isCloudSupabase = false,
@@ -172,8 +316,26 @@ export function TalentPulseDashboard({
   const [selectedSkillFilter, setSelectedSkillFilter] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractStatus, setExtractStatus] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const PAGE_SIZE = 10;
   const [selectedJob, setSelectedJob] = useState<UnifiedJobRecord | null>(null);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Dedicated city switch handler that cleanly resets active skill filter and page
+  const handleCitySelect = (cityName: string) => {
+    setSelectedCity(cityName);
+    setSelectedSkillFilter(null);
+    setCurrentPage(1);
+  };
+
+  // Automatically reset to page 1 when city, skill filter, or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCity, selectedSkillFilter, searchQuery]);
 
   // Dynamic relative time for last extraction run
   const lastExtractionText = useMemo(() => {
@@ -198,14 +360,13 @@ export function TalentPulseDashboard({
     return `${diffDays} Day${diffDays > 1 ? "s" : ""} Ago`;
   }, [initialJobs]);
 
-  // Pre-calculate city job distributions across full catalog
+  // Pre-calculate city job distributions across full catalog (strictly pure city jobs, no mixed locations)
   const cityCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const node of CITY_NODES) {
-      const matching = initialJobs.filter((j) => {
-        const loc = ((j.city || "") + " " + (j.normalized_location || "") + " " + (j.state || "")).toLowerCase();
-        return loc.includes(node.name.toLowerCase());
-      });
+      const matching = initialJobs.filter((j) =>
+        isCityMatchStrict(j.city, node.name, j.normalized_location)
+      );
       counts[node.name] = initialJobs.length > 0 ? matching.length : node.baseCount;
     }
     return counts;
@@ -245,6 +406,161 @@ export function TalentPulseDashboard({
     };
   }, [selectedCity, initialJobs, cityCounts]);
 
+  // All jobs corresponding to the selected location (strictly pure city jobs, excluding mixed locations)
+  const cityJobs = useMemo(() => {
+    if (initialJobs.length === 0) return [];
+    if (selectedCity === "All India") return initialJobs;
+    return initialJobs.filter((j) =>
+      isCityMatchStrict(j.city, selectedCity, j.normalized_location)
+    );
+  }, [initialJobs, selectedCity]);
+
+  // Dynamic skills extraction computed specifically for the active location
+  const { cityTopSkills, cityTotalSkillInstances } = useMemo(() => {
+    const skillCounts = new Map<string, number>();
+    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    const totalJobs = baseJobs.length || 1;
+    let totalInstances = 0;
+
+    for (const job of baseJobs) {
+      if (!job.skills) continue;
+      const rawSkills = job.skills.split(/[,;|/]/).map((s) => s.trim()).filter(Boolean);
+      const seenInJob = new Set<string>();
+
+      for (const raw of rawSkills) {
+        const lower = raw.toLowerCase();
+        if (IGNORED_SKILLS.has(lower) || lower.length < 2) continue;
+        const canonical = CANONICAL_SKILL_MAP[lower] || (raw.charAt(0).toUpperCase() + raw.slice(1));
+        if (!seenInJob.has(canonical.toLowerCase())) {
+          seenInJob.add(canonical.toLowerCase());
+          skillCounts.set(canonical, (skillCounts.get(canonical) || 0) + 1);
+          totalInstances++;
+        }
+      }
+    }
+
+    const sorted = Array.from(skillCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => {
+        const pctNumber = Math.min(100, Math.round((count / totalJobs) * 100));
+        return {
+          name,
+          count,
+          pctNumber,
+          pct: `${pctNumber}%`,
+        };
+      });
+
+    return {
+      cityTopSkills: sorted.length > 0 ? sorted : [
+        { name: "Python", count: 42, pctNumber: 42, pct: "42%" },
+        { name: "SQL", count: 31, pctNumber: 31, pct: "31%" },
+        { name: "AWS", count: 25, pctNumber: 25, pct: "25%" },
+        { name: "Data / AI", count: 22, pctNumber: 22, pct: "22%" },
+      ],
+      cityTotalSkillInstances: totalInstances || 100,
+    };
+  }, [cityJobs, initialJobs]);
+
+  // Dynamic experience split for the selected location (Entry, Mid, Senior)
+  const cityExpSplit = useMemo(() => {
+    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    if (baseJobs.length === 0) {
+      return { entryPct: 25, midPct: 45, seniorPct: 30, entryCount: 25, midCount: 45, seniorCount: 30 };
+    }
+
+    let entry = 0;
+    let mid = 0;
+    let senior = 0;
+
+    for (const j of baseJobs) {
+      let val = 2; // Default to mid if unspecified
+      if (j.min_experience_years !== null && j.min_experience_years !== undefined) {
+        const parsed = parseFloat(String(j.min_experience_years));
+        if (!isNaN(parsed)) val = parsed;
+      }
+      if (val <= 1) entry++;
+      else if (val <= 5) mid++;
+      else senior++;
+    }
+
+    const total = baseJobs.length;
+    const entryPct = Math.round((entry / total) * 100);
+    const seniorPct = Math.round((senior / total) * 100);
+    const midPct = Math.max(0, 100 - entryPct - seniorPct);
+
+    return {
+      entryPct,
+      midPct,
+      seniorPct,
+      entryCount: entry,
+      midCount: mid,
+      seniorCount: senior,
+    };
+  }, [cityJobs, initialJobs]);
+
+  // Donut chart dataset matching Image 2 (Dark card with vibrant slices)
+  const locationSkillsPieData = useMemo(() => {
+    const PALETTE = ["#A855F7", "#F43F5E", "#F59E0B", "#06B6D4", "#10B981", "#3B82F6"];
+    const top5 = cityTopSkills.slice(0, 5);
+    const top5Count = top5.reduce((sum, s) => sum + s.count, 0);
+    const remaining = Math.max(0, cityTotalSkillInstances - top5Count);
+
+    const slices = top5.map((s, idx) => ({
+      name: s.name,
+      value: s.count,
+      percentage: s.pctNumber,
+      color: PALETTE[idx % PALETTE.length],
+    }));
+
+    if (remaining > 0 && cityTopSkills.length > 5) {
+      const otherPct = Math.max(1, Math.round((remaining / cityTotalSkillInstances) * 100));
+      slices.push({
+        name: "Others",
+        value: remaining,
+        percentage: otherPct,
+        color: "#64748B",
+      });
+    }
+    return slices;
+  }, [cityTopSkills, cityTotalSkillInstances]);
+
+  // Point chart dataset matching Image 3 (Minimalist white card with connected points)
+  const experienceCurveData = useMemo(() => {
+    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    const total = baseJobs.length || 1;
+
+    let b0_1 = 0;
+    let b1_3 = 0;
+    let b3_5 = 0;
+    let b5_8 = 0;
+    let b8_12 = 0;
+    let b12_plus = 0;
+
+    for (const j of baseJobs) {
+      let val = 2;
+      if (j.min_experience_years !== null && j.min_experience_years !== undefined) {
+        const parsed = parseFloat(String(j.min_experience_years));
+        if (!isNaN(parsed)) val = parsed;
+      }
+      if (val <= 1) b0_1++;
+      else if (val <= 3) b1_3++;
+      else if (val <= 5) b3_5++;
+      else if (val <= 8) b5_8++;
+      else if (val <= 12) b8_12++;
+      else b12_plus++;
+    }
+
+    return [
+      { bracket: "0-1 Yr", count: b0_1, pct: Math.round((b0_1 / total) * 100) },
+      { bracket: "1-3 Yrs", count: b1_3, pct: Math.round((b1_3 / total) * 100) },
+      { bracket: "3-5 Yrs", count: b3_5, pct: Math.round((b3_5 / total) * 100) },
+      { bracket: "5-8 Yrs", count: b5_8, pct: Math.round((b5_8 / total) * 100) },
+      { bracket: "8-12 Yrs", count: b8_12, pct: Math.round((b8_12 / total) * 100) },
+      { bracket: "12+ Yrs", count: b12_plus, pct: Math.round((b12_plus / total) * 100) },
+    ];
+  }, [cityJobs, initialJobs]);
+
   // Search submission handler (handles city switching and cross-location filtering)
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -260,13 +576,13 @@ export function TalentPulseDashboard({
     );
 
     if (matchedCity) {
-      setSelectedCity(matchedCity.name);
+      handleCitySelect(matchedCity.name);
     } else if (lower.includes("all india") || lower === "india") {
-      setSelectedCity("All India");
+      handleCitySelect("All India");
     } else {
       const catalogCity = initialJobs.find((j) => (j.city || "").toLowerCase().includes(lower));
       if (catalogCity && catalogCity.city) {
-        setSelectedCity(catalogCity.city.split(",")[0].trim());
+        handleCitySelect(catalogCity.city.split(",")[0].trim());
       }
     }
   };
@@ -287,14 +603,9 @@ export function TalentPulseDashboard({
       : (selectedCity !== "All India" ? selectedCity : null);
 
     return initialJobs.filter((j) => {
-      // 1. Strict location check
+      // 1. Strict location check - strictly pure city jobs, excluding mixed-location postings
       if (targetCityFilter) {
-        const loc = ((j.city || "") + " " + (j.normalized_location || "")).toLowerCase();
-        const cityTarget = targetCityFilter.toLowerCase();
-        const isCityMatch =
-          loc.includes(cityTarget) ||
-          (cityTarget === "bengaluru" && loc.includes("bangalore"));
-        if (!isCityMatch) {
+        if (!isCityMatchStrict(j.city, targetCityFilter, j.normalized_location)) {
           return false;
         }
       }
@@ -374,6 +685,15 @@ export function TalentPulseDashboard({
     ] as UnifiedJobRecord[];
   }, [filteredJobs, initialJobs, selectedCity]);
 
+  // Pagination computations (Page-based navigation instead of load-more expanding)
+  const totalPages = Math.max(1, Math.ceil(displayJobs.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, displayJobs.length);
+  const currentPaginatedJobs = useMemo(() => {
+    return displayJobs.slice(startIndex, endIndex);
+  }, [displayJobs, startIndex, endIndex]);
+
   // Metric counts
   const totalLiveJobs = initialJobs.length;
   const currentCityCount =
@@ -397,7 +717,7 @@ export function TalentPulseDashboard({
     }, 1500);
   };
 
-  // Export current city jobs to CSV
+  // Export current city jobs to CSV (strictly saves selected city, eliminates mixed locations)
   const handleExportCityCsv = () => {
     const jobsToExport = displayJobs;
     const headers = [
@@ -410,16 +730,24 @@ export function TalentPulseDashboard({
       "Skills",
       "Link",
     ];
-    const rows = jobsToExport.map((j) => [
-      `"${j.job_id}"`,
-      `"${(j.title || "").replace(/"/g, '""')}"`,
-      `"${(j.company || "").replace(/"/g, '""')}"`,
-      `"${(j.city || "").replace(/"/g, '""')}"`,
-      `"${(j.exp_display || j.min_experience_years || "").replace(/"/g, '""')}"`,
-      `"${(j.source || "").replace(/"/g, '""')}"`,
-      `"${(j.skills || "").replace(/"/g, '""')}"`,
-      `"${(j.link || "").replace(/"/g, '""')}"`,
-    ]);
+    const rows = jobsToExport.map((j) => {
+      // Clean, single-city location without mixed other cities
+      const cleanCity =
+        selectedCity !== "All India"
+          ? selectedCity
+          : (j.city && j.city !== "Not Specified" ? j.city : j.normalized_location || "India");
+
+      return [
+        `"${j.job_id}"`,
+        `"${(j.title || "").replace(/"/g, '""')}"`,
+        `"${(j.company || "").replace(/"/g, '""')}"`,
+        `"${cleanCity.replace(/"/g, '""')}"`,
+        `"${(j.exp_display || j.min_experience_years || "").replace(/"/g, '""')}"`,
+        `"${(j.source || "").replace(/"/g, '""')}"`,
+        `"${(j.skills || "").replace(/"/g, '""')}"`,
+        `"${(j.link || "").replace(/"/g, '""')}"`,
+      ];
+    });
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -517,7 +845,7 @@ export function TalentPulseDashboard({
             id="selected-region-pill-btn"
             onClick={() => {
               if (selectedCity !== "All India") {
-                setSelectedCity("All India");
+                handleCitySelect("All India");
               }
             }}
             title={selectedCity !== "All India" ? "Click to view All India" : "Currently viewing All India"}
@@ -607,7 +935,7 @@ export function TalentPulseDashboard({
       {/* ==================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT CARD: Geographic Job Density (India) */}
-        <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col">
+        <div className="lg:col-span-7 xl:col-span-7 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col">
           <div className="flex items-center justify-between pb-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">
@@ -618,7 +946,7 @@ export function TalentPulseDashboard({
               </p>
             </div>
             <button
-              onClick={() => setSelectedCity("All India")}
+              onClick={() => handleCitySelect("All India")}
               id="reset-to-india-btn"
               className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 shadow-xs transition-colors"
             >
@@ -672,7 +1000,7 @@ export function TalentPulseDashboard({
                       strokeWidth={isStateActive ? "2" : "1"}
                       onClick={() => {
                         const match = CITY_NODES.find((c) => c.stateId === state.id);
-                        if (match) setSelectedCity(match.name);
+                        if (match) handleCitySelect(match.name);
                       }}
                     >
                       <title>{state.name}</title>
@@ -718,7 +1046,7 @@ export function TalentPulseDashboard({
                       key={city.name}
                       id={`city-cluster-${city.name.toLowerCase()}`}
                       className="cursor-pointer group transition-transform duration-200"
-                      onClick={() => setSelectedCity(city.name)}
+                      onClick={() => handleCitySelect(city.name)}
                     >
                       {isSelected ? (
                         <>
@@ -867,134 +1195,189 @@ export function TalentPulseDashboard({
           </div>
         </div>
 
-        {/* RIGHT CARD: Drilldown: [City] ([State]) */}
-        <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Drilldown: {activeCityNode.name} ({activeCityNode.state})
-              </h2>
-              <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                Live extraction scope & hiring intelligence
-              </p>
+        {/* RIGHT COLUMN: LOCATION SKILLS PIE & EXPERIENCE POINT CHARTS + EXPORT BUTTON */}
+        <div id="sidebar-analytics-column" className="lg:col-span-5 xl:col-span-5 flex flex-col gap-5">
+          {/* Chart 1: Location-wise Skills Donut Chart (Clean White Theme matching Dashboard) */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
+            <div className="pb-1 flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight" id="skills-pie-chart-title">
+                  {activeCityNode.name} Skills Breakdown
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                  Top in-demand technical skills in {activeCityNode.name}
+                </p>
+              </div>
+              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                Donut Share
+              </span>
             </div>
 
-            {/* Top In-Demand Skills */}
-            <div className="space-y-2.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Top In-Demand Skills
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { name: "Python / AI", pct: "42%" },
-                  { name: "React / JS", pct: "31%" },
-                  { name: "Cloud / AWS", pct: "25%" },
-                  { name: "Data / SQL", pct: "22%" },
-                ].map((s) => {
-                  const isFiltered =
-                    selectedSkillFilter?.toLowerCase() === s.name.split(" ")[0].toLowerCase();
-                  return (
-                    <button
-                      key={s.name}
-                      onClick={() =>
-                        setSelectedSkillFilter(
-                          isFiltered ? null : s.name.split(" ")[0]
-                        )
-                      }
-                      className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all border ${
-                        isFiltered
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                          : "bg-slate-50 hover:bg-indigo-50 text-slate-800 hover:text-indigo-950 border-slate-300 hover:border-indigo-300"
-                      }`}
+            <div className="h-[210px] w-full flex items-center justify-center relative my-1">
+              {isMounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Tooltip content={<CustomPieTooltip />} />
+                    <Pie
+                      data={locationSkillsPieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={46}
+                      outerRadius={78}
+                      paddingAngle={3}
+                      stroke="#ffffff"
+                      strokeWidth={3}
                     >
-                      {s.name} ({s.pct})
-                    </button>
-                  );
-                })}
-              </div>
+                      {locationSkillsPieData.map((slice, index) => (
+                        <Cell key={`slice-${index}`} fill={slice.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                  Loading visualization...
+                </div>
+              )}
             </div>
 
-            {/* Experience Split */}
-            <div className="space-y-2.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Experience Split
-              </span>
-              {/* Segmented Progress Bar */}
-              <div className="h-3.5 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-                <div
-                  className="bg-sky-500 h-full transition-all duration-500"
-                  style={{ width: "25%" }}
-                  title="Entry Level: 25%"
-                ></div>
-                <div
-                  className="bg-indigo-600 h-full transition-all duration-500"
-                  style={{ width: "45%" }}
-                  title="Mid Level: 45%"
-                ></div>
-                <div
-                  className="bg-purple-700 h-full transition-all duration-500"
-                  style={{ width: "30%" }}
-                  title="Senior: 30%"
-                ></div>
-              </div>
-              <div className="text-xs font-semibold text-slate-700 flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-sky-500 inline-block"></span>
-                  Entry: 25%
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
-                  Mid: 45%
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-purple-700 inline-block"></span>
-                  Senior: 30%
-                </span>
-              </div>
+            {/* Bottom Horizontal Legend - Clean White Dashboard Theme */}
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-2.5 border-t border-slate-100 text-[11px]">
+              {locationSkillsPieData.map((item) => (
+                <button
+                  key={item.name}
+                  onClick={() => {
+                    if (item.name !== "Others") {
+                      setSelectedSkillFilter(
+                        selectedSkillFilter?.toLowerCase() === item.name.toLowerCase()
+                          ? null
+                          : item.name
+                      );
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors ${
+                    selectedSkillFilter?.toLowerCase() === item.name.toLowerCase()
+                      ? "bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold shadow-2xs"
+                      : "text-slate-700 hover:text-slate-950 hover:bg-slate-50 border border-transparent"
+                  }`}
+                  title={`Filter by ${item.name}`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-[3px] shrink-0 inline-block"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="font-semibold">{item.name}</span>
+                  <span className="text-slate-500 font-medium">({item.percentage}%)</span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2.5 pt-6">
-            {extractStatus && (
-              <div className="text-xs font-semibold text-indigo-950 bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center gap-2 shadow-2xs">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                <span>{extractStatus}</span>
+          {/* Chart 2: Experience Demand Point Chart (Clean White Minimalist - Image 3) */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
+            <div className="pb-1 flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight" id="experience-chart-title">
+                  Experience Demand ({activeCityNode.name})
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                  Active hiring breakdown across career seniority tiers
+                </p>
               </div>
-            )}
-
-            <button
-              onClick={handleTriggerExtraction}
-              disabled={isExtracting}
-              id="extract-live-postings-btn"
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 hover:from-indigo-700 hover:to-violet-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-              <span>
-                {isExtracting
-                  ? "Extracting Pipeline Active..."
-                  : `Extract Live ${activeCityNode.name} Postings`}
+              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                Point Curve
               </span>
-            </button>
+            </div>
 
-            <button
-              onClick={handleExportCityCsv}
-              id="export-city-csv-btn"
-              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 hover:text-slate-950 font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>
-                Export {activeCityNode.name.toLowerCase().replace(/\s+/g, "_")}_jobs.csv
+            <div className="h-[210px] w-full flex items-center justify-center relative my-1">
+              {isMounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={experienceCurveData}
+                    margin={{ top: 12, right: 15, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#E2E8F0"
+                      vertical={true}
+                      horizontal={true}
+                    />
+                    <XAxis
+                      dataKey="bracket"
+                      tick={{ fill: "#64748B", fontSize: 10, fontWeight: 600 }}
+                      stroke="#CBD5E1"
+                      tickLine={false}
+                      axisLine={{ stroke: "#E2E8F0" }}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748B", fontSize: 10, fontWeight: 600 }}
+                      stroke="#CBD5E1"
+                      tickLine={false}
+                      axisLine={{ stroke: "#E2E8F0" }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip content={<CustomExpTooltip />} />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#09090B"
+                      strokeWidth={2.5}
+                      dot={{
+                        r: 4,
+                        fill: "#09090B",
+                        stroke: "#FFFFFF",
+                        strokeWidth: 1.5,
+                      }}
+                      activeDot={{
+                        r: 6,
+                        fill: "#4F46E5",
+                        stroke: "#FFFFFF",
+                        strokeWidth: 2,
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+                  Loading visualization...
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-600 font-medium">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-900 inline-block"></span>
+                Peak Demand:{" "}
+                <strong className="text-slate-900">
+                  {[...experienceCurveData].sort((a, b) => b.count - a.count)[0]?.bracket || "Mid"}
+                </strong>
               </span>
-            </button>
+              <span className="text-[10px] text-slate-500 font-medium">
+                Total {experienceCurveData.reduce((acc, d) => acc + d.count, 0).toLocaleString()} Roles
+              </span>
+            </div>
           </div>
+
+          {/* Export CSV Button at the end (Extract option removed as requested) */}
+          <button
+            onClick={handleExportCityCsv}
+            id="export-city-csv-btn"
+            className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-400 text-slate-800 hover:text-slate-950 font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-600" />
+            <span>
+              Export {activeCityNode.name.toLowerCase().replace(/\s+/g, "_")}_jobs.csv
+            </span>
+          </button>
         </div>
       </div>
 
       {/* ==================================================================== */}
       {/* BOTTOM SECTION: [CITY] LIVE OPENINGS TABLE */}
       {/* ==================================================================== */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4 hover:border-slate-300 transition-colors">
+      <div id="directory" className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4 hover:border-slate-300 transition-colors">
         {/* Table Title Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
           <div className="flex items-baseline gap-2">
@@ -1002,8 +1385,8 @@ export function TalentPulseDashboard({
               {activeCityNode.name === "All India" ? "All India" : activeCityNode.name} Live Openings
             </h3>
             <span className="text-xs font-semibold text-slate-600" id="table-count-label">
-              (Showing {displayJobs.length > 0 ? `1–${Math.min(visibleCount, displayJobs.length)}` : "0"} of{" "}
-              {displayJobs.length.toLocaleString()} matching records)
+              (Showing {displayJobs.length > 0 ? `${startIndex + 1}–${endIndex}` : "0"} of{" "}
+              {displayJobs.length.toLocaleString()} matching records • Page {safeCurrentPage} of {totalPages})
             </span>
           </div>
 
@@ -1074,7 +1457,7 @@ export function TalentPulseDashboard({
                   </td>
                 </tr>
               ) : (
-                displayJobs.slice(0, visibleCount).map((job) => {
+                currentPaginatedJobs.map((job) => {
                   const src = (job.source || "LinkedIn").toLowerCase();
                   return (
                     <tr
@@ -1098,9 +1481,11 @@ export function TalentPulseDashboard({
 
                       {/* Location */}
                       <td className="py-4 px-4 text-slate-600 font-medium text-xs">
-                        {job.city && job.city !== "Not Specified"
-                          ? `${job.city}${job.state && job.state !== "Not Specified" ? `, ${job.state}` : ""}`
-                          : job.normalized_location || (activeCityNode.name !== "All India" ? `${activeCityNode.name}, ${activeCityNode.state}` : "India")}
+                        {selectedCity !== "All India"
+                          ? (job.city && job.city.toLowerCase().includes("hybrid") ? `Hybrid - ${selectedCity}` : selectedCity)
+                          : (job.city && job.city !== "Not Specified"
+                              ? `${job.city}${job.state && job.state !== "Not Specified" ? `, ${job.state}` : ""}`
+                              : job.normalized_location || "India")}
                       </td>
 
                       {/* Experience */}
@@ -1152,16 +1537,97 @@ export function TalentPulseDashboard({
           </table>
         </div>
 
-        {/* Load More Button if rows available */}
-        {displayJobs.length > visibleCount && (
-          <div className="pt-2 flex justify-center">
-            <button
-              onClick={() => setVisibleCount((prev) => prev + 10)}
-              id="load-more-jobs-btn"
-              className="px-6 py-2.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl shadow-xs transition-colors"
-            >
-              Load More Records (+10)
-            </button>
+        {/* Page Navigation Controls (Navigates to Next / Prev Page instead of expanding on same page) */}
+        {displayJobs.length > 0 && (
+          <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4" id="table-pagination-bar">
+            {/* Results count text */}
+            <div className="text-xs font-semibold text-slate-600">
+              Showing <span className="font-bold text-slate-900">{startIndex + 1}</span> to{" "}
+              <span className="font-bold text-slate-900">{endIndex}</span> of{" "}
+              <span className="font-bold text-slate-900">{displayJobs.length.toLocaleString()}</span> jobs
+            </div>
+
+            {/* Pagination Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Previous Page Button */}
+              <button
+                onClick={() => {
+                  setCurrentPage((prev) => Math.max(1, prev - 1));
+                  document.getElementById("directory")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                disabled={safeCurrentPage <= 1}
+                id="prev-page-btn"
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:text-slate-950 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </button>
+
+              {/* Numbered Page Buttons */}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (safeCurrentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (safeCurrentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = safeCurrentPage - 2 + i;
+                  }
+
+                  const isActive = pageNum === safeCurrentPage;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => {
+                        setCurrentPage(pageNum);
+                        document.getElementById("directory")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-white text-slate-700 hover:text-slate-950 hover:bg-slate-100 border border-slate-200"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                {totalPages > 5 && safeCurrentPage < totalPages - 2 && (
+                  <>
+                    <span className="text-slate-400 px-1 text-xs select-none">...</span>
+                    <button
+                      onClick={() => {
+                        setCurrentPage(totalPages);
+                        document.getElementById("directory")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className="min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold bg-white text-slate-700 hover:text-slate-950 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Next Page Button */}
+              <button
+                onClick={() => {
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+                  document.getElementById("directory")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                disabled={safeCurrentPage >= totalPages}
+                id="next-page-btn"
+                className="px-3.5 py-1.5 rounded-xl border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:border-slate-300 disabled:text-slate-500 cursor-pointer"
+                title="Next Page"
+              >
+                <span>Next Page</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1188,8 +1654,8 @@ export function TalentPulseDashboard({
                   {selectedJob.title}
                 </h3>
                 <p className="text-sm font-semibold text-slate-700 mt-0.5">
-                  {selectedJob.company} • {selectedJob.city || activeCityNode.name},{" "}
-                  {selectedJob.state || activeCityNode.state}
+                  {selectedJob.company} • {selectedCity !== "All India" ? selectedCity : (selectedJob.city || activeCityNode.name)},{" "}
+                  {selectedCity !== "All India" ? activeCityNode.state : (selectedJob.state || activeCityNode.state)}
                 </p>
               </div>
 

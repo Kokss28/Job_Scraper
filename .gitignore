@@ -2,16 +2,30 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
 # Virtual environments
 .venv/
 venv/
 ENV/
 
-# Environment variables and secrets
+# Environment variables & secrets (KEEP .env.example tracked, IGNORE real secrets)
 .env
+.env.*
+!.env.example
+web/.env*
+!web/.env.example
+
+# Next.js & Frontend builds
+web/.next/
+web/out/
+web/node_modules/
+node_modules/
+*.tsbuildinfo
+next-env.d.ts
 
 # Data outputs, databases, and local tracking files
+data/
 Data/
 *.csv
 *.db
@@ -21,12 +35,17 @@ Data/
 !tsconfig.json
 !web/**/*.json
 
-# Machine learning models and checkpoints
-#ml/models/
+# Playwright Test Output Artifacts
+web/public/test_screenshots/
+web/public/test_screenshots/*
 
-# Debug logs or temporary debug folders
+# Debug logs or crawler temporary folders
 naukri_debug/
+*.log
+npm-debug.log*
 
-# OS-specific files
+# OS & Editor specific files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/

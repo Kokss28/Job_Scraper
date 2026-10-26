@@ -55,7 +55,7 @@ export function AppNav({
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-[#0B1120] border-r border-slate-800/80 flex flex-col min-h-screen">
+    <aside className="w-64 flex-shrink-0 bg-[#0B1120] border-r border-slate-800/80 flex flex-col h-screen sticky top-0 overflow-y-auto z-40 select-none">
       {/* Brand Header */}
       <div className="p-6">
         <Link href="/dashboard" className="flex items-center gap-3 group">
