@@ -18,7 +18,6 @@ jobs:
   harvest-python-development:
     name: Harvest Python Development Jobs
     runs-on: ubuntu-latest
-    environment: CORN_JOBS
     timeout-minutes: 45
 
     steps:
