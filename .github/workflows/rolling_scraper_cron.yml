@@ -2,18 +2,19 @@ name: 4-Hour Rolling Domain Job Scraper
 
 on:
   schedule:
-    # Runs every hour at minute 0 (24/7 continuous rolling schedule)
-    # Slot 0 (Hours 0, 4, 8, 12, 16, 20): Data & Analytics
-    # Slot 1 (Hours 1, 5, 9, 13, 17, 21): Python Development
-    # Slot 2 (Hours 2, 6, 10, 14, 18, 22): Java Development
-    # Slot 3 (Hours 3, 7, 11, 15, 19, 23): Cloud & DevOps
-    - cron: '0 * * * *'
+    # Runs every hour at minute 15 (offset from minute 0 to avoid GitHub Actions queue delays)
+    # Continuous round-robin rotation across all 4 domains:
+    # Slot 0: Data & Analytics
+    # Slot 1: Python Development
+    # Slot 2: Java Development
+    # Slot 3: Cloud & DevOps
+    - cron: '15 * * * *'
 
   # Manual on-demand execution from GitHub Actions web interface
   workflow_dispatch:
     inputs:
       target_slot:
-        description: 'Target Domain Slot (auto uses current hour modulo 4)'
+        description: 'Target Domain Slot (auto uses intelligent sequential rotation)'
         required: true
         default: 'auto'
         type: choice
@@ -34,7 +35,7 @@ jobs:
     name: Harvest & Sync Rolling Domain Jobs
     runs-on: ubuntu-latest
     environment: CORN_JOBS
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Repository

@@ -2371,6 +2371,7 @@ def collect_naukri_jobs(
 
         consecutive_empty_pages = 0
         consecutive_no_match_pages = 0
+        detail_enrichment_count = 0
         page_number = 1
 
         while True:
@@ -2473,10 +2474,10 @@ def collect_naukri_jobs(
                 )
 
                 # ------------------------------------------------
-                # Optional detail page
+                # Optional detail page (budgeted up to 20 to prevent timeout)
                 # ------------------------------------------------
 
-                if enable_detail_pages:
+                if enable_detail_pages and detail_enrichment_count < 20:
 
                     link = job.get(
                         "link"
@@ -2502,6 +2503,7 @@ def collect_naukri_jobs(
                                     detail_response
                                 )
                             )
+                            detail_enrichment_count += 1
 
                         time.sleep(
                             DETAIL_DELAY_SECONDS

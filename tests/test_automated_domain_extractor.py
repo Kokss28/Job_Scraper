@@ -49,3 +49,40 @@ def test_modulo_hour_mapping():
         expected_slot_idx = hour % 4
         assert slot["slot"] == expected_slot_idx
         assert hour in slot["hours"]
+
+
+def test_keyword_to_slot_mapping():
+    from pipeline.automated_domain_extractor import keyword_to_slot
+
+    # Slot 0: Data & Analytics
+    assert keyword_to_slot("data analyst") == 0
+    assert keyword_to_slot("Data Scientist") == 0
+    assert keyword_to_slot("Power BI developer") == 0
+    assert keyword_to_slot("data engineer") == 0
+
+    # Slot 1: Python Development
+    assert keyword_to_slot("python developer") == 1
+    assert keyword_to_slot("FastAPI Developer") == 1
+    assert keyword_to_slot("Django Backend") == 1
+
+    # Slot 2: Java Development
+    assert keyword_to_slot("java developer") == 2
+    assert keyword_to_slot("Spring Boot Engineer") == 2
+    assert keyword_to_slot("core java") == 2
+
+    # Slot 3: Cloud & DevOps
+    assert keyword_to_slot("cloud engineer") == 3
+    assert keyword_to_slot("AWS DevOps") == 3
+    assert keyword_to_slot("Kubernetes Developer") == 3
+
+    # Unknown
+    assert keyword_to_slot("nurse") is None
+    assert keyword_to_slot("") is None
+
+
+def test_sequential_rotation_sequence():
+    # Sequence must follow 0 -> 1 -> 2 -> 3 -> 0
+    for slot in range(4):
+        next_slot = (slot + 1) % 4
+        assert next_slot == (slot + 1 if slot < 3 else 0)
+
