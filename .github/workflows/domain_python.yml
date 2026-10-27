@@ -2,9 +2,9 @@ name: 2. Harvest - Python Development
 
 on:
   schedule:
-    # Runs every 4 hours at minute 00: 1, 5, 9, 13, 17, 21 UTC
-    # Indian Standard Time (IST): 6:30 AM, 10:30 AM, 2:30 PM, 6:30 PM, 10:30 PM, 2:30 AM
-    - cron: '0 1,5,9,13,17,21 * * *'
+    # Runs every 4 hours at exact :00 Indian Standard Time (IST)
+    # India (IST): 2:00 PM, 6:00 PM, 10:00 PM, 2:00 AM, 6:00 AM, 10:00 AM
+    - cron: '30 0,4,8,12,16,20 * * *'
 
   workflow_dispatch:
     inputs:

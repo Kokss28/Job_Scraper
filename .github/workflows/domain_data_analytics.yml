@@ -2,9 +2,9 @@ name: 1. Harvest - Data & Analytics
 
 on:
   schedule:
-    # Runs every 4 hours at minute 00: 0, 4, 8, 12, 16, 20 UTC
-    # Indian Standard Time (IST): 5:30 AM, 9:30 AM, 1:30 PM, 5:30 PM, 9:30 PM, 1:30 AM
-    - cron: '0 0,4,8,12,16,20 * * *'
+    # Runs every 4 hours at exact :00 Indian Standard Time (IST)
+    # India (IST): 1:00 PM, 5:00 PM, 9:00 PM, 1:00 AM, 5:00 AM, 9:00 AM
+    - cron: '30 3,7,11,15,19,23 * * *'
 
   workflow_dispatch:
     inputs:
