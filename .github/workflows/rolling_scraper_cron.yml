@@ -1,15 +1,6 @@
-name: 4-Hour Rolling Domain Job Scraper
+name: Manual Master Harvester (All Domains)
 
 on:
-  schedule:
-    # Runs every hour at minute 15 (offset from minute 0 to avoid GitHub Actions queue delays)
-    # Continuous round-robin rotation across all 4 domains:
-    # Slot 0: Data & Analytics
-    # Slot 1: Python Development
-    # Slot 2: Java Development
-    # Slot 3: Cloud & DevOps
-    - cron: '15 * * * *'
-
   # Manual on-demand execution from GitHub Actions web interface
   workflow_dispatch:
     inputs:

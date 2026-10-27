@@ -1,0 +1,65 @@
+name: 1. Harvest - Data & Analytics
+
+on:
+  schedule:
+    # Runs every 4 hours: 0, 4, 8, 12, 16, 20 UTC
+    # Indian Standard Time (IST): 5:45 AM, 9:45 AM, 1:45 PM, 5:45 PM, 9:45 PM, 1:45 AM
+    - cron: '15 0,4,8,12,16,20 * * *'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (verify schedule without web scraping)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  harvest-data-analytics:
+    name: Harvest Data & Analytics Jobs
+    runs-on: ubuntu-latest
+    environment: CORN_JOBS
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium Browser & OS Dependencies
+        run: |
+          playwright install chromium --with-deps
+
+      - name: Run Data & Analytics Harvest (Slot 0 - Past 4 Hours)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NAUKRI_HEADLESS: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          DRY_ARG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_ARG="--dry-run"
+          fi
+          echo "Executing Slot 0: Data & Analytics..."
+          python pipeline/automated_domain_extractor.py --slot 0 $DRY_ARG
+
+      - name: Summary & Status
+        if: always()
+        run: |
+          echo "### 📊 Slot 0 Complete: Data & Analytics" >> $GITHUB_STEP_SUMMARY
+          echo "Timestamp (UTC): $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "Keywords: data analyst, data scientist, data engineer, business analyst, power bi" >> $GITHUB_STEP_SUMMARY
+          echo "Recency Window: Past 4 Hours" >> $GITHUB_STEP_SUMMARY
