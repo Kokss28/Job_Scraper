@@ -10,7 +10,7 @@ workflows = [
 ]
 
 for wid, name in workflows:
-    u = f"https://api.github.com/repos/Kokss28/Job_Scraper/actions/workflows/{wid}/runs"
+    u = f"https://api.github.com/repos/Pravink1005/Job_Scraper/actions/workflows/{wid}/runs"
     req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
     res = json.loads(urllib.request.urlopen(req).read().decode())
     total = res.get("total_count", 0)

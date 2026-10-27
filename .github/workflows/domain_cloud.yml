@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs every 4 hours at exact :00 Indian Standard Time (IST)
     # India (IST): 4:00 PM, 8:00 PM, 12:00 AM, 4:00 AM, 8:00 AM, 12:00 PM
-    - cron: '30 2,6,10,14,18,22 * * *'
+    - cron: '35 2,6,10,14,18,22 * * *'
 
   workflow_dispatch:
     inputs:

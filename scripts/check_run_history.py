@@ -2,7 +2,7 @@ import urllib.request
 import json
 from datetime import datetime, timezone, timedelta
 
-u = "https://api.github.com/repos/Kokss28/Job_Scraper/actions/runs?per_page=20"
+u = "https://api.github.com/repos/Pravink1005/Job_Scraper/actions/runs?per_page=20"
 req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
 res = json.loads(urllib.request.urlopen(req).read().decode())
 runs = res.get("workflow_runs", [])
