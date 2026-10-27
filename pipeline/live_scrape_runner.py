@@ -101,6 +101,13 @@ def main():
     naukri_col = collect_naukri_jobs if use_naukri else None
     indeed_col = collect_indeed_jobs if use_indeed else None
 
+    # When freshness <= 24h and max-jobs is unlimited, cap search pages to 6 per keyword.
+    # On job portals, postings from the last 4-24 hours are concentrated in the first 3-5 pages.
+    # Capping prevents infinite crawling through 50 historical pages.
+    naukri_max_pages = None
+    if freshness <= 24 and max_jobs is None:
+        naukri_max_pages = 6
+
     lk_kwargs = {
         "keywords": keywords,
         "location": location,
@@ -112,7 +119,7 @@ def main():
     nk_kwargs = {
         "titles": keywords,
         "location": location,
-        "max_pages": None,  # Paginate dynamically until matching jobs are exhausted
+        "max_pages": naukri_max_pages,
         "max_jobs": max_jobs,
         "max_total": max_jobs,
         "max_age_hours": freshness,

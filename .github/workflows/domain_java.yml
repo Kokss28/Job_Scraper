@@ -1,0 +1,65 @@
+name: 3. Harvest - Java Development
+
+on:
+  schedule:
+    # Runs every 4 hours at exact :00 Indian Standard Time (IST)
+    # India (IST): 3:00 PM, 7:00 PM, 11:00 PM, 3:00 AM, 7:00 AM, 11:00 AM
+    - cron: '30 1,5,9,13,17,21 * * *'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (verify schedule without web scraping)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  harvest-java-development:
+    name: Harvest Java Development Jobs
+    runs-on: ubuntu-latest
+    environment: CORN_JOBS
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium Browser & OS Dependencies
+        run: |
+          playwright install chromium --with-deps
+
+      - name: Run Java Development Harvest (Slot 2 - Past 4 Hours)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NAUKRI_HEADLESS: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          DRY_ARG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_ARG="--dry-run"
+          fi
+          echo "Executing Slot 2: Java Development..."
+          python pipeline/automated_domain_extractor.py --slot 2 $DRY_ARG
+
+      - name: Summary & Status
+        if: always()
+        run: |
+          echo "### ☕ Slot 2 Complete: Java Development" >> $GITHUB_STEP_SUMMARY
+          echo "Timestamp (UTC): $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "Keywords: java developer, full stack java, spring boot developer, core java" >> $GITHUB_STEP_SUMMARY
+          echo "Recency Window: Past 4 Hours" >> $GITHUB_STEP_SUMMARY

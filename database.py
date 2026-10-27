@@ -415,6 +415,85 @@ def sync_csv_to_supabase(target_csv=None, batch_size=100) -> dict:
     return {"synced": total_synced, "skipped": skipped, "status": "success"}
 
 
+def sync_supabase_to_sqlite(target_db=None, target_csv=None, batch_size=1000) -> dict:
+    """
+    Pulls all jobs from Supabase Cloud and syncs them to local SQLite and unified_jobs.csv.
+    """
+    client = get_supabase_client()
+    if not client:
+        print("[Supabase] Error: Supabase credentials not configured in .env")
+        return {"pulled": 0, "status": "unconfigured"}
+
+    db_file = Path(target_db) if target_db else DB_PATH
+    csv_file = Path(target_csv) if target_csv else CSV_PATH
+
+    print("=" * 70)
+    print("SUPABASE CLOUD -> LOCAL SQLITE & CSV SYNC")
+    print("=" * 70)
+    print(f"Target SQLite: {db_file}")
+    print(f"Target CSV   : {csv_file}")
+    print()
+
+    all_jobs = []
+    start = 0
+    step = 1000
+    while True:
+        res = client.table("jobs").select("*").range(start, start + step - 1).execute()
+        rows = res.data or []
+        if not rows:
+            break
+        all_jobs.extend(rows)
+        print(f"  [Supabase] Pulled {len(all_jobs)} rows...")
+        if len(rows) < step:
+            break
+        start += step
+
+    if not all_jobs:
+        print("[Supabase] No jobs found in Supabase Cloud.")
+        return {"pulled": 0, "status": "empty"}
+
+    connection = create_database()
+    cursor = connection.cursor()
+
+    columns = [
+        "job_id", "source", "title", "company", "search_keyword",
+        "city", "state", "country", "min_experience_years", "max_experience_years",
+        "experience_review", "skills", "degree_required", "specialization_required",
+        "collected_at", "link", "full_description"
+    ]
+    placeholders = ", ".join(["?"] * len(columns))
+    col_str = ", ".join(columns)
+
+    insert_sql = f"INSERT OR REPLACE INTO jobs ({col_str}) VALUES ({placeholders})"
+
+    rows_to_insert = []
+    for j in all_jobs:
+        row_vals = tuple(str(j.get(col, "") or "") for col in columns)
+        rows_to_insert.append(row_vals)
+
+    cursor.executemany(insert_sql, rows_to_insert)
+    connection.commit()
+
+    # Also rewrite / update CSV
+    from pipeline.schema import CSV_FIELDS
+    with open(csv_file, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        for j in all_jobs:
+            writer.writerow(clean_job_record(j))
+
+    cursor.execute("SELECT COUNT(*) FROM jobs")
+    total_local = cursor.fetchone()[0]
+    connection.close()
+
+    print()
+    print("=" * 70)
+    print(f"LOCAL SYNC COMPLETE: {len(all_jobs)} jobs pulled from Supabase Cloud.")
+    print(f"Total jobs now in local SQLite ({db_file.name}): {total_local}")
+    print("=" * 70)
+    return {"pulled": len(all_jobs), "total_local": total_local, "status": "success"}
+
+
 def sync_all(target_csv=None):
     """
     Convenience method: Syncs to SQLite first, and if Supabase is configured,
@@ -444,15 +523,23 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--target",
-        choices=["all", "sqlite", "supabase"],
+        choices=["all", "sqlite", "supabase", "pull"],
         default="all",
-        help="Database target to sync to: all (default), sqlite, or supabase",
+        help="Database target: all (default), sqlite, supabase, or pull (download Cloud to local SQLite)",
+    )
+    parser.add_argument(
+        "--pull",
+        action="store_true",
+        help="Download latest jobs from Supabase Cloud to local SQLite database and CSV",
     )
     args = parser.parse_args()
 
-    if args.target == "sqlite":
+    if args.pull or args.target == "pull":
+        sync_supabase_to_sqlite(target_csv=args.csv)
+    elif args.target == "sqlite":
         import_csv_to_database(args.csv)
     elif args.target == "supabase":
         sync_csv_to_supabase(args.csv)
     else:
         sync_all(args.csv)
+

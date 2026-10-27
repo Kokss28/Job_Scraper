@@ -2709,11 +2709,14 @@ def collect_linkedin_jobs(
             all_jobs,
             start=1
         ):
+            if index > 25:
+                logger.info("Reached maximum detail enrichment cap (25 jobs). Using card-level details for remaining jobs.")
+                break
 
             logger.info(
                 "Detail enrichment %s/%s",
                 index,
-                len(all_jobs)
+                min(len(all_jobs), 25)
             )
 
             try:
