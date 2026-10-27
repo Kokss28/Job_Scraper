@@ -35,9 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Playwright Chromium Browser & OS Dependencies
+      - name: Install Playwright Chromium Browser
         run: |
-          playwright install chromium --with-deps
+          playwright install chromium
 
       - name: Run Python Development Harvest (Slot 1 - Past 4 Hours)
         env:
