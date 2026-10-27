@@ -2,9 +2,9 @@ name: 4. Harvest - Cloud & DevOps
 
 on:
   schedule:
-    # Runs every 4 hours: 3, 7, 11, 15, 19, 23 UTC
-    # Indian Standard Time (IST): 8:45 AM, 12:45 PM, 4:45 PM, 8:45 PM, 12:45 AM, 4:45 AM
-    - cron: '15 3,7,11,15,19,23 * * *'
+    # Runs every 4 hours at minute 00: 3, 7, 11, 15, 19, 23 UTC
+    # Indian Standard Time (IST): 8:30 AM, 12:30 PM, 4:30 PM, 8:30 PM, 12:30 AM, 4:30 AM
+    - cron: '0 3,7,11,15,19,23 * * *'
 
   workflow_dispatch:
     inputs:

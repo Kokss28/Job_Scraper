@@ -2,9 +2,9 @@ name: 3. Harvest - Java Development
 
 on:
   schedule:
-    # Runs every 4 hours: 2, 6, 10, 14, 18, 22 UTC
-    # Indian Standard Time (IST): 7:45 AM, 11:45 AM, 3:45 PM, 7:45 PM, 11:45 PM, 3:45 AM
-    - cron: '15 2,6,10,14,18,22 * * *'
+    # Runs every 4 hours at minute 00: 2, 6, 10, 14, 18, 22 UTC
+    # Indian Standard Time (IST): 7:30 AM, 11:30 AM, 3:30 PM, 7:30 PM, 11:30 PM, 3:30 AM
+    - cron: '0 2,6,10,14,18,22 * * *'
 
   workflow_dispatch:
     inputs:
