@@ -1,0 +1,326 @@
+{
+  "an": {
+    "id": "an",
+    "name": "Andaman and Nicobar Islands",
+    "minX": 503.0,
+    "minY": 521.6,
+    "maxX": 539.4,
+    "maxY": 695.6,
+    "viewBox": "483.0 495.5 76.4 226.2"
+  },
+  "ap": {
+    "id": "ap",
+    "name": "Andhra Pradesh",
+    "minX": 175.9,
+    "minY": 429.6,
+    "maxX": 343.5,
+    "maxY": 571.3,
+    "viewBox": "150.8 408.3 217.9 184.2"
+  },
+  "ar": {
+    "id": "ar",
+    "name": "Arunachal Pradesh",
+    "minX": 488.9,
+    "minY": 190.9,
+    "maxX": 611.9,
+    "maxY": 257.8,
+    "viewBox": "468.9 170.9 163.0 106.9"
+  },
+  "as": {
+    "id": "as",
+    "name": "Assam",
+    "minX": 449.7,
+    "minY": 226.3,
+    "maxX": 582.7,
+    "maxY": 316.2,
+    "viewBox": "429.7 206.3 173.0 129.9"
+  },
+  "br": {
+    "id": "br",
+    "name": "Bihar",
+    "minX": 316.1,
+    "minY": 226.9,
+    "maxX": 421.3,
+    "maxY": 310.7,
+    "viewBox": "296.1 206.9 145.2 123.8"
+  },
+  "ch": {
+    "id": "ch",
+    "name": "Chandigarh",
+    "minX": 178.1,
+    "minY": 158.3,
+    "maxX": 180.9,
+    "maxY": 161.5,
+    "viewBox": "158.1 138.3 42.8 43.2"
+  },
+  "ct": {
+    "id": "ct",
+    "name": "Chhattisgarh",
+    "minX": 252.6,
+    "minY": 316.8,
+    "maxX": 339.3,
+    "maxY": 458.4,
+    "viewBox": "232.6 295.6 126.7 184.1"
+  },
+  "dn": {
+    "id": "dn",
+    "name": "Dadra and Nagar Haveli",
+    "minX": 99.2,
+    "minY": 401.5,
+    "maxX": 105.3,
+    "maxY": 408.4,
+    "viewBox": "79.2 381.5 46.1 46.9"
+  },
+  "dd": {
+    "id": "dd",
+    "name": "Daman and Diu",
+    "minX": 52.1,
+    "minY": 387.5,
+    "maxX": 56.9,
+    "maxY": 394.3,
+    "viewBox": "32.1 367.5 44.8 46.8"
+  },
+  "dl": {
+    "id": "dl",
+    "name": "Delhi",
+    "minX": 180.8,
+    "minY": 204.8,
+    "maxX": 191.5,
+    "maxY": 216.2,
+    "viewBox": "160.8 184.8 50.7 51.4"
+  },
+  "ga": {
+    "id": "ga",
+    "name": "Goa",
+    "minX": 115.0,
+    "minY": 502.2,
+    "maxX": 129.0,
+    "maxY": 522.0,
+    "viewBox": "95.0 482.2 54.0 59.8"
+  },
+  "gj": {
+    "id": "gj",
+    "name": "Gujarat",
+    "minX": 0.0,
+    "minY": 302.8,
+    "maxX": 132.0,
+    "maxY": 406.6,
+    "viewBox": "0.0 282.8 172.0 143.8"
+  },
+  "hr": {
+    "id": "hr",
+    "name": "Haryana",
+    "minX": 131.9,
+    "minY": 155.1,
+    "maxX": 196.7,
+    "maxY": 233.4,
+    "viewBox": "111.9 135.1 104.8 118.3"
+  },
+  "hp": {
+    "id": "hp",
+    "name": "Himachal Pradesh",
+    "minX": 154.8,
+    "minY": 97.5,
+    "maxX": 226.1,
+    "maxY": 168.4,
+    "viewBox": "134.8 77.5 111.3 110.9"
+  },
+  "jk": {
+    "id": "jk",
+    "name": "Jammu and Kashmir",
+    "minX": 93.0,
+    "minY": 0.0,
+    "maxX": 253.0,
+    "maxY": 121.6,
+    "viewBox": "69.0 0.0 208.0 161.6"
+  },
+  "jh": {
+    "id": "jh",
+    "name": "Jharkhand",
+    "minX": 317.7,
+    "minY": 298.0,
+    "maxX": 415.0,
+    "maxY": 375.5,
+    "viewBox": "297.7 278.0 137.3 117.5"
+  },
+  "ka": {
+    "id": "ka",
+    "name": "Karnataka",
+    "minX": 123.2,
+    "minY": 444.1,
+    "maxX": 216.8,
+    "maxY": 592.9,
+    "viewBox": "103.2 421.8 133.6 193.4"
+  },
+  "kl": {
+    "id": "kl",
+    "name": "Kerala",
+    "minX": 139.4,
+    "minY": 567.3,
+    "maxX": 192.6,
+    "maxY": 663.1,
+    "viewBox": "119.4 547.3 93.2 135.8"
+  },
+  "ld": {
+    "id": "ld",
+    "name": "Lakshadweep",
+    "minX": 81.9,
+    "minY": 590.6,
+    "maxX": 115.7,
+    "maxY": 663.8,
+    "viewBox": "61.9 570.6 73.8 113.2"
+  },
+  "mp": {
+    "id": "mp",
+    "name": "Madhya Pradesh",
+    "minX": 122.5,
+    "minY": 252.5,
+    "maxX": 306.0,
+    "maxY": 395.4,
+    "viewBox": "95.0 231.1 238.6 185.8"
+  },
+  "mh": {
+    "id": "mh",
+    "name": "Maharashtra",
+    "minX": 92.8,
+    "minY": 364.2,
+    "maxX": 266.0,
+    "maxY": 506.9,
+    "viewBox": "66.8 342.8 225.2 185.5"
+  },
+  "mn": {
+    "id": "mn",
+    "name": "Manipur",
+    "minX": 518.6,
+    "minY": 279.9,
+    "maxX": 555.8,
+    "maxY": 322.5,
+    "viewBox": "498.6 259.9 77.2 82.6"
+  },
+  "ml": {
+    "id": "ml",
+    "name": "Meghalaya",
+    "minX": 453.5,
+    "minY": 270.2,
+    "maxX": 515.7,
+    "maxY": 295.6,
+    "viewBox": "433.5 250.2 102.2 65.4"
+  },
+  "mz": {
+    "id": "mz",
+    "name": "Mizoram",
+    "minX": 504.1,
+    "minY": 307.3,
+    "maxX": 528.6,
+    "maxY": 366.3,
+    "viewBox": "484.1 287.3 64.5 99.0"
+  },
+  "nl": {
+    "id": "nl",
+    "name": "Nagaland",
+    "minX": 526.6,
+    "minY": 248.4,
+    "maxX": 566.4,
+    "maxY": 291.7,
+    "viewBox": "506.6 228.4 79.8 83.3"
+  },
+  "or": {
+    "id": "or",
+    "name": "Odisha",
+    "minX": 275.6,
+    "minY": 351.9,
+    "maxX": 403.8,
+    "maxY": 458.0,
+    "viewBox": "255.6 331.9 168.2 146.1"
+  },
+  "py": {
+    "id": "py",
+    "name": "Puducherry",
+    "minX": 239.9,
+    "minY": 481.2,
+    "maxX": 295.5,
+    "maxY": 609.7,
+    "viewBox": "219.9 461.2 95.6 168.5"
+  },
+  "pb": {
+    "id": "pb",
+    "name": "Punjab",
+    "minX": 119.2,
+    "minY": 114.5,
+    "maxX": 183.0,
+    "maxY": 188.0,
+    "viewBox": "99.2 94.5 103.8 113.5"
+  },
+  "rj": {
+    "id": "rj",
+    "name": "Rajasthan",
+    "minX": 26.6,
+    "minY": 173.1,
+    "maxX": 210.8,
+    "maxY": 350.5,
+    "viewBox": "0.0 146.5 239.5 230.6"
+  },
+  "sk": {
+    "id": "sk",
+    "name": "Sikkim",
+    "minX": 414.8,
+    "minY": 223.0,
+    "maxX": 434.0,
+    "maxY": 247.6,
+    "viewBox": "394.8 203.0 59.2 64.6"
+  },
+  "tn": {
+    "id": "tn",
+    "name": "Tamil Nadu",
+    "minX": 168.5,
+    "minY": 550.8,
+    "maxX": 254.4,
+    "maxY": 667.3,
+    "viewBox": "148.5 530.8 125.9 156.5"
+  },
+  "tg": {
+    "id": "tg",
+    "name": "Telangana",
+    "minX": 190.0,
+    "minY": 411.6,
+    "maxX": 285.1,
+    "maxY": 501.3,
+    "viewBox": "170.0 391.6 135.1 129.7"
+  },
+  "tr": {
+    "id": "tr",
+    "name": "Tripura",
+    "minX": 476.9,
+    "minY": 306.9,
+    "maxX": 503.4,
+    "maxY": 343.0,
+    "viewBox": "456.9 286.9 66.5 76.1"
+  },
+  "up": {
+    "id": "up",
+    "name": "Uttar Pradesh",
+    "minX": 185.9,
+    "minY": 167.8,
+    "maxX": 344.3,
+    "maxY": 322.4,
+    "viewBox": "162.1 144.6 205.9 201.0"
+  },
+  "ut": {
+    "id": "ut",
+    "name": "Uttarakhand",
+    "minX": 196.0,
+    "minY": 143.0,
+    "maxX": 268.5,
+    "maxY": 209.2,
+    "viewBox": "176.0 123.0 112.5 106.2"
+  },
+  "wb": {
+    "id": "wb",
+    "name": "West Bengal",
+    "minX": 368.4,
+    "minY": 233.1,
+    "maxX": 453.2,
+    "maxY": 375.1,
+    "viewBox": "348.4 211.8 124.8 184.6"
+  }
+}
