@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -35,7 +35,19 @@ import {
   Tooltip,
 } from "recharts";
 import { type UnifiedJobRecord, isCityMatchStrict } from "@/lib/taxonomy";
-import { INDIA_STATES, INDIA_MAP_VIEWBOX } from "./india-map-paths";
+import {
+  INDIA_STATES,
+  INDIA_MAP_VIEWBOX,
+  STATE_BBOXES,
+  type StateBoundingBox,
+} from "./india-map-paths";
+
+export interface SelectedStateInfo {
+  id: string;
+  code: string;
+  name: string;
+  totalJobs: number;
+}
 
 interface TalentPulseDashboardProps {
   initialJobs: UnifiedJobRecord[];
@@ -53,11 +65,14 @@ export interface CityNode {
   lx: number;
   ly: number;
   lw: number;
+  tier: number;
   baseCount: number;
 }
 
 // Authentic tech hub coordinates on the 612x696 India GIS vector projection
+// Includes all national metro hubs and regional clusters across India stored in the database
 const CITY_NODES: CityNode[] = [
+  // --- TIER 1 METRO TECH HUBS (Exact original benchmark coordinates preserved) ---
   {
     name: "Delhi",
     fullName: "Delhi NCR",
@@ -69,6 +84,7 @@ const CITY_NODES: CityNode[] = [
     lx: 206,
     ly: 198,
     lw: 88,
+    tier: 1,
     baseCount: 2840,
   },
   {
@@ -82,6 +98,7 @@ const CITY_NODES: CityNode[] = [
     lx: 12,
     ly: 416,
     lw: 94,
+    tier: 1,
     baseCount: 2110,
   },
   {
@@ -95,6 +112,7 @@ const CITY_NODES: CityNode[] = [
     lx: 148,
     ly: 456,
     lw: 88,
+    tier: 1,
     baseCount: 1420,
   },
   {
@@ -108,6 +126,7 @@ const CITY_NODES: CityNode[] = [
     lx: 254,
     ly: 450,
     lw: 110,
+    tier: 1,
     baseCount: 2530,
   },
   {
@@ -121,6 +140,7 @@ const CITY_NODES: CityNode[] = [
     lx: 436,
     ly: 346,
     lw: 96,
+    tier: 1,
     baseCount: 890,
   },
   {
@@ -131,9 +151,10 @@ const CITY_NODES: CityNode[] = [
     x: 192,
     y: 570,
     labelPos: "left",
-    lx: 76,
+    lx: 68,
     ly: 558,
-    lw: 110,
+    lw: 116,
+    tier: 1,
     baseCount: 4210,
   },
   {
@@ -147,6 +168,7 @@ const CITY_NODES: CityNode[] = [
     lx: 268,
     ly: 564,
     lw: 118,
+    tier: 1,
     baseCount: 1842,
   },
   {
@@ -157,14 +179,620 @@ const CITY_NODES: CityNode[] = [
     x: 184,
     y: 602,
     labelPos: "left",
-    lx: 72,
+    lx: 68,
     ly: 600,
-    lw: 104,
+    lw: 106,
+    tier: 1,
     baseCount: 420,
+  },
+
+  // --- TIER 1 & 2 REGIONAL TECH & INDUSTRIAL HUBS ACROSS INDIA ---
+  {
+    name: "Ahmedabad",
+    fullName: "Ahmedabad / Gandhinagar, Gujarat",
+    state: "GJ",
+    stateId: "gj",
+    x: 100,
+    y: 340,
+    labelPos: "left",
+    lx: 8,
+    ly: 328,
+    lw: 88,
+    tier: 1,
+    baseCount: 650,
+  },
+  {
+    name: "Kochi",
+    fullName: "Kochi (Cochin), Kerala",
+    state: "KL",
+    stateId: "kl",
+    x: 173,
+    y: 637,
+    labelPos: "left",
+    lx: 82,
+    ly: 630,
+    lw: 86,
+    tier: 1,
+    baseCount: 520,
+  },
+  {
+    name: "Thiruvananthapuram",
+    fullName: "Thiruvananthapuram, Kerala",
+    state: "KL",
+    stateId: "kl",
+    x: 186,
+    y: 670,
+    labelPos: "right",
+    lx: 202,
+    ly: 660,
+    lw: 132,
+    tier: 2,
+    baseCount: 380,
+  },
+  {
+    name: "Jaipur",
+    fullName: "Jaipur, Rajasthan",
+    state: "RJ",
+    stateId: "rj",
+    x: 165,
+    y: 253,
+    labelPos: "left",
+    lx: 82,
+    ly: 242,
+    lw: 80,
+    tier: 1,
+    baseCount: 490,
+  },
+  {
+    name: "Chandigarh",
+    fullName: "Chandigarh / Mohali, Punjab",
+    state: "CH",
+    stateId: "ch",
+    x: 185,
+    y: 167,
+    labelPos: "left",
+    lx: 76,
+    ly: 156,
+    lw: 104,
+    tier: 1,
+    baseCount: 510,
+  },
+  {
+    name: "Indore",
+    fullName: "Indore, Madhya Pradesh",
+    state: "MP",
+    stateId: "mp",
+    x: 166,
+    y: 348,
+    labelPos: "right",
+    lx: 178,
+    ly: 338,
+    lw: 78,
+    tier: 1,
+    baseCount: 370,
+  },
+  {
+    name: "Bhopal",
+    fullName: "Bhopal, Madhya Pradesh",
+    state: "MP",
+    stateId: "mp",
+    x: 197,
+    y: 336,
+    labelPos: "right",
+    lx: 210,
+    ly: 326,
+    lw: 72,
+    tier: 2,
+    baseCount: 220,
+  },
+  {
+    name: "Lucknow",
+    fullName: "Lucknow, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 268,
+    y: 256,
+    labelPos: "right",
+    lx: 284,
+    ly: 246,
+    lw: 86,
+    tier: 1,
+    baseCount: 340,
+  },
+  {
+    name: "Nagpur",
+    fullName: "Nagpur, Maharashtra",
+    state: "MH",
+    stateId: "mh",
+    x: 231,
+    y: 385,
+    labelPos: "right",
+    lx: 246,
+    ly: 375,
+    lw: 76,
+    tier: 2,
+    baseCount: 260,
+  },
+  {
+    name: "Surat",
+    fullName: "Surat, Gujarat",
+    state: "GJ",
+    stateId: "gj",
+    x: 105,
+    y: 382,
+    labelPos: "left",
+    lx: 26,
+    ly: 372,
+    lw: 72,
+    tier: 2,
+    baseCount: 210,
+  },
+  {
+    name: "Vadodara",
+    fullName: "Vadodara, Gujarat",
+    state: "GJ",
+    stateId: "gj",
+    x: 112,
+    y: 356,
+    labelPos: "right",
+    lx: 126,
+    ly: 356,
+    lw: 80,
+    tier: 2,
+    baseCount: 190,
+  },
+  {
+    name: "Rajkot",
+    fullName: "Rajkot, Gujarat",
+    state: "GJ",
+    stateId: "gj",
+    x: 64,
+    y: 355,
+    labelPos: "left",
+    lx: 4,
+    ly: 348,
+    lw: 56,
+    tier: 2,
+    baseCount: 120,
+  },
+  {
+    name: "Visakhapatnam",
+    fullName: "Visakhapatnam, Andhra Pradesh",
+    state: "AP",
+    stateId: "ap",
+    x: 313,
+    y: 465,
+    labelPos: "right",
+    lx: 328,
+    ly: 456,
+    lw: 104,
+    tier: 2,
+    baseCount: 230,
+  },
+  {
+    name: "Bhubaneswar",
+    fullName: "Bhubaneswar, Odisha",
+    state: "OR",
+    stateId: "or",
+    x: 366,
+    y: 407,
+    labelPos: "right",
+    lx: 382,
+    ly: 398,
+    lw: 102,
+    tier: 1,
+    baseCount: 290,
+  },
+  {
+    name: "Patna",
+    fullName: "Patna, Bihar",
+    state: "BR",
+    stateId: "br",
+    x: 353,
+    y: 286,
+    labelPos: "right",
+    lx: 368,
+    ly: 276,
+    lw: 76,
+    tier: 1,
+    baseCount: 180,
+  },
+  {
+    name: "Dehradun",
+    fullName: "Dehradun, Uttarakhand",
+    state: "UT",
+    stateId: "ut",
+    x: 210,
+    y: 177,
+    labelPos: "right",
+    lx: 226,
+    ly: 168,
+    lw: 82,
+    tier: 2,
+    baseCount: 150,
+  },
+  {
+    name: "Madurai",
+    fullName: "Madurai, Tamil Nadu",
+    state: "TN",
+    stateId: "tn",
+    x: 210,
+    y: 638,
+    labelPos: "right",
+    lx: 226,
+    ly: 630,
+    lw: 78,
+    tier: 2,
+    baseCount: 190,
+  },
+  {
+    name: "Mysuru",
+    fullName: "Mysuru, Karnataka",
+    state: "KA",
+    stateId: "ka",
+    x: 180,
+    y: 584,
+    labelPos: "left",
+    lx: 96,
+    ly: 578,
+    lw: 76,
+    tier: 2,
+    baseCount: 240,
+  },
+  {
+    name: "Mangaluru",
+    fullName: "Mangaluru, Karnataka",
+    state: "KA",
+    stateId: "ka",
+    x: 122,
+    y: 538,
+    labelPos: "left",
+    lx: 46,
+    ly: 530,
+    lw: 74,
+    tier: 3,
+    baseCount: 170,
+  },
+  {
+    name: "Salem",
+    fullName: "Salem, Tamil Nadu",
+    state: "TN",
+    stateId: "tn",
+    x: 211,
+    y: 599,
+    labelPos: "right",
+    lx: 226,
+    ly: 596,
+    lw: 72,
+    tier: 2,
+    baseCount: 130,
+  },
+  {
+    name: "Tiruppur",
+    fullName: "Tiruppur, Tamil Nadu",
+    state: "TN",
+    stateId: "tn",
+    x: 194,
+    y: 611,
+    labelPos: "right",
+    lx: 208,
+    ly: 608,
+    lw: 76,
+    tier: 2,
+    baseCount: 110,
+  },
+  {
+    name: "Tiruchirappalli",
+    fullName: "Tiruchirappalli, Tamil Nadu",
+    state: "TN",
+    stateId: "tn",
+    x: 222,
+    y: 619,
+    labelPos: "right",
+    lx: 236,
+    ly: 614,
+    lw: 104,
+    tier: 2,
+    baseCount: 140,
+  },
+  {
+    name: "Warangal",
+    fullName: "Warangal, Telangana",
+    state: "TS",
+    stateId: "tg",
+    x: 240,
+    y: 457,
+    labelPos: "left",
+    lx: 154,
+    ly: 448,
+    lw: 78,
+    tier: 2,
+    baseCount: 90,
+  },
+  {
+    name: "Guwahati",
+    fullName: "Guwahati, Assam",
+    state: "AS",
+    stateId: "as",
+    x: 485,
+    y: 276,
+    labelPos: "right",
+    lx: 500,
+    ly: 266,
+    lw: 84,
+    tier: 1,
+    baseCount: 160,
+  },
+  {
+    name: "Goa",
+    fullName: "Goa (Panaji)",
+    state: "GA",
+    stateId: "ga",
+    x: 130,
+    y: 515,
+    labelPos: "left",
+    lx: 62,
+    ly: 506,
+    lw: 64,
+    tier: 2,
+    baseCount: 120,
+  },
+  {
+    name: "Gwalior",
+    fullName: "Gwalior, Madhya Pradesh",
+    state: "MP",
+    stateId: "mp",
+    x: 213,
+    y: 270,
+    labelPos: "right",
+    lx: 226,
+    ly: 262,
+    lw: 72,
+    tier: 3,
+    baseCount: 80,
+  },
+  {
+    name: "Kanpur",
+    fullName: "Kanpur, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 256,
+    y: 265,
+    labelPos: "left",
+    lx: 180,
+    ly: 272,
+    lw: 72,
+    tier: 3,
+    baseCount: 90,
+  },
+  {
+    name: "Prayagraj",
+    fullName: "Prayagraj, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 286,
+    y: 289,
+    labelPos: "right",
+    lx: 300,
+    ly: 280,
+    lw: 82,
+    tier: 3,
+    baseCount: 70,
+  },
+  {
+    name: "Varanasi",
+    fullName: "Varanasi, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 309,
+    y: 292,
+    labelPos: "right",
+    lx: 322,
+    ly: 290,
+    lw: 78,
+    tier: 3,
+    baseCount: 75,
+  },
+  {
+    name: "Agra",
+    fullName: "Agra, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 209,
+    y: 248,
+    labelPos: "right",
+    lx: 222,
+    ly: 240,
+    lw: 68,
+    tier: 3,
+    baseCount: 85,
+  },
+  {
+    name: "Nashik",
+    fullName: "Nashik, Maharashtra",
+    state: "MH",
+    stateId: "mh",
+    x: 124,
+    y: 409,
+    labelPos: "right",
+    lx: 136,
+    ly: 398,
+    lw: 70,
+    tier: 3,
+    baseCount: 95,
+  },
+  {
+    name: "Aurangabad",
+    fullName: "Aurangabad, Maharashtra",
+    state: "MH",
+    stateId: "mh",
+    x: 155,
+    y: 412,
+    labelPos: "right",
+    lx: 168,
+    ly: 408,
+    lw: 98,
+    tier: 3,
+    baseCount: 85,
+  },
+  {
+    name: "Udaipur",
+    fullName: "Udaipur, Rajasthan",
+    state: "RJ",
+    stateId: "rj",
+    x: 123,
+    y: 305,
+    labelPos: "left",
+    lx: 46,
+    ly: 296,
+    lw: 72,
+    tier: 3,
+    baseCount: 70,
+  },
+  {
+    name: "Hubballi",
+    fullName: "Hubballi, Karnataka",
+    state: "KA",
+    stateId: "ka",
+    x: 150,
+    y: 514,
+    labelPos: "right",
+    lx: 164,
+    ly: 508,
+    lw: 80,
+    tier: 3,
+    baseCount: 65,
+  },
+  {
+    name: "Belagavi",
+    fullName: "Belagavi, Karnataka",
+    state: "KA",
+    stateId: "ka",
+    x: 138,
+    y: 503,
+    labelPos: "right",
+    lx: 152,
+    ly: 496,
+    lw: 76,
+    tier: 3,
+    baseCount: 60,
+  },
+  {
+    name: "Itanagar",
+    fullName: "Itanagar, Arunachal Pradesh",
+    state: "AR",
+    stateId: "ar",
+    x: 523,
+    y: 256,
+    labelPos: "right",
+    lx: 538,
+    ly: 248,
+    lw: 76,
+    tier: 3,
+    baseCount: 50,
+  },
+  {
+    name: "Jharsuguda",
+    fullName: "Jharsuguda, Odisha",
+    state: "OR",
+    stateId: "or",
+    x: 329,
+    y: 371,
+    labelPos: "left",
+    lx: 242,
+    ly: 364,
+    lw: 82,
+    tier: 3,
+    baseCount: 40,
+  },
+  {
+    name: "Ramban",
+    fullName: "Ramban, Jammu & Kashmir",
+    state: "JK",
+    stateId: "jk",
+    x: 154,
+    y: 109,
+    labelPos: "right",
+    lx: 170,
+    ly: 100,
+    lw: 82,
+    tier: 3,
+    baseCount: 45,
+  },
+  {
+    name: "Hosur",
+    fullName: "Hosur, Tamil Nadu",
+    state: "TN",
+    stateId: "tn",
+    x: 204,
+    y: 574,
+    labelPos: "right",
+    lx: 218,
+    ly: 568,
+    lw: 68,
+    tier: 3,
+    baseCount: 90,
+  },
+  {
+    name: "Tumakuru",
+    fullName: "Tumakuru, Karnataka",
+    state: "KA",
+    stateId: "ka",
+    x: 188,
+    y: 554,
+    labelPos: "right",
+    lx: 198,
+    ly: 546,
+    lw: 82,
+    tier: 3,
+    baseCount: 50,
+  },
+  {
+    name: "Kozhikode",
+    fullName: "Kozhikode (Calicut), Kerala",
+    state: "KL",
+    stateId: "kl",
+    x: 163,
+    y: 607,
+    labelPos: "left",
+    lx: 82,
+    ly: 604,
+    lw: 82,
+    tier: 3,
+    baseCount: 80,
+  },
+  {
+    name: "Vijayawada",
+    fullName: "Vijayawada, Andhra Pradesh",
+    state: "AP",
+    stateId: "ap",
+    x: 261,
+    y: 490,
+    labelPos: "right",
+    lx: 276,
+    ly: 484,
+    lw: 92,
+    tier: 3,
+    baseCount: 110,
+  },
+  {
+    name: "Ranchi",
+    fullName: "Ranchi, Jharkhand",
+    state: "JH",
+    stateId: "jh",
+    x: 356,
+    y: 337,
+    labelPos: "left",
+    lx: 276,
+    ly: 330,
+    lw: 76,
+    tier: 2,
+    baseCount: 130,
   },
 ];
 
 const TALENT_CORRIDORS = [
+  // Primary corridors connecting national metro hubs
   { x1: 186, y1: 210, x2: 105, y2: 428 }, // Delhi - Mumbai
   { x1: 105, y1: 428, x2: 130, y2: 456 }, // Mumbai - Pune
   { x1: 130, y1: 456, x2: 236, y2: 462 }, // Pune - Hyderabad
@@ -175,6 +803,30 @@ const TALENT_CORRIDORS = [
   { x1: 418, y1: 358, x2: 236, y2: 462 }, // Kolkata - Hyderabad
   { x1: 192, y1: 570, x2: 184, y2: 602 }, // Bengaluru - Coimbatore
   { x1: 184, y1: 602, x2: 248, y2: 576 }, // Coimbatore - Chennai
+
+  // Nationwide Inter-State Regional Corridors
+  { x1: 186, y1: 210, x2: 185, y2: 167 }, // Delhi - Chandigarh
+  { x1: 185, y1: 167, x2: 154, y2: 109 }, // Chandigarh - Ramban
+  { x1: 186, y1: 210, x2: 210, y2: 177 }, // Delhi - Dehradun
+  { x1: 186, y1: 210, x2: 165, y2: 253 }, // Delhi - Jaipur
+  { x1: 165, y1: 253, x2: 100, y2: 340 }, // Jaipur - Ahmedabad
+  { x1: 100, y1: 340, x2: 105, y2: 428 }, // Ahmedabad - Mumbai
+  { x1: 186, y1: 210, x2: 268, y2: 256 }, // Delhi - Lucknow
+  { x1: 268, y1: 256, x2: 353, y2: 286 }, // Lucknow - Patna
+  { x1: 353, y1: 286, x2: 418, y2: 358 }, // Patna - Kolkata
+  { x1: 418, y1: 358, x2: 485, y2: 276 }, // Kolkata - Guwahati
+  { x1: 105, y1: 428, x2: 166, y2: 348 }, // Mumbai - Indore
+  { x1: 166, y1: 348, x2: 197, y2: 336 }, // Indore - Bhopal
+  { x1: 197, y1: 336, x2: 231, y2: 385 }, // Bhopal - Nagpur
+  { x1: 231, y1: 385, x2: 236, y2: 462 }, // Nagpur - Hyderabad
+  { x1: 236, y1: 462, x2: 313, y2: 465 }, // Hyderabad - Visakhapatnam
+  { x1: 313, y1: 465, x2: 366, y2: 407 }, // Visakhapatnam - Bhubaneswar
+  { x1: 366, y1: 407, x2: 418, y2: 358 }, // Bhubaneswar - Kolkata
+  { x1: 192, y1: 570, x2: 173, y2: 637 }, // Bengaluru - Kochi
+  { x1: 173, y1: 637, x2: 186, y2: 670 }, // Kochi - Thiruvananthapuram
+  { x1: 184, y1: 602, x2: 210, y2: 638 }, // Coimbatore - Madurai
+  { x1: 210, y1: 638, x2: 186, y2: 670 }, // Madurai - Thiruvananthapuram
+  { x1: 130, y1: 456, x2: 130, y2: 515 }, // Pune - Goa
 ];
 
 const CANONICAL_SKILL_MAP: Record<string, string> = {
@@ -309,7 +961,22 @@ export function TalentPulseDashboard({
   initialJobs,
   isCloudSupabase = false,
 }: TalentPulseDashboardProps) {
-  // Default selected city: "All India" (Pan-National) so all extracted jobs are loaded initially
+  // Hold active job catalog in state (seeded by initialJobs) so newly extracted jobs update automatically
+  const [jobs, setJobs] = useState<UnifiedJobRecord[]>(initialJobs);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Synchronize state when initialJobs prop changes
+  useEffect(() => {
+    setJobs(initialJobs);
+  }, [initialJobs]);
+
+  // 2-Level Progressive Disclosure Architecture:
+  // Level 1: selectedState === null (National Overview)
+  // Level 2: selectedState !== null (State Drill-Down)
+  const [selectedState, setSelectedState] = useState<SelectedStateInfo | null>(null);
+  const [hoveredStateId, setHoveredStateId] = useState<string | null>(null);
+
+  // Default selected city: "All India" (Pan-National / Pan-State)
   const [selectedCity, setSelectedCity] = useState<string>("All India");
   const [searchInput, setSearchInput] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -320,27 +987,256 @@ export function TalentPulseDashboard({
   const PAGE_SIZE = 10;
   const [selectedJob, setSelectedJob] = useState<UnifiedJobRecord | null>(null);
   const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [mapViewMode, setMapViewMode] = useState<"all" | "major">("all");
+  const [hoveredCity, setHoveredCity] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Pre-calculate city job distributions across full catalog (strictly pure city jobs, no mixed locations)
+  const cityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const node of CITY_NODES) {
+      const matching = jobs.filter((j) =>
+        isCityMatchStrict(j.city, node.name, j.normalized_location)
+      );
+      counts[node.name] = jobs.length > 0 ? matching.length : node.baseCount;
+    }
+    return counts;
+  }, [jobs]);
+
+  // Cities that have active jobs in the catalog, sorted by count descending
+  const citiesWithJobs = useMemo(() => {
+    const list = CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
+    return list.sort((a, b) => (cityCounts[b.name] || 0) - (cityCounts[a.name] || 0));
+  }, [cityCounts]);
+
+  // Dynamic state job counts computed from active database catalog
+  const stateJobCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const state of INDIA_STATES) {
+      counts[state.id] = 0;
+    }
+
+    if (!jobs || jobs.length === 0) {
+      for (const node of CITY_NODES) {
+        if (node.stateId && counts[node.stateId] !== undefined) {
+          counts[node.stateId] += node.baseCount;
+        }
+      }
+      return counts;
+    }
+
+    const stateNameMap = new Map<string, string>();
+    for (const s of INDIA_STATES) {
+      stateNameMap.set(s.name.toLowerCase(), s.id);
+      stateNameMap.set(s.id.toLowerCase(), s.id);
+    }
+    const cityToStateId = new Map<string, string>();
+    for (const c of CITY_NODES) {
+      if (c.stateId) {
+        cityToStateId.set(c.name.toLowerCase(), c.stateId);
+      }
+    }
+
+    for (const j of jobs) {
+      let matchedStateId: string | null = null;
+      if (j.state) {
+        const sLower = j.state.trim().toLowerCase();
+        if (stateNameMap.has(sLower)) {
+          matchedStateId = stateNameMap.get(sLower)!;
+        }
+      }
+      if (!matchedStateId && j.city) {
+        const cLower = j.city.trim().toLowerCase();
+        if (cityToStateId.has(cLower)) {
+          matchedStateId = cityToStateId.get(cLower)!;
+        } else {
+          for (const node of CITY_NODES) {
+            if (isCityMatchStrict(j.city, node.name, j.normalized_location)) {
+              matchedStateId = node.stateId;
+              break;
+            }
+          }
+        }
+      }
+      if (!matchedStateId && j.normalized_location) {
+        const locLower = j.normalized_location.toLowerCase();
+        for (const s of INDIA_STATES) {
+          if (locLower.includes(s.name.toLowerCase())) {
+            matchedStateId = s.id;
+            break;
+          }
+        }
+      }
+      if (matchedStateId && counts[matchedStateId] !== undefined) {
+        counts[matchedStateId]++;
+      }
+    }
+    return counts;
+  }, [jobs]);
+
+  // Top 10 locations calculated dynamically by total job count from database
+  const top10NationalHubs = useMemo(() => {
+    return [...CITY_NODES]
+      .sort((a, b) => {
+        const countA = cityCounts[a.name] || 0;
+        const countB = cityCounts[b.name] || 0;
+        if (countB !== countA) return countB - countA;
+        return (b.baseCount || 0) - (a.baseCount || 0);
+      })
+      .slice(0, 10);
+  }, [cityCounts]);
+
+  const top10CityNamesSet = useMemo(() => {
+    return new Set(top10NationalHubs.map((c) => c.name.toLowerCase()));
+  }, [top10NationalHubs]);
+
+  // Camera Zoom & Pan Transform: smoothly animates to selected state's bounding box
+  const cameraTransform = useMemo(() => {
+    if (!selectedState) {
+      return {
+        scale: 1,
+        tx: 0,
+        ty: 0,
+        transform: "translate(0px, 0px) scale(1)",
+      };
+    }
+
+    const bbox = STATE_BBOXES[selectedState.id];
+    if (!bbox) {
+      return {
+        scale: 1,
+        tx: 0,
+        ty: 0,
+        transform: "translate(0px, 0px) scale(1)",
+      };
+    }
+
+    const w = Math.max(bbox.maxX - bbox.minX, 30);
+    const h = Math.max(bbox.maxY - bbox.minY, 30);
+    const cx = (bbox.minX + bbox.maxX) / 2;
+    const cy = (bbox.minY + bbox.maxY) / 2;
+
+    const scaleX = (612 * 0.72) / w;
+    const scaleY = (696 * 0.72) / h;
+    let scale = Math.min(scaleX, scaleY);
+    scale = Math.min(3.2, Math.max(1.35, scale));
+
+    const tx = 306 - cx * scale;
+    const ty = 348 - cy * scale;
+
+    return {
+      scale,
+      tx,
+      ty,
+      transform: `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(3)})`,
+    };
+  }, [selectedState]);
+
+  // Talent Corridors: strictly show on hover over an active node
+  const activeCorridors = useMemo(() => {
+    if (!hoveredCity) return [];
+    const hoveredNode = CITY_NODES.find(
+      (c) => c.name.toLowerCase() === hoveredCity.toLowerCase()
+    );
+    if (!hoveredNode) return [];
+    return TALENT_CORRIDORS.filter(
+      (c) =>
+        (Math.abs(c.x1 - hoveredNode.x) < 8 && Math.abs(c.y1 - hoveredNode.y) < 8) ||
+        (Math.abs(c.x2 - hoveredNode.x) < 8 && Math.abs(c.y2 - hoveredNode.y) < 8)
+    );
+  }, [hoveredCity]);
+
+  // State selection handler: drills down into Level 2 (State view)
+  const handleStateClick = (state: { id: string; name: string }) => {
+    const totalJobs = stateJobCounts[state.id] || 0;
+    setSelectedState({
+      id: state.id,
+      code: state.id.toUpperCase(),
+      name: state.name,
+      totalJobs,
+    });
+    setSelectedCity("All India");
+    setSelectedSkillFilter(null);
+    setCurrentPage(1);
+  };
+
+  // Reset handler: smoothly zooms out to Level 1 National Overview
+  const handleResetToNational = () => {
+    setSelectedState(null);
+    setSelectedCity("All India");
+    setSelectedSkillFilter(null);
+    setCurrentPage(1);
+  };
+
   // Dedicated city switch handler that cleanly resets active skill filter and page
   const handleCitySelect = (cityName: string) => {
+    if (cityName === "All India") {
+      if (selectedState) {
+        setSelectedCity("All India");
+      } else {
+        handleResetToNational();
+      }
+      setSelectedSkillFilter(null);
+      setCurrentPage(1);
+      return;
+    }
+
+    const found = CITY_NODES.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
+    if (found && found.stateId) {
+      const stateObj = INDIA_STATES.find((s) => s.id === found.stateId);
+      if (stateObj && !selectedState) {
+        setSelectedState({
+          id: stateObj.id,
+          code: found.state,
+          name: stateObj.name,
+          totalJobs: stateJobCounts[stateObj.id] || 0,
+        });
+      }
+    }
+
     setSelectedCity(cityName);
     setSelectedSkillFilter(null);
     setCurrentPage(1);
   };
 
-  // Automatically reset to page 1 when city, skill filter, or search query changes
+  // Automatically reset to page 1 when city, state, skill filter, or search query changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCity, selectedSkillFilter, searchQuery]);
+  }, [selectedCity, selectedState, selectedSkillFilter, searchQuery]);
+
+  // Refresh job catalog from database (calls /api/jobs)
+  const refreshFromDatabase = useCallback(async (forced: boolean = false) => {
+    try {
+      setIsSyncing(true);
+      const res = await fetch(`/api/jobs?refresh=${forced ? "true" : "false"}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.jobs && Array.isArray(data.jobs)) {
+          setJobs(data.jobs);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to auto-refresh database jobs:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // Auto-poll the database every 20 seconds so newly extracted jobs update automatically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshFromDatabase(false);
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [refreshFromDatabase]);
 
   // Dynamic relative time for last extraction run
   const lastExtractionText = useMemo(() => {
     let latestTime = 0;
-    for (const j of initialJobs) {
+    for (const j of jobs) {
       if (j.collected_at) {
         const t = new Date(j.collected_at).getTime();
         if (!isNaN(t) && t > latestTime) {
@@ -358,35 +1254,76 @@ export function TalentPulseDashboard({
     if (diffHours < 24) return `${diffHours} Hours Ago`;
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays} Day${diffDays > 1 ? "s" : ""} Ago`;
-  }, [initialJobs]);
+  }, [jobs]);
 
-  // Pre-calculate city job distributions across full catalog (strictly pure city jobs, no mixed locations)
-  const cityCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const node of CITY_NODES) {
-      const matching = initialJobs.filter((j) =>
-        isCityMatchStrict(j.city, node.name, j.normalized_location)
-      );
-      counts[node.name] = initialJobs.length > 0 ? matching.length : node.baseCount;
+  // Nodes to display on the India map based on the 2-level progressive disclosure architecture:
+  // Strictly display locations that actually have active jobs in the database (count > 0).
+  // Locations with 0 jobs are never shown; as soon as new jobs are extracted for any city,
+  // that location is automatically added to the map with its live job volume!
+  const displayedCityNodes = useMemo(() => {
+    // Only include cities that have active jobs in the database
+    let list = CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
+
+    // LEVEL 2: State Drill-Down (State Selected)
+    if (selectedState) {
+      list = list.filter((c) => c.stateId === selectedState.id);
     }
-    return counts;
-  }, [initialJobs]);
+
+    // If a specific city is selected, ensure it remains in the rendered list so user never loses sight of selection
+    if (selectedCity !== "All India") {
+      const selectedNode = CITY_NODES.find(
+        (c) => c.name.toLowerCase() === selectedCity.toLowerCase()
+      );
+      if (selectedNode && !list.some((c) => c.name.toLowerCase() === selectedNode.name.toLowerCase())) {
+        list = [...list, selectedNode];
+      }
+    }
+
+    // SVG Paint Ordering:
+    // 1. Larger count bubbles render first (bottom layer in SVG)
+    // 2. Smaller count bubbles render on top so they are easily clickable without being obscured
+    // 3. Hovered node renders near the top
+    // 4. Selected node renders last (very top layer in SVG)
+    return [...list].sort((a, b) => {
+      const aIsSelected = a.name.toLowerCase() === selectedCity.toLowerCase();
+      const bIsSelected = b.name.toLowerCase() === selectedCity.toLowerCase();
+      if (aIsSelected) return 1;
+      if (bIsSelected) return -1;
+
+      const aIsHovered = hoveredCity === a.name;
+      const bIsHovered = hoveredCity === b.name;
+      if (aIsHovered) return 1;
+      if (bIsHovered) return -1;
+
+      const countA = cityCounts[a.name] || 0;
+      const countB = cityCounts[b.name] || 0;
+      return countB - countA;
+    });
+  }, [
+    selectedState,
+    selectedCity,
+    hoveredCity,
+    cityCounts,
+  ]);
 
   // Current active city info
   const activeCityNode = useMemo(() => {
     if (selectedCity === "All India") {
       return {
-        name: "All India",
-        fullName: "All India (Pan-National)",
-        state: "IN",
-        stateId: "",
+        name: selectedState ? selectedState.name : "All India",
+        fullName: selectedState
+          ? `${selectedState.name} (State Aggregate)`
+          : "All India (Pan-National)",
+        state: selectedState ? selectedState.code : "IN",
+        stateId: selectedState ? selectedState.id : "",
         x: 306,
         y: 348,
         labelPos: "right" as const,
         lx: 0,
         ly: 0,
         lw: 0,
-        baseCount: initialJobs.length || 1623,
+        tier: 1,
+        baseCount: selectedState ? selectedState.totalJobs : (jobs.length || 1623),
       };
     }
     const found = CITY_NODES.find((c) => c.name.toLowerCase() === selectedCity.toLowerCase());
@@ -394,31 +1331,76 @@ export function TalentPulseDashboard({
     return {
       name: selectedCity,
       fullName: `${selectedCity}, India`,
-      state: "IN",
-      stateId: "",
+      state: selectedState ? selectedState.code : "IN",
+      stateId: selectedState ? selectedState.id : "",
       x: 184,
       y: 602,
       labelPos: "right" as const,
       lx: 190,
       ly: 595,
       lw: 90,
-      baseCount: initialJobs.length > 0 ? (cityCounts[selectedCity] ?? 0) : 100,
+      tier: 3,
+      baseCount: jobs.length > 0 ? (cityCounts[selectedCity] ?? 0) : 100,
     };
-  }, [selectedCity, initialJobs, cityCounts]);
+  }, [selectedCity, selectedState, jobs, cityCounts]);
 
-  // All jobs corresponding to the selected location (strictly pure city jobs, excluding mixed locations)
-  const cityJobs = useMemo(() => {
-    if (initialJobs.length === 0) return [];
-    if (selectedCity === "All India") return initialJobs;
-    return initialJobs.filter((j) =>
-      isCityMatchStrict(j.city, selectedCity, j.normalized_location)
-    );
-  }, [initialJobs, selectedCity]);
+  // Computed active job subset based on 2-level progressive disclosure:
+  // Level 1 (National): All jobs across India
+  // Level 2 (State): Jobs in selectedState
+  // Drilldown (City): Jobs matching selectedCity
+  const activeAnalyticsJobs = useMemo(() => {
+    if (jobs.length === 0) return [];
 
-  // Dynamic skills extraction computed specifically for the active location
+    // Specific city selected (and not "All India")
+    if (selectedCity && selectedCity !== "All India") {
+      return jobs.filter((j) =>
+        isCityMatchStrict(j.city, selectedCity, j.normalized_location)
+      );
+    }
+
+    // State selected (State-level aggregate)
+    if (selectedState) {
+      const stateCities = CITY_NODES.filter((c) => c.stateId === selectedState.id);
+      const stateCityNamesLower = new Set(stateCities.map((c) => c.name.toLowerCase()));
+      const sNameLower = selectedState.name.toLowerCase();
+      const sIdLower = selectedState.id.toLowerCase();
+
+      return jobs.filter((j) => {
+        if (j.state) {
+          const js = j.state.toLowerCase();
+          if (js === sNameLower || js === sIdLower) return true;
+        }
+        if (j.city && stateCityNamesLower.has(j.city.toLowerCase())) {
+          return true;
+        }
+        for (const c of stateCities) {
+          if (isCityMatchStrict(j.city, c.name, j.normalized_location)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    // Default National Overview: All India jobs
+    return jobs;
+  }, [jobs, selectedCity, selectedState]);
+
+  // Dynamic scope title for analytics widgets
+  const activeAnalyticsTitle = useMemo(() => {
+    if (selectedCity && selectedCity !== "All India") {
+      return selectedCity;
+    }
+    if (selectedState) {
+      return selectedState.name;
+    }
+    return "India";
+  }, [selectedCity, selectedState]);
+
+  // Dynamic skills extraction computed specifically for the active scope
   const { cityTopSkills, cityTotalSkillInstances } = useMemo(() => {
     const skillCounts = new Map<string, number>();
-    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    const baseJobs = activeAnalyticsJobs.length > 0 ? activeAnalyticsJobs : (jobs.length > 0 ? jobs : []);
     const totalJobs = baseJobs.length || 1;
     let totalInstances = 0;
 
@@ -460,11 +1442,11 @@ export function TalentPulseDashboard({
       ],
       cityTotalSkillInstances: totalInstances || 100,
     };
-  }, [cityJobs, initialJobs]);
+  }, [activeAnalyticsJobs, jobs]);
 
-  // Dynamic experience split for the selected location (Entry, Mid, Senior)
+  // Dynamic experience split for the active scope (Entry, Mid, Senior)
   const cityExpSplit = useMemo(() => {
-    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    const baseJobs = activeAnalyticsJobs.length > 0 ? activeAnalyticsJobs : (jobs.length > 0 ? jobs : []);
     if (baseJobs.length === 0) {
       return { entryPct: 25, midPct: 45, seniorPct: 30, entryCount: 25, midCount: 45, seniorCount: 30 };
     }
@@ -497,7 +1479,7 @@ export function TalentPulseDashboard({
       midCount: mid,
       seniorCount: senior,
     };
-  }, [cityJobs, initialJobs]);
+  }, [activeAnalyticsJobs, jobs]);
 
   // Donut chart dataset matching Image 2 (Dark card with vibrant slices)
   const locationSkillsPieData = useMemo(() => {
@@ -527,7 +1509,7 @@ export function TalentPulseDashboard({
 
   // Point chart dataset matching Image 3 (Minimalist white card with connected points)
   const experienceCurveData = useMemo(() => {
-    const baseJobs = cityJobs.length > 0 ? cityJobs : (initialJobs.length > 0 ? initialJobs : []);
+    const baseJobs = activeAnalyticsJobs.length > 0 ? activeAnalyticsJobs : (jobs.length > 0 ? jobs : []);
     const total = baseJobs.length || 1;
 
     let b0_1 = 0;
@@ -559,7 +1541,7 @@ export function TalentPulseDashboard({
       { bracket: "8-12 Yrs", count: b8_12, pct: Math.round((b8_12 / total) * 100) },
       { bracket: "12+ Yrs", count: b12_plus, pct: Math.round((b12_plus / total) * 100) },
     ];
-  }, [cityJobs, initialJobs]);
+  }, [activeAnalyticsJobs, jobs]);
 
   // Search submission handler (handles city switching and cross-location filtering)
   const handleSearchSubmit = (e?: React.FormEvent) => {
@@ -578,78 +1560,57 @@ export function TalentPulseDashboard({
     if (matchedCity) {
       handleCitySelect(matchedCity.name);
     } else if (lower.includes("all india") || lower === "india") {
-      handleCitySelect("All India");
+      handleResetToNational();
     } else {
-      const catalogCity = initialJobs.find((j) => (j.city || "").toLowerCase().includes(lower));
+      const catalogCity = jobs.find((j) => (j.city || "").toLowerCase().includes(lower));
       if (catalogCity && catalogCity.city) {
         handleCitySelect(catalogCity.city.split(",")[0].trim());
       }
     }
   };
 
-  // Filter jobs by city, skill pill, and search query
+  // Filter jobs by city/state, skill pill, and search query
   const filteredJobs = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    let list = activeAnalyticsJobs;
 
-    // Check if query targets a specific city node
-    const queryCityMatch = CITY_NODES.find(
-      (c) =>
-        q.includes(c.name.toLowerCase()) ||
-        (c.name === "Bengaluru" && q.includes("bangalore"))
-    );
-
-    const targetCityFilter = queryCityMatch
-      ? queryCityMatch.name
-      : (selectedCity !== "All India" ? selectedCity : null);
-
-    return initialJobs.filter((j) => {
-      // 1. Strict location check - strictly pure city jobs, excluding mixed-location postings
-      if (targetCityFilter) {
-        if (!isCityMatchStrict(j.city, targetCityFilter, j.normalized_location)) {
-          return false;
-        }
-      }
-
-      // 2. Skill pill filter
-      if (selectedSkillFilter) {
+    // 1. Skill pill filter
+    if (selectedSkillFilter) {
+      const sf = selectedSkillFilter.toLowerCase();
+      list = list.filter((j) => {
         const skillsText = ((j.skills || "") + " " + (j.title || "")).toLowerCase();
-        if (!skillsText.includes(selectedSkillFilter.toLowerCase())) {
-          return false;
-        }
-      }
+        return skillsText.includes(sf);
+      });
+    }
 
-      // 3. Search query keywords
-      if (q) {
-        if (queryCityMatch && q === queryCityMatch.name.toLowerCase()) {
-          return true; // Query was purely the city name, location filter already satisfied
-        }
-        // If query was "Python developer in Coimbatore", remove city name from keyword check
-        const cleanKeyword = queryCityMatch
-          ? q.replace(queryCityMatch.name.toLowerCase(), "").replace(/\bin\b/g, "").trim()
-          : q;
-        if (cleanKeyword) {
-          const haystack = (
-            (j.title || "") +
-            " " +
-            (j.company || "") +
-            " " +
-            (j.skills || "") +
-            " " +
-            (j.search_keyword || "") +
-            " " +
-            (j.full_description || "")
-          ).toLowerCase();
-          if (!haystack.includes(cleanKeyword)) return false;
-        }
-      }
+    // 2. Search query keywords
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((j) => {
+        const haystack = (
+          (j.title || "") +
+          " " +
+          (j.company || "") +
+          " " +
+          (j.skills || "") +
+          " " +
+          (j.city || "") +
+          " " +
+          (j.state || "") +
+          " " +
+          (j.search_keyword || "") +
+          " " +
+          (j.full_description || "")
+        ).toLowerCase();
+        return haystack.includes(q);
+      });
+    }
 
-      return true;
-    });
-  }, [initialJobs, selectedCity, selectedSkillFilter, searchQuery]);
+    return list;
+  }, [activeAnalyticsJobs, selectedSkillFilter, searchQuery]);
 
   // Authentic display jobs: returns filteredJobs, or DEMO jobs only if DB is 100% empty
   const displayJobs = useMemo(() => {
-    if (initialJobs.length > 0) {
+    if (jobs.length > 0) {
       return filteredJobs;
     }
 
@@ -683,7 +1644,7 @@ export function TalentPulseDashboard({
         edu_degrees: ["B.Tech", "B.E."],
       },
     ] as UnifiedJobRecord[];
-  }, [filteredJobs, initialJobs, selectedCity]);
+  }, [filteredJobs, jobs, selectedCity]);
 
   // Pagination computations (Page-based navigation instead of load-more expanding)
   const totalPages = Math.max(1, Math.ceil(displayJobs.length / PAGE_SIZE));
@@ -695,26 +1656,78 @@ export function TalentPulseDashboard({
   }, [displayJobs, startIndex, endIndex]);
 
   // Metric counts
-  const totalLiveJobs = initialJobs.length;
+  const totalLiveJobs = jobs.length;
   const currentCityCount =
-    selectedCity === "All India"
-      ? totalLiveJobs
-      : (cityCounts[selectedCity] !== undefined
+    selectedCity !== "All India"
+      ? (cityCounts[selectedCity] !== undefined
           ? cityCounts[selectedCity]
-          : (initialJobs.length > 0 ? filteredJobs.length : 1842));
-  const percentageOfIndia = totalLiveJobs > 0 ? ((currentCityCount / totalLiveJobs) * 100).toFixed(1) : "0.0";
+          : activeAnalyticsJobs.length)
+      : selectedState
+      ? selectedState.totalJobs
+      : totalLiveJobs;
+  const percentageOfIndia =
+    totalLiveJobs > 0 ? ((currentCityCount / totalLiveJobs) * 100).toFixed(1) : "0.0";
 
-  // Trigger live extraction simulation
-  const handleTriggerExtraction = () => {
+  // Dynamically compute today's additions and accurate growth percentage from database timestamps
+  const todayStats = useMemo(() => {
+    if (!jobs || jobs.length === 0) {
+      return { count: 0, percentage: 0, formatted: "0.0% today" };
+    }
+
+    const now = new Date();
+    // Scraper writes ISO strings in UTC (e.g. 2026-10-28T06:45:00.022498+00:00)
+    const todayUtc = now.toISOString().slice(0, 10);
+    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    let todayCount = 0;
+    for (const j of jobs) {
+      if (j.collected_at) {
+        const col = String(j.collected_at);
+        if (col.startsWith(todayUtc) || col.startsWith(todayLocal)) {
+          todayCount++;
+        }
+      }
+    }
+
+    // Accurate growth percentage based on today's new jobs over prior baseline
+    const baseline = Math.max(1, jobs.length - todayCount);
+    const growth = (todayCount / baseline) * 100;
+
+    return {
+      count: todayCount,
+      percentage: growth,
+      formatted: todayCount > 0 ? `↑ +${growth.toFixed(1)}% today` : `0.0% today`,
+    };
+  }, [jobs]);
+
+  // Trigger live crawler extraction and automatically sync database afterwards
+  const handleTriggerExtraction = async () => {
     setIsExtracting(true);
     setExtractStatus(`Connecting to crawler pipeline for ${selectedCity}...`);
-    setTimeout(() => {
-      setExtractStatus(`Dispatched live scrapers (LinkedIn, Naukri, Indeed) for ${selectedCity}!`);
-      setTimeout(() => {
+    try {
+      await fetch("/api/scraper/live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sources: ["LinkedIn", "Naukri", "Indeed"],
+          location: selectedCity === "All India" ? "India" : selectedCity,
+          keywords: "Python developer",
+          freshness: 24,
+          maxJobs: 15,
+          enableDetails: true,
+        }),
+      });
+      setExtractStatus(`Scraper pipeline active! Updating live catalog...`);
+      await refreshFromDatabase(true);
+    } catch (err) {
+      console.warn("Crawler trigger note:", err);
+    } finally {
+      setTimeout(async () => {
+        await refreshFromDatabase(true);
         setIsExtracting(false);
         setExtractStatus(null);
-      }, 2500);
-    }, 1500);
+      }, 3000);
+    }
   };
 
   // Export current city jobs to CSV (strictly saves selected city, eliminates mixed locations)
@@ -730,12 +1743,21 @@ export function TalentPulseDashboard({
       "Skills",
       "Link",
     ];
+    const exportName =
+      selectedCity !== "All India"
+        ? selectedCity
+        : selectedState
+        ? selectedState.name
+        : "all_india";
+
     const rows = jobsToExport.map((j) => {
       // Clean, single-city location without mixed other cities
       const cleanCity =
         selectedCity !== "All India"
           ? selectedCity
-          : (j.city && j.city !== "Not Specified" ? j.city : j.normalized_location || "India");
+          : j.city && j.city !== "Not Specified"
+          ? j.city
+          : j.normalized_location || (selectedState ? selectedState.name : "India");
 
       return [
         `"${j.job_id}"`,
@@ -756,7 +1778,7 @@ export function TalentPulseDashboard({
     link.href = url;
     link.setAttribute(
       "download",
-      `${selectedCity.toLowerCase().replace(/\s+/g, "_")}_jobs.csv`
+      `${exportName.toLowerCase().replace(/\s+/g, "_")}_jobs.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -829,6 +1851,19 @@ export function TalentPulseDashboard({
             </button>
           </form>
 
+          {/* Sync DB Button to check database on demand */}
+          <button
+            type="button"
+            id="sync-database-btn"
+            onClick={() => refreshFromDatabase(true)}
+            disabled={isSyncing}
+            title="Check database and automatically update statistics"
+            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-950 border border-slate-300 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isSyncing ? "animate-spin" : ""}`} />
+            <span>{isSyncing ? "Syncing..." : "Sync DB"}</span>
+          </button>
+
           {/* Export CSV Button */}
           <button
             onClick={handleExportCityCsv}
@@ -866,15 +1901,27 @@ export function TalentPulseDashboard({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: TOTAL LIVE JOBS */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-            TOTAL LIVE JOBS
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              TOTAL LIVE JOBS
+            </span>
+            {isSyncing && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Syncing...
+              </span>
+            )}
+          </div>
           <div className="mt-3 flex items-baseline justify-between">
             <span className="text-3xl font-black text-slate-900 tracking-tight" id="kpi-total-live-jobs">
               {totalLiveJobs.toLocaleString()}
             </span>
-            <span className="text-xs font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-full">
-              ↑ +8.4% today
+            <span
+              id="kpi-today-growth-badge"
+              title={`${todayStats.count.toLocaleString()} jobs collected today out of ${totalLiveJobs.toLocaleString()} total`}
+              className="text-xs font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-full transition-all"
+            >
+              {todayStats.formatted}
             </span>
           </div>
         </div>
@@ -886,22 +1933,26 @@ export function TalentPulseDashboard({
           </span>
           <div className="mt-3 flex items-baseline justify-between">
             <span className="text-2xl font-black text-indigo-700 tracking-tight" id="kpi-selected-region">
-              {activeCityNode.name === "All India"
-                ? "Pan-India"
-                : `${activeCityNode.name}, ${activeCityNode.state}`}
+              {selectedCity !== "All India"
+                ? `${activeCityNode.name}, ${activeCityNode.state}`
+                : selectedState
+                ? `${selectedState.name}, IN`
+                : "Pan-India"}
             </span>
             <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-              Tech Hub
+              {selectedState ? "State Focus" : "Tech Hub"}
             </span>
           </div>
         </div>
 
-        {/* Card 3: JOBS IN [CITY] */}
+        {/* Card 3: JOBS IN [REGION] */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-600 truncate">
-            {selectedCity === "All India"
-              ? "ALL INDIA JOBS"
-              : `JOBS IN ${selectedCity.toUpperCase()}`}
+            {selectedCity !== "All India"
+              ? `JOBS IN ${selectedCity.toUpperCase()}`
+              : selectedState
+              ? `JOBS IN ${selectedState.name.toUpperCase()}`
+              : "ALL INDIA JOBS"}
           </span>
           <div className="mt-3 flex items-baseline justify-between">
             <span className="text-3xl font-black text-slate-900 tracking-tight" id="kpi-city-jobs-count">
@@ -936,25 +1987,107 @@ export function TalentPulseDashboard({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT CARD: Geographic Job Density (India) */}
         <div className="lg:col-span-7 xl:col-span-7 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col">
-          <div className="flex items-center justify-between pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5">
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Geographic Job Density (India)
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">
+                  Geographic Job Density (India)
+                </h2>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {selectedState
+                    ? `${selectedState.name} (${displayedCityNodes.length} Hubs)`
+                    : `${citiesWithJobs.length} Active Hubs`}
+                </span>
+              </div>
               <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                Click any city cluster to isolate local demand
+                {selectedState
+                  ? `Drill-down view of ${selectedState.name} — click local city hubs to isolate city demand`
+                  : "National proportional density map — bubble sizes scale by live hiring volume. Click any state to drill down"}
               </p>
             </div>
-            <button
-              onClick={() => handleCitySelect("All India")}
-              id="reset-to-india-btn"
-              className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 shadow-xs transition-colors"
-            >
-              Reset to India
-            </button>
           </div>
 
-          {/* Map Visualization Canvas */}
+          {/* 2-Level Progressive Disclosure Navigation & Breadcrumb Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 pt-1 border-b border-slate-100 text-xs">
+            {selectedState ? (
+              /* Level 2 Breadcrumb Navigation */
+              <div className="flex items-center gap-1.5 flex-wrap" id="map-state-breadcrumb">
+                <button
+                  type="button"
+                  onClick={handleResetToNational}
+                  className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <span>All India</span>
+                </button>
+                <span className="text-slate-400 font-bold">/</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCity("All India")}
+                  className={`font-bold transition-colors cursor-pointer ${
+                    selectedCity === "All India"
+                      ? "text-slate-900 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-200"
+                      : "text-indigo-600 hover:text-indigo-800 hover:underline"
+                  }`}
+                >
+                  <span>{selectedState.name}</span>
+                  <span className="ml-1 text-[11px] font-semibold text-indigo-700">
+                    ({selectedState.totalJobs.toLocaleString()} Jobs)
+                  </span>
+                </button>
+                {selectedCity !== "All India" && (
+                  <>
+                    <span className="text-slate-400 font-bold">/</span>
+                    <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                      {selectedCity} ({cityCounts[selectedCity] || 0} Jobs)
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Level 1 National Overview Info */
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
+                  National Overview
+                </span>
+                <span className="text-slate-400">•</span>
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing {displayedCityNodes.length} Proportional Hubs • Click any state polygon or hub to drill down
+                </span>
+              </div>
+            )}
+
+            {/* Reset Controls */}
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedState && (
+                <button
+                  type="button"
+                  onClick={handleResetToNational}
+                  id="reset-view-breadcrumb-btn"
+                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                  title="Reset camera back to National Overview"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset View</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleResetToNational}
+                id="reset-to-india-btn"
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all whitespace-nowrap ${
+                  !selectedState && selectedCity === "All India"
+                    ? "border-slate-200 bg-slate-50 text-slate-400 cursor-default"
+                    : "border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 shadow-xs cursor-pointer"
+                }`}
+              >
+                Reset to India
+              </button>
+            </div>
+          </div>
+
+          {/* Map Visualization Canvas: Proportional Density Bubble Map */}
           <div className="mt-3 flex-1 min-h-[460px] rounded-xl border border-slate-200 bg-[#FAFAFC] relative overflow-hidden select-none flex flex-col items-center justify-between p-3">
             <svg
               viewBox={INDIA_MAP_VIEWBOX}
@@ -980,52 +2113,7 @@ export function TalentPulseDashboard({
               {/* Background Coordinate Grid */}
               <rect width="100%" height="100%" fill="url(#india-dot-grid)" />
 
-              {/* Water Body Annotations */}
-              <text x="70" y="520" fill="#64748B" fontSize="11" fontWeight="800" letterSpacing="3" opacity="0.8">ARABIAN SEA</text>
-              <text x="400" y="530" fill="#64748B" fontSize="11" fontWeight="800" letterSpacing="3" opacity="0.8">BAY OF BENGAL</text>
-              <text x="210" y="682" fill="#64748B" fontSize="10.5" fontWeight="800" letterSpacing="3" opacity="0.75">INDIAN OCEAN</text>
-
-              {/* Authentic India State Vector Contours */}
-              <g id="india-states">
-                {INDIA_STATES.map((state) => {
-                  const isStateActive = activeCityNode?.stateId === state.id;
-                  return (
-                    <path
-                      key={state.id}
-                      id={`state-${state.id}`}
-                      d={state.path}
-                      className="transition-colors duration-200 cursor-pointer hover:fill-indigo-50 hover:stroke-indigo-400"
-                      fill={isStateActive ? "#EEF2FF" : "#FFFFFF"}
-                      stroke={isStateActive ? "#4F46E5" : "#94A3B8"}
-                      strokeWidth={isStateActive ? "2" : "1"}
-                      onClick={() => {
-                        const match = CITY_NODES.find((c) => c.stateId === state.id);
-                        if (match) handleCitySelect(match.name);
-                      }}
-                    >
-                      <title>{state.name}</title>
-                    </path>
-                  );
-                })}
-              </g>
-
-              {/* Inter-City Talent Corridors */}
-              <g id="talent-corridors" opacity="0.55" pointerEvents="none">
-                {TALENT_CORRIDORS.map((c, idx) => (
-                  <line
-                    key={idx}
-                    x1={c.x1}
-                    y1={c.y1}
-                    x2={c.x2}
-                    y2={c.y2}
-                    stroke="#6366F1"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 3"
-                  />
-                ))}
-              </g>
-
-              {/* Compass Rose */}
+              {/* Fixed Compass Rose HUD */}
               <g transform="translate(560, 45)" opacity="0.85" pointerEvents="none">
                 <circle cx="0" cy="0" r="14" fill="#FFFFFF" stroke="#94A3B8" strokeWidth="1.2" />
                 <path d="M0,-11 L3,-2 L0,0 L-3,-2 Z" fill="#EF4444" />
@@ -1033,164 +2121,352 @@ export function TalentPulseDashboard({
                 <text x="0" y="-14" textAnchor="middle" fontSize="9" fontWeight="900" fill="#0F172A">N</text>
               </g>
 
-              {/* Interactive City Hub Clusters & Non-Overlapping Pills */}
-              <g id="city-nodes">
-                {CITY_NODES.map((city) => {
-                  const isSelected = selectedCity.toLowerCase() === city.name.toLowerCase();
-                  const count = cityCounts[city.name] || city.baseCount;
-                  const formatted = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count;
-                  const labelText = isSelected ? `★ ${city.name} (${formatted})` : `${city.name} (${formatted})`;
+              {/* Camera Zoom Layer - smoothly translates and scales to focused state bounding box */}
+              <g
+                id="map-camera-layer"
+                style={{
+                  transform: cameraTransform.transform,
+                  transition: "transform 450ms cubic-bezier(0.4, 0, 0.2, 1)",
+                  transformOrigin: "0 0",
+                }}
+              >
+                {/* Water Body Annotations */}
+                <text x="70" y="520" fill="#64748B" fontSize="11" fontWeight="800" letterSpacing="3" opacity={selectedState ? 0.3 : 0.8}>ARABIAN SEA</text>
+                <text x="400" y="530" fill="#64748B" fontSize="11" fontWeight="800" letterSpacing="3" opacity={selectedState ? 0.3 : 0.8}>BAY OF BENGAL</text>
+                <text x="210" y="682" fill="#64748B" fontSize="10.5" fontWeight="800" letterSpacing="3" opacity={selectedState ? 0.3 : 0.75}>INDIAN OCEAN</text>
 
-                  return (
-                    <g
-                      key={city.name}
-                      id={`city-cluster-${city.name.toLowerCase()}`}
-                      className="cursor-pointer group transition-transform duration-200"
-                      onClick={() => handleCitySelect(city.name)}
-                    >
-                      {isSelected ? (
-                        <>
-                          {/* Pulsing radar ripple around selected node */}
+                {/* Authentic India State Vector Contours */}
+                <g id="india-states">
+                  {INDIA_STATES.map((state) => {
+                    const isSelectedState = selectedState?.id === state.id;
+                    const isHovered = hoveredStateId === state.id;
+                    const stateJobCount = stateJobCounts[state.id] || 0;
+
+                    // When a state is selected:
+                    // Selected state: opacity 1, fill #EEF2FF, stroke #4F46E5, strokeWidth 2.2
+                    // Other states: dim to 20% opacity (opacity: 0.2)
+                    const opacity = selectedState
+                      ? isSelectedState
+                        ? 1
+                        : 0.2
+                      : 1;
+
+                    const fill = isSelectedState
+                      ? "#EEF2FF"
+                      : isHovered
+                      ? "#F5F3FF"
+                      : "#FFFFFF";
+
+                    const stroke = isSelectedState
+                      ? "#4F46E5"
+                      : isHovered
+                      ? "#6366F1"
+                      : "#94A3B8";
+
+                    const strokeWidth = isSelectedState ? "2.2" : isHovered ? "1.8" : "1";
+
+                    return (
+                      <path
+                        key={state.id}
+                        id={`state-${state.id}`}
+                        d={state.path}
+                        className="cursor-pointer transition-all duration-200"
+                        fill={fill}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        opacity={opacity}
+                        style={{
+                          transition: "opacity 350ms ease, fill 200ms ease, stroke 200ms ease",
+                        }}
+                        onClick={() => handleStateClick(state)}
+                        onMouseEnter={() => setHoveredStateId(state.id)}
+                        onMouseLeave={() => setHoveredStateId(null)}
+                      >
+                        <title>
+                          {isSelectedState
+                            ? `${state.name} (${stateJobCount} Jobs)`
+                            : `Click to view all ${state.name} locations (${stateJobCount} Jobs)`}
+                        </title>
+                      </path>
+                    );
+                  })}
+                </g>
+
+                {/* Inter-City Talent Corridors: strictly illuminate on node hover */}
+                {activeCorridors.length > 0 && (
+                  <g id="talent-corridors" opacity="0.6" pointerEvents="none" className="transition-opacity duration-300">
+                    {activeCorridors.map((c, idx) => (
+                      <line
+                        key={idx}
+                        x1={c.x1}
+                        y1={c.y1}
+                        x2={c.x2}
+                        y2={c.y2}
+                        stroke="#6366F1"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 3"
+                      />
+                    ))}
+                  </g>
+                )}
+
+                {/* CONCEPT 2: Interactive City Hub Clusters & Proportional Density Bubbles */}
+                <g id="city-nodes">
+                  {displayedCityNodes.map((city) => {
+                    const isSelected = selectedCity.toLowerCase() === city.name.toLowerCase();
+                    const isHovered = hoveredCity === city.name;
+                    const count = cityCounts[city.name] || 0;
+                    const formatted = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count;
+
+                    // Proportional Density Bubble Radius Scaling
+                    // Mathematical square-root scale tuned for high-contrast visibility:
+                    // count 0 -> 4.5px
+                    // count 1-10 -> 5.5px - 7px
+                    // count 50 -> 8.5px
+                    // count 250 -> 12px
+                    // count 1000+ -> 19-22px
+                    const bubbleRadius = count > 0 ? Math.max(5, Math.min(22, 5 + Math.sqrt(count) * 0.45)) : 4.5;
+                    const coreRadius = Math.max(2.5, Math.min(6, bubbleRadius * 0.35));
+
+                    // Label Display Logic:
+                    // Top 10, count >= 25, in state drill-down, or selected show badge; others show tooltip on hover
+                    const isTop10 = top10CityNamesSet.has(city.name.toLowerCase());
+                    const showBadge =
+                      isSelected ||
+                      Boolean(selectedState) ||
+                      isTop10 ||
+                      count >= 25 ||
+                      isHovered;
+
+                    const labelText = isSelected
+                      ? `★ ${city.name} (${formatted})`
+                      : `${city.name} (${formatted})`;
+
+                    // Counter-scale badges when camera zooms in so labels never collide
+                    const counterScale = cameraTransform.scale > 1
+                      ? Math.min(1, (1 / cameraTransform.scale) * 1.45)
+                      : 1;
+
+                    return (
+                      <g
+                        key={city.name}
+                        id={`city-cluster-${city.name.toLowerCase()}`}
+                        className="cursor-pointer group transition-all duration-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCitySelect(city.name);
+                        }}
+                        onMouseEnter={() => setHoveredCity(city.name)}
+                        onMouseLeave={() => setHoveredCity(null)}
+                      >
+                        <g
+                          transform={
+                            counterScale !== 1
+                              ? `translate(${city.x}, ${city.y}) scale(${counterScale.toFixed(3)}) translate(${-city.x}, ${-city.y})`
+                              : undefined
+                          }
+                        >
+                          {/* 1. Proportional Outer Halo (Cartographic Density Bubble) */}
                           <circle
                             cx={city.x}
                             cy={city.y}
-                            r="22"
-                            fill="none"
-                            stroke="#4F46E5"
-                            strokeWidth="1.8"
-                            strokeDasharray="3 3"
-                            opacity="0.85"
-                            className="animate-spin"
-                            style={{ transformOrigin: `${city.x}px ${city.y}px`, animationDuration: "14s" }}
+                            r={isHovered ? bubbleRadius + 3 : bubbleRadius}
+                            fill={
+                              isSelected
+                                ? "rgba(79, 70, 229, 0.28)"
+                                : isHovered
+                                ? "rgba(99, 102, 241, 0.32)"
+                                : "rgba(79, 70, 229, 0.18)"
+                            }
+                            stroke={isSelected ? "#4F46E5" : isHovered ? "#4338CA" : "#6366F1"}
+                            strokeWidth={isSelected ? 2 : isHovered ? 1.6 : 1.2}
+                            className="transition-all duration-200"
+                            style={{ transformOrigin: `${city.x}px ${city.y}px` }}
                           />
+
+                          {/* 2. Solid Inner Core Beacon */}
                           <circle
                             cx={city.x}
                             cy={city.y}
-                            r="15"
-                            fill="#818CF8"
-                            opacity="0.25"
-                          />
-                          {/* Active glowing beacon node */}
-                          <circle
-                            cx={city.x}
-                            cy={city.y}
-                            r="11"
-                            fill="url(#activeNodeGrad)"
+                            r={coreRadius}
+                            fill={isSelected ? "url(#activeNodeGrad)" : "#4F46E5"}
                             stroke="#FFFFFF"
-                            strokeWidth="2.5"
-                            filter="url(#city-active-glow)"
-                          />
-                          <text
-                            x={city.x}
-                            y={city.y + 3.5}
-                            textAnchor="middle"
-                            fontSize="9"
-                            fill="#FBBF24"
-                            fontWeight="900"
-                            className="pointer-events-none"
-                          >
-                            ★
-                          </text>
-
-                          {/* Dark Sleek Active Pill Label */}
-                          <rect
-                            x={city.lx}
-                            y={city.ly}
-                            width={city.lw}
-                            height="24"
-                            rx="6"
-                            fill="#0F172A"
-                            stroke="#312E81"
-                            strokeWidth="1.5"
-                            filter="url(#city-badge-shadow)"
-                            className="transition-all duration-200 group-hover:scale-105 cursor-pointer"
-                            style={{ transformOrigin: `${city.lx + city.lw / 2}px ${city.ly + 12}px` }}
-                          />
-                          <text
-                            x={city.lx + city.lw / 2}
-                            y={city.ly + 16}
-                            textAnchor="middle"
-                            fill="#FFFFFF"
-                            fontSize="11.5"
-                            fontWeight="900"
-                            letterSpacing="-0.2px"
-                            className="select-none cursor-pointer"
-                          >
-                            {labelText}
-                          </text>
-                        </>
-                      ) : (
-                        <>
-                          {/* Inactive cluster node dot */}
-                          <circle
-                            cx={city.x}
-                            cy={city.y}
-                            r="8"
-                            fill="#4F46E5"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="transition-colors group-hover:fill-indigo-700"
-                          />
-                          <circle
-                            cx={city.x}
-                            cy={city.y}
-                            r="3"
-                            fill="#FFFFFF"
+                            strokeWidth={isHovered || isSelected ? 2 : 1.4}
+                            className="transition-all duration-200"
+                            style={{ transformOrigin: `${city.x}px ${city.y}px` }}
                           />
 
-                          {/* Clean High-Contrast Inactive Pill Label */}
-                          <rect
-                            x={city.lx}
-                            y={city.ly}
-                            width={city.lw}
-                            height="22"
-                            rx="6"
-                            fill="#FFFFFF"
-                            stroke="#64748B"
-                            strokeWidth="1.2"
-                            filter="url(#city-badge-shadow)"
-                            className="transition-all duration-200 group-hover:stroke-indigo-600 group-hover:scale-105 cursor-pointer"
-                            style={{ transformOrigin: `${city.lx + city.lw / 2}px ${city.ly + 11}px` }}
-                          />
-                          <text
-                            x={city.lx + city.lw / 2}
-                            y={city.ly + 15}
-                            textAnchor="middle"
-                            fill="#0F172A"
-                            fontSize="11"
-                            fontWeight="800"
-                            letterSpacing="-0.2px"
-                            className="select-none cursor-pointer transition-colors group-hover:fill-indigo-600"
-                          >
-                            {labelText}
-                          </text>
-                        </>
-                      )}
-                    </g>
-                  );
-                })}
+                          {/* 3. Selected Active Radar Ripple */}
+                          {isSelected && (
+                            <>
+                              <circle
+                                cx={city.x}
+                                cy={city.y}
+                                r={bubbleRadius + 8}
+                                fill="none"
+                                stroke="#4F46E5"
+                                strokeWidth="1.8"
+                                strokeDasharray="3 3"
+                                opacity="0.85"
+                                className="animate-spin"
+                                style={{ transformOrigin: `${city.x}px ${city.y}px`, animationDuration: "14s" }}
+                              />
+                              <circle
+                                cx={city.x}
+                                cy={city.y}
+                                r={bubbleRadius + 4}
+                                fill="#818CF8"
+                                opacity="0.25"
+                              />
+                              <text
+                                x={city.x}
+                                y={city.y + 3.5}
+                                textAnchor="middle"
+                                fontSize="9"
+                                fill="#FBBF24"
+                                fontWeight="900"
+                                className="pointer-events-none"
+                              >
+                                ★
+                              </text>
+                            </>
+                          )}
+
+                          {/* 4. Badges and Tooltips */}
+                          {isSelected ? (
+                            /* Dark Sleek Active Pill Label */
+                            <>
+                              <rect
+                                x={city.lx}
+                                y={city.ly}
+                                width={city.lw}
+                                height="24"
+                                rx="6"
+                                fill="#0F172A"
+                                stroke="#312E81"
+                                strokeWidth="1.5"
+                                filter="url(#city-badge-shadow)"
+                                className="transition-all duration-200 group-hover:scale-105 cursor-pointer"
+                                style={{ transformOrigin: `${city.lx + city.lw / 2}px ${city.ly + 12}px` }}
+                              />
+                              <text
+                                x={city.lx + city.lw / 2}
+                                y={city.ly + 16}
+                                textAnchor="middle"
+                                fill="#FFFFFF"
+                                fontSize="11.5"
+                                fontWeight="900"
+                                letterSpacing="-0.2px"
+                                className="select-none cursor-pointer"
+                              >
+                                {labelText}
+                              </text>
+                            </>
+                          ) : showBadge ? (
+                            /* Rectangular Floating Count Badge */
+                            <>
+                              <rect
+                                x={city.lx}
+                                y={city.ly}
+                                width={city.lw}
+                                height="22"
+                                rx="6"
+                                fill="#FFFFFF"
+                                stroke={isHovered ? "#4F46E5" : "#64748B"}
+                                strokeWidth={isHovered ? "1.6" : "1.2"}
+                                filter="url(#city-badge-shadow)"
+                                className="transition-all duration-200 group-hover:stroke-indigo-600 group-hover:scale-105 cursor-pointer"
+                                style={{ transformOrigin: `${city.lx + city.lw / 2}px ${city.ly + 11}px` }}
+                              />
+                              <text
+                                x={city.lx + city.lw / 2}
+                                y={city.ly + 15}
+                                textAnchor="middle"
+                                fill="#0F172A"
+                                fontSize="11"
+                                fontWeight="800"
+                                letterSpacing="-0.2px"
+                                className="select-none cursor-pointer transition-colors group-hover:fill-indigo-600"
+                              >
+                                {labelText}
+                              </text>
+                            </>
+                          ) : (
+                            /* Hover Tooltip Card for Bubbles when badge is hidden */
+                            isHovered && (
+                              <g
+                                transform={`translate(${city.x}, ${city.y - bubbleRadius - 16})`}
+                                className="pointer-events-none transition-all duration-150"
+                              >
+                                <rect
+                                  x="-60"
+                                  y="-14"
+                                  width="120"
+                                  height="28"
+                                  rx="6"
+                                  fill="#0F172A"
+                                  stroke="#4F46E5"
+                                  strokeWidth="1.2"
+                                  filter="url(#city-badge-shadow)"
+                                />
+                                <text
+                                  x="0"
+                                  y="4"
+                                  textAnchor="middle"
+                                  fill="#FFFFFF"
+                                  fontSize="10.5"
+                                  fontWeight="800"
+                                >
+                                  {city.name} ({formatted} Jobs)
+                                </text>
+                              </g>
+                            )
+                          )}
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
               </g>
             </svg>
 
-            {/* Bottom Map Legend */}
-            <div className="w-full flex items-center justify-between pt-2 px-2 border-t border-slate-200 text-xs text-slate-700 font-semibold">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block ring-2 ring-indigo-200"></span>
-                  Active Hub ({selectedCity})
+            {/* Bottom Map Legend with Proportional Density Scale */}
+            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 px-2 border-t border-slate-200 text-xs text-slate-700 font-semibold">
+              {/* Density Bubble Scale Guide */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scale:</span>
+                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
+                  &lt;10
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 border border-white inline-block"></span>
-                  Major Tech Hubs
+                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <span className="w-3.5 h-3.5 rounded-full bg-indigo-100 border border-indigo-600 flex items-center justify-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                  </span>
+                  10–50
                 </span>
-                <span className="hidden sm:flex items-center gap-1.5">
-                  <span className="w-4 border-t-2 border-dashed border-indigo-500 inline-block"></span>
-                  Talent Corridors
+                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <span className="w-5 h-5 rounded-full bg-indigo-100 border border-indigo-600 flex items-center justify-center">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                  </span>
+                  50+ Metros
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-[11px] text-indigo-700 font-bold">
+                  Bubble Size = Hiring Volume
                 </span>
               </div>
-              <span className="text-slate-600 text-[11px] font-medium">
-                Vector GIS Coordinates
-              </span>
+
+              {/* Counts & Coverage */}
+              <div className="flex items-center gap-2 text-[11px] text-slate-600 font-medium">
+                <span>
+                  Showing <strong className="text-slate-900 font-bold">{displayedCityNodes.length}</strong> of {citiesWithJobs.length} Active Hubs
+                </span>
+                <span>•</span>
+                <span>
+                  {selectedState ? `${selectedState.totalJobs} State Roles` : `${jobs.length} Positions`}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1202,10 +2478,14 @@ export function TalentPulseDashboard({
             <div className="pb-1 flex items-start justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight" id="skills-pie-chart-title">
-                  {activeCityNode.name} Skills Breakdown
+                  {activeAnalyticsTitle} Skills Breakdown
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                  Top in-demand technical skills in {activeCityNode.name}
+                  {selectedCity !== "All India"
+                    ? `Top in-demand technical skills in ${selectedCity}`
+                    : selectedState
+                    ? `Top in-demand technical skills in ${selectedState.name}`
+                    : "Top in-demand technical skills across India"}
                 </p>
               </div>
               <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
@@ -1280,10 +2560,14 @@ export function TalentPulseDashboard({
             <div className="pb-1 flex items-start justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight" id="experience-chart-title">
-                  Experience Demand ({activeCityNode.name})
+                  Experience Demand ({activeAnalyticsTitle === "India" ? "All India" : activeAnalyticsTitle})
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                  Active hiring breakdown across career seniority tiers
+                  {selectedCity !== "All India"
+                    ? `Active hiring breakdown across career seniority tiers in ${selectedCity}`
+                    : selectedState
+                    ? `Active hiring breakdown across career seniority tiers in ${selectedState.name}`
+                    : "Active hiring breakdown across career seniority tiers across India"}
                 </p>
               </div>
               <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
@@ -1360,7 +2644,7 @@ export function TalentPulseDashboard({
             </div>
           </div>
 
-          {/* Export CSV Button at the end (Extract option removed as requested) */}
+          {/* Export CSV Button at the end */}
           <button
             onClick={handleExportCityCsv}
             id="export-city-csv-btn"
@@ -1368,7 +2652,7 @@ export function TalentPulseDashboard({
           >
             <Download className="w-4 h-4 text-slate-600" />
             <span>
-              Export {activeCityNode.name.toLowerCase().replace(/\s+/g, "_")}_jobs.csv
+              Export {activeAnalyticsTitle.toLowerCase().replace(/\s+/g, "_")}_jobs.csv
             </span>
           </button>
         </div>
@@ -1382,7 +2666,11 @@ export function TalentPulseDashboard({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
           <div className="flex items-baseline gap-2">
             <h3 className="text-base font-black text-slate-900" id="table-title">
-              {activeCityNode.name === "All India" ? "All India" : activeCityNode.name} Live Openings
+              {selectedCity !== "All India"
+                ? `${selectedCity} Live Openings`
+                : selectedState
+                ? `${selectedState.name} Live Openings`
+                : "All India Live Openings"}
             </h3>
             <span className="text-xs font-semibold text-slate-600" id="table-count-label">
               (Showing {displayJobs.length > 0 ? `${startIndex + 1}–${endIndex}` : "0"} of{" "}
