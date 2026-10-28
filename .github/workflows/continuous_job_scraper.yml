@@ -1,0 +1,87 @@
+name: 24/7 Rolling Job Harvester
+
+on:
+  schedule:
+    # Runs every single hour at 35 minutes past UTC (X:05 AM/PM IST)
+    - cron: '35 * * * *'
+
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Target Domain (or leave auto for sequential rotation)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - '0: Data & Analytics'
+          - '1: Python Development'
+          - '2: Java Development'
+          - '3: Cloud & DevOps'
+      dry_run:
+        description: 'Dry run only (verify schedule without web scraping)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  harvest-jobs:
+    name: Hourly Rolling Job Harvest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium Browser
+        run: |
+          playwright install chromium
+
+      - name: Execute Automated Domain Harvest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NAUKRI_HEADLESS: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --dry-run"
+          fi
+
+          SLOT_CHOICE="${{ github.event.inputs.slot }}"
+          if [ "$SLOT_CHOICE" = "0: Data & Analytics" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --slot 0"
+          elif [ "$SLOT_CHOICE" = "1: Python Development" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --slot 1"
+          elif [ "$SLOT_CHOICE" = "2: Java Development" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --slot 2"
+          elif [ "$SLOT_CHOICE" = "3: Cloud & DevOps" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --slot 3"
+          fi
+
+          echo "Executing Automated Rolling Domain Harvester with args: $EXTRA_ARGS"
+          python pipeline/automated_domain_extractor.py $EXTRA_ARGS
+
+      - name: Workflow Run Summary
+        if: always()
+        run: |
+          echo "### 🚀 24/7 Rolling Job Harvester Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp (UTC):** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Execution Mode:** Automatic Sequential Rotation" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Sources:** LinkedIn, Naukri, Indeed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Recency Window:** Past 4.0 Hours" >> $GITHUB_STEP_SUMMARY

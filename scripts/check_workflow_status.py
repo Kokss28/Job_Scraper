@@ -2,20 +2,20 @@ import urllib.request
 import json
 from datetime import datetime, timezone, timedelta
 
-workflows = [
-    (398020999, "1. Harvest - Data & Analytics"),
-    (398021009, "2. Harvest - Python Development"),
-    (398021005, "3. Harvest - Java Development"),
-    (398020997, "4. Harvest - Cloud & DevOps"),
-]
+url = "https://api.github.com/repos/Pravink1005/Job_Scraper/actions/workflows/continuous_job_scraper.yml/runs?per_page=10"
+req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
-for wid, name in workflows:
-    u = f"https://api.github.com/repos/Pravink1005/Job_Scraper/actions/workflows/{wid}/runs"
-    req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
-    res = json.loads(urllib.request.urlopen(req).read().decode())
-    total = res.get("total_count", 0)
-    print(f"\n{name} (ID: {wid}): {total} runs")
-    for r in res.get("workflow_runs", [])[:3]:
-        created_utc = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
-        created_ist = created_utc + timedelta(hours=5, minutes=30)
-        print(f"  Run #{r['id']} | Event: {r['event']} | Status: {r['status']} | Result: {r['conclusion']} | Time (IST): {created_ist.strftime('%Y-%m-%d %I:%M:%S %p')}")
+try:
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode())
+        runs = data.get("workflow_runs", [])
+        print(f"24/7 Rolling Job Harvester - Total Runs Recorded: {len(runs)}\n")
+        print(f"{'Run ID':<14} | {'Event':<18} | {'Status':<12} | {'Result':<12} | {'Time (IST)'}")
+        print("-" * 85)
+        for r in runs:
+            created_utc = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+            created_ist = created_utc + timedelta(hours=5, minutes=30)
+            res = r.get("conclusion") or "running"
+            print(f"{r['id']:<14} | {r['event']:<18} | {r['status']:<12} | {res:<12} | {created_ist.strftime('%Y-%m-%d %I:%M:%S %p')}")
+except Exception as e:
+    print(f"Workflow Status Query Note: {e}")
