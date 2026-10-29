@@ -1833,8 +1833,10 @@ def enrich_job(
     job
 ):
 
-    url = job.get(
-        "job_url"
+    url = (
+        job.get("job_url")
+        or job.get("link")
+        or job.get("url")
     )
 
     if (
@@ -1844,19 +1846,36 @@ def enrich_job(
 
         return job
 
+    # Convert frontend desktop URL (which easily triggers HTTP 429) to LinkedIn's official public guest endpoint
+    target_url = url
+    jid_match = re.search(r"(\d{8,})", url)
+    if jid_match:
+        target_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{jid_match.group(1)}"
+
+    title = job.get("job_title") or job.get("title") or "Unknown"
     logger.info(
         "Fetching detail: %s",
-        job.get(
-            "job_title"
-        )
+        title
     )
 
     try:
-
-        response = safe_fetch_get(
-            url,
-            timeout=30
-        )
+        response = None
+        for attempt in range(1, 4):
+            response = safe_fetch_get(
+                target_url,
+                timeout=30
+            )
+            status = getattr(response, "status_code", None)
+            if status == 429:
+                wait_time = 2.5 * attempt
+                logger.warning(
+                    "Detail page returned HTTP 429 (rate limit). Backing off for %.1fs (attempt %d/3)...",
+                    wait_time,
+                    attempt
+                )
+                time.sleep(wait_time)
+                continue
+            break
 
         if response is None:
             return job
@@ -1871,13 +1890,17 @@ def enrich_job(
             status is not None
             and status >= 400
         ):
+            # Fallback to original url if guest endpoint returned error
+            if target_url != url:
+                response = safe_fetch_get(url, timeout=30)
+                status = getattr(response, "status_code", None)
 
-            logger.warning(
-                "Detail page returned HTTP %s",
-                status
-            )
-
-            return job
+            if status is not None and status >= 400:
+                logger.warning(
+                    "Detail page returned HTTP %s",
+                    status
+                )
+                return job
 
         # ----------------------------------------------------
         # Description
@@ -1891,6 +1914,9 @@ def enrich_job(
 
             job[
                 "job_description"
+            ] = description
+            job[
+                "full_description"
             ] = description
 
         # ----------------------------------------------------
@@ -2705,18 +2731,22 @@ def collect_linkedin_jobs(
             "=" * 72
         )
 
+        max_enrich = int(os.getenv("LINKEDIN_MAX_DETAIL_ENRICHMENT", "150"))
         for index, job in enumerate(
             all_jobs,
             start=1
         ):
-            if index > 25:
-                logger.info("Reached maximum detail enrichment cap (25 jobs). Using card-level details for remaining jobs.")
+            if index > max_enrich:
+                logger.info(
+                    "Reached maximum detail enrichment cap (%s jobs). Using card-level details for remaining jobs.",
+                    max_enrich
+                )
                 break
 
             logger.info(
                 "Detail enrichment %s/%s",
                 index,
-                min(len(all_jobs), 25)
+                min(len(all_jobs), max_enrich)
             )
 
             try:
