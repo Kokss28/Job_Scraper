@@ -29,6 +29,7 @@ data/
 Data/
 *.csv
 *.db
+*.pdf
 *.json
 !package.json
 !package-lock.json

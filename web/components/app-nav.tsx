@@ -32,6 +32,12 @@ export function AppNav({
       label: "India Job Map",
       href: "/dashboard/market",
     },
+
+    {
+      id: "nav-degree-advisor",
+      label: "Degree Career Advisor",
+      href: "/dashboard/degree-advisor",
+    },
     {
       id: "nav-jobs-directory",
       label: "All Jobs Directory",
@@ -55,7 +61,7 @@ export function AppNav({
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-[#0B1120] border-r border-slate-800/80 flex flex-col h-screen sticky top-0 overflow-y-auto z-40 select-none">
+    <aside className="w-64 flex-shrink-0 bg-[#0B1120] border-r border-slate-800/80 flex flex-col h-screen sticky top-0 overflow-y-auto z-40 select-none print:hidden">
       {/* Brand Header */}
       <div className="p-6">
         <Link href="/dashboard" className="flex items-center gap-3 group">

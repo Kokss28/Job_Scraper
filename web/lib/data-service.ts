@@ -16,7 +16,10 @@ export * from "./taxonomy";
 // Fallback CSV parser reading ../Data/unified_jobs.csv
 function loadJobsFromLocalCsv(): UnifiedJobRecord[] {
   try {
-    const csvPath = path.resolve(process.cwd(), "../Data/unified_jobs.csv");
+    let csvPath = path.resolve(process.cwd(), "../Data/unified_jobs.csv");
+    if (!fs.existsSync(csvPath)) {
+      csvPath = path.resolve(process.cwd(), "Data/unified_jobs.csv");
+    }
     if (!fs.existsSync(csvPath)) return [];
 
     const fileContent = fs.readFileSync(csvPath, "utf-8");
