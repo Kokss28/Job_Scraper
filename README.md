@@ -327,6 +327,12 @@ An AI-assisted academic career guidance engine that maps candidate qualification
 - **Soft Skill Isolation**: Distinguishes hard engineering tools from universal soft skills for razor-sharp learning focus.
 - **Client-Side PDF Generation**: Fast, vectorized 2-page executive dossiers generated instantly in the browser without server roundtrips or printer dialogs.
 
+### 📬 6. Automated Email & Alert Notifications
+- **Automated Execution Digests**: Formatted summary emails sent via Gmail SMTP on completed runs, detailing new job counts, platform contributions, and top employers.
+- **Instant Crash & Timeout Alerts**: Immediate notification triggers if scraping sessions encounter rate limits, network timeouts, or 0-job anomalies.
+- **Zero External Dependencies**: Powered entirely by Python's built-in `smtplib` and `email.mime` modules.
+- **Responsive Inline HTML**: Clean, cross-client email templates styled for instant reading on both desktop and mobile email clients.
+
 ---
 
 ## 🗂️ Project Structure
@@ -347,6 +353,8 @@ Job_Scraper/
 │   ├── live_scrape_runner.py  # Headless live scraper runner for the web API
 │   ├── recency.py             # Time window filtering (1h - 30d)
 │   ├── role_matcher.py        # Keyword and title classification
+│   ├── notifier.py            # Automated Gmail SMTP execution & failure alert engine
+│   ├── automated_domain_extractor.py # Sequential keyword slot rotation extractor
 │   └── data_quality.py        # Automated schema and integrity audit
 │
 ├── scrapers/                  # Ingestion scrapers
@@ -378,7 +386,10 @@ Job_Scraper/
 │
 ├── tests/                     # Test suites
 │   ├── test_ui_flows.py       # Playwright end-to-end UI tests
-│   └── screenshots/           # UI walkthrough screenshots
+│   └── screenshots/           # High-DPI walkthrough screenshots (Screens 1 to 7)
+│
+├── scripts/                   # Production & automated test scripts
+│   └── test_degree_advisor_playwright.py # End-to-end Degree Advisor & PDF verification
 │
 ├── requirements.txt           # Python dependencies
 ├── .env.example               # Environment variables template
