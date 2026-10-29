@@ -270,6 +270,11 @@ export function normalizeIndianHub(
     cToken = cToken.slice(0, -7).trim();
   }
 
+  // Normalize ambiguous shorthand like 'CT' (Contract / Cyber Towers / Connecticut typo) to Pan-India
+  if (cToken.toUpperCase() === "CT" || cToken.toUpperCase() === "CT, INDIA") {
+    return "Pan-India (Flexible)";
+  }
+
   // Exact abbreviation check for city token (e.g. KA -> Karnataka, TN -> Tamil Nadu)
   if (STATE_MAPPING[cToken.toUpperCase()]) {
     const fullSt = STATE_MAPPING[cToken.toUpperCase()];
