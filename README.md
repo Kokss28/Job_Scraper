@@ -20,6 +20,7 @@ A complete end-to-end talent intelligence platform that scrapes tech job posting
   - [Screen 4: Market & Geographic Insights](#-screen-4-market--geographic-insights)
   - [Screen 5: Scraper Studio & Live Ingestion](#-screen-5-scraper-studio--live-ingestion)
   - [Screen 6: Admin Governance & RBAC Console](#-screen-6-admin-governance--rbac-console)
+  - [Screen 7: Academic Degree Career & Course Advisor](#-screen-7-academic-degree-career--course-advisor)
 - [✨ Key Features](#-key-features)
 - [🗂️ Project Structure](#️-project-structure)
 - [📊 Canonical 17-Column Schema](#-canonical-17-column-schema)
@@ -84,6 +85,7 @@ flowchart TD
         P4["🏢 Market & Hubs<br/>Tech Corridors & Hiring Enterprises"]
         P5["⚡ Scraper Studio<br/>Trigger Live Runs in Real-Time"]
         P6["🛡️ Admin & RBAC<br/>User Management & Role Governance"]
+        P7["🎓 Degree Advisor<br/>Live Market Analytics & Course Syllabi"]
 
         PORTAL --> P1
         PORTAL --> P2
@@ -91,6 +93,7 @@ flowchart TD
         PORTAL --> P4
         PORTAL --> P5
         PORTAL --> P6
+        PORTAL --> P7
     end
 
     style CFG fill:#4F46E5,color:#fff,stroke:#312E81
@@ -111,6 +114,7 @@ flowchart TD
     style P4 fill:#1E293B,color:#fff,stroke:#64748B
     style P5 fill:#1E293B,color:#fff,stroke:#64748B
     style P6 fill:#1E293B,color:#fff,stroke:#64748B
+    style P7 fill:#1E293B,color:#fff,stroke:#64748B
 ```
 
 ---
@@ -248,6 +252,52 @@ Enterprise administration, user role assignments, access control, and audit logs
 
 ---
 
+### 🎓 Screen 7: Academic Degree Career & Course Advisor
+**URL:** `/dashboard/degree-advisor`  
+An AI-assisted academic career guidance engine that maps candidate qualifications (**B.Sc.**, **M.Sc.**, **BCA**, **MCA**, **B.E./B.Tech**, or **Open Degrees**) to verified hiring volumes across India, identifies high-growth tech domains, and outputs targeted, topic-level learning curriculums with direct 2-page PDF report generation.
+
+![Academic Degree Career & Course Advisor](tests/screenshots/07_academic_degree_career_advisor.png)
+
+#### 🔍 What This Does:
+- **🎯 Target Qualification Selection**: Toggle between `B.Sc.`, `M.Sc.`, `BCA`, `MCA`, `B.E. / B.Tech`, and `All Degrees (Any Graduate / Open)` to see exact market feasibility computed across thousands of live verified postings.
+- **👶 Experience Granularity**: Instantly pivot between `Freshers & Interns (0–1y)`, `Junior (1–3y)`, and `All Experience` levels to isolate immediate entry-level graduate openings.
+- **📊 Executive Market Feasibility KPIs**: View live statistics on:
+  - 💼 **Eligible Openings**: Total vacancies welcoming this academic qualification.
+  - ✨ **Fresher Accessibility**: Exact percentage of roles open to candidates with 0–1 year of experience.
+  - 📈 **Top Hiring Sector**: The single technical domain commanding the highest hiring volume.
+  - 💻 **#1 Core Technical Prerequisite**: The most frequently demanded skill across postings.
+- **🍩 Visual Job Domain Distribution (Donut Chart)**: Real-time visual breakdown across 6 industry tech sectors:
+  - 📊 **DA: Data Analytics & Business Intelligence**
+  - 💻 **SE: Software Engineering & Full Stack Web Development**
+  - 🤖 **AI: Artificial Intelligence & Machine Learning**
+  - ☁️ **Cloud: Cloud Computing & DevOps Infrastructure**
+  - ⚙️ **DE: Data Engineering & Big Data Pipelines**
+  - 🛡️ **QA: Quality Assurance & Automated Software Testing**
+- **⚡ Interactive Click-to-Filter on Domains**:
+  - Clicking any sector (e.g. *Data Analytics*) dynamically filters the jobs table below to show **only** verified roles in that domain (powered by Title-First Classification to prevent cross-domain contamination).
+  - Dynamically morphs the **Top In-Demand Skills** ranking to show only skills demanded within that specific career family.
+  - Automatically reveals the **Targeted Course Curriculum** box customized for that track.
+- **🛠️ Pure Technical Skills Ranking (Zero Soft Skills)**: Bar chart tracking real skill frequency demanded by hiring managers (Python, SQL, Power BI, Excel, AWS, Git, Java, Docker), with non-technical soft skills (*Communication, Teamwork*) cleanly filtered out.
+- **📚 Targeted Modular Course Syllabi & Deep Topic Breakdowns**:
+  - Structured module-by-module learning paths with exact sub-topics, industry libraries, and frameworks.
+  - Realistic **Portfolio Capstone Projects** tailored for technical interviews.
+  - Prerequisites and real-world market demand reality checks.
+- **💼 Verified Live Openings Directory**: Real-time table showing role titles, companies, Pan-India flexible locations, single-line `Fresher (0y)` status, and direct portal application links.
+- **📄 Direct 2-Page Executive PDF Dossier**:
+  - 1-click client-side generation using `jspdf` and `jspdf-autotable` with **zero print dialogs**.
+  - **Track 1**: Primary high-demand curriculum path with fully wrapped overview and modular topic grids.
+  - **Track 2 (Dynamic Second Option)**: Automatically selects the **next highest hiring domain** in market volume as the candidate's secondary specialization option.
+  - **Page 2 Live Openings Directory**: Curated directory of verified live positions matching the candidate's selected domain.
+- **📋 1-Click Markdown Summary & Clipboard Export**: Export complete curriculum reports into clean GitHub-flavored markdown.
+
+#### 💡 Why Use This (Real-World Value):
+- **Bridge Academia & Industry**: Universities often teach outdated syllabi; this advisor reveals what companies are paying for *today*.
+- **Strategic Career Choice**: Demonstrates that while *Data Analytics* and *Software Dev* offer the largest volume of immediate fresher openings (~50%+), *AI/GenAI* and *Cloud* provide the highest salary ceilings.
+- **Zero Fluff**: Focuses purely on concrete technical topics (Window Functions, DAX, PyTorch, Docker) rather than vague advice.
+- **Counselor & Recruiter Ready**: Export professional 2-page PDF dossiers to present to students, parents, or placement cells.
+
+---
+
 ## ✨ Key Features
 
 ### 📥 1. Multi-Source Scraping
@@ -270,6 +320,12 @@ Enterprise administration, user role assignments, access control, and audit logs
 - **CSV (`Data/unified_jobs.csv`)**: Instant tabular view ready for Excel or Google Sheets.
 - **SQLite (`Data/jobs.db`)**: High-speed SQL query database with unique constraint indices on `job_id`.
 - **Supabase Cloud (PostgreSQL)**: Remote sync for user authentication, row-level security, and web portal persistence.
+
+### 🎓 5. Academic Degree Career & Course Intelligence
+- **Title-First Category Classification**: High-precision classification engine that categorizes postings into DA, SE, AI, Cloud, DE, and QA based on job titles first, preventing misleading classifications.
+- **Dynamic Morphing Skills**: Live skill frequency ranking recalculates on the fly when switching career domains.
+- **Soft Skill Isolation**: Distinguishes hard engineering tools from universal soft skills for razor-sharp learning focus.
+- **Client-Side PDF Generation**: Fast, vectorized 2-page executive dossiers generated instantly in the browser without server roundtrips or printer dialogs.
 
 ---
 
@@ -304,10 +360,14 @@ Job_Scraper/
 │   └── models/                # Serialized model checkpoints (.pkl)
 │
 ├── web/                       # Next.js Enterprise Web Application
-│   ├── app/                   # App Router pages (/dashboard, /saved-jobs, /admin)
+│   ├── app/                   # App Router pages (/dashboard, /degree-advisor, /admin)
+│   │   ├── api/degree-report/ # REST endpoint for degree career intelligence
+│   │   └── dashboard/degree-advisor/ # Degree Career Advisor dashboard page
 │   ├── components/            # Reusable UI components, charts, and filter controls
-│   ├── lib/                   # Data service, taxonomy, and Supabase client
-│   ├── package.json           # Node.js dependencies
+│   ├── lib/                   # Data service, taxonomy, degree matching & PDF generator
+│   │   ├── degree-matching.ts # Title-first classifier & course syllabi definitions
+│   │   └── degree-pdf-generator.ts # Direct 2-page executive PDF dossier engine
+│   ├── package.json           # Node.js dependencies (jspdf, jspdf-autotable, etc.)
 │   ├── tailwind.config.ts     # Tailwind theme & color tokens
 │   └── tsconfig.json          # TypeScript path aliases
 │
