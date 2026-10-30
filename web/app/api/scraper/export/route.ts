@@ -95,6 +95,27 @@ export async function GET(request: Request) {
     }
     const latestBatchPath = path.join(rootDir, "Data", "latest_extracted_jobs.csv");
     const unifiedCatalogPath = path.join(rootDir, "Data", "unified_jobs.csv");
+    const historyCsvPath = path.join(rootDir, "Data", "extraction_history.csv");
+
+    // Case 0: user wants the master extraction history audit log
+    if (batch === "history") {
+      if (fs.existsSync(historyCsvPath)) {
+        const rawHistory = fs.readFileSync(historyCsvPath, "utf-8");
+        return new NextResponse(rawHistory, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": `attachment; filename="extraction_history.csv"`,
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        });
+      } else {
+        return NextResponse.json(
+          { error: "No extraction history recorded yet." },
+          { status: 404 }
+        );
+      }
+    }
 
     // Case 1: user wants the latest extraction batch (or default when latest batch exists)
     if (batch !== "all" && fs.existsSync(latestBatchPath)) {

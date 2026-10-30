@@ -749,6 +749,14 @@ export default function ScraperStudioPage() {
                   Recent Batch CSV
                 </a>
                 <a
+                  href="/api/scraper/export?batch=history"
+                  download="extraction_history.csv"
+                  className="px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold border border-indigo-200 transition-all flex items-center gap-1.5 text-xs shadow-xs"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  Extraction Log CSV
+                </a>
+                <a
                   href="/api/scraper/export?batch=all"
                   download="master_all_jobs.csv"
                   className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 font-bold border border-slate-300 transition-all text-xs shadow-xs"
