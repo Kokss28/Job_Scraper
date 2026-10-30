@@ -1937,6 +1937,22 @@ def enrich_job(
         if experience_text != NOT_SPECIFIED:
             job["experience"] = experience_text
 
+            exp_range_m = re.search(
+                r"\b(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\b",
+                experience_text,
+            )
+            if exp_range_m:
+                job["min_experience_years"] = exp_range_m.group(1)
+                job["max_experience_years"] = exp_range_m.group(2)
+            else:
+                exp_single_m = re.search(
+                    r"\b(\d+(?:\.\d+)?)\b",
+                    experience_text,
+                )
+                if exp_single_m:
+                    job["min_experience_years"] = exp_single_m.group(1)
+                    job["max_experience_years"] = NOT_SPECIFIED
+
         # ----------------------------------------------------
         # Company
         # ----------------------------------------------------

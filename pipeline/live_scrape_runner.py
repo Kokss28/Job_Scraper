@@ -110,12 +110,16 @@ def main():
     if freshness <= 24 and max_jobs is None:
         naukri_max_pages = 6
 
+    # LinkedIn search cards omit descriptions and experience; its detail enrichment uses a fast guest API (~0.4s/job, no browser).
+    # We keep it enabled by default so full_description, min_experience_years, and max_experience_years are always populated.
+    lk_enable_details = True if os.getenv("DISABLE_LINKEDIN_DETAILS", "").lower() not in ("1", "true", "yes") else False
+
     lk_kwargs = {
         "keywords": keywords,
         "location": location,
         "max_jobs_per_keyword": max_jobs,
         "max_age_hours": freshness,
-        "enable_detail_pages": enable_details,
+        "enable_detail_pages": lk_enable_details,
     } if use_linkedin else None
 
     nk_kwargs = {

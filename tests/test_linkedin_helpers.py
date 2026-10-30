@@ -77,3 +77,37 @@ def test_is_recent_posted_time_outside_window():
 
 def test_is_recent_posted_time_unparsable_is_not_recent():
     assert is_recent_posted_time("Not Specified", max_age_hours=1) is False
+
+
+def test_extract_experience_from_text_ranges_and_singles():
+    from scrapers.linkedin.scraper import extract_experience_from_text
+
+    assert extract_experience_from_text("Requires 3-5 years of hands-on experience in AWS.") == "3 to 5 years"
+    assert extract_experience_from_text("Looking for 5+ years of experience with Python.") == "5+ years"
+    assert extract_experience_from_text("Candidate should have minimum 4 years of experience.") == "4 years"
+    assert extract_experience_from_text("Overall experience of 8 years in DevOps.") == "8 years"
+
+
+def test_enrich_job_structured_experience_population():
+    from unittest.mock import MagicMock, patch
+    from scrapers.linkedin.scraper import enrich_job
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_element = MagicMock()
+    fake_element.text = "Role description: Must have 4 to 7 years of experience in Azure and Kubernetes."
+    fake_response.css.return_value = [fake_element]
+
+    job = {
+        "job_url": "https://www.linkedin.com/jobs/view/4483430798/",
+        "title": "Cloud Engineer",
+    }
+
+    with patch("scrapers.linkedin.scraper.safe_fetch_get", return_value=fake_response):
+        enriched = enrich_job(job)
+
+    assert enriched.get("job_description") is not None
+    assert enriched.get("full_description") is not None
+    assert enriched.get("experience") == "4 to 7 years"
+    assert enriched.get("min_experience_years") == "4"
+    assert enriched.get("max_experience_years") == "7"
