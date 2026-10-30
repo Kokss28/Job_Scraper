@@ -16,6 +16,8 @@ import smtplib
 import sys
 import traceback
 from datetime import datetime, timezone, timedelta
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -91,19 +93,30 @@ def format_duration(seconds: float) -> str:
 # CORE SMTP DISPATCHER
 # ============================================================================
 
+def _clean_credentials(pwd: str) -> str:
+    """Removes spaces and surrounding whitespace from App Passwords."""
+    return pwd.replace(" ", "").strip() if pwd else ""
+
+
 def send_smtp_email(
     subject: str,
     html_content: str,
     text_content: Optional[str] = None,
     recipient: Optional[str] = None,
+    attachment_path: Optional[str | Path] = None,
+    attachment_name: Optional[str] = None,
 ) -> bool:
     """
     Sends an email via Gmail SMTP using standard library smtplib.
+    Supports CSV / file attachments via MIME multipart.
+    Supports both Port 587 (STARTTLS) and Port 465 (Direct SSL) with auto-fallback.
     Returns True if sent successfully, False otherwise.
     """
     target = recipient or DEFAULT_RECIPIENT
+    clean_user = SMTP_USER.strip() if SMTP_USER else ""
+    clean_password = _clean_credentials(SMTP_PASSWORD)
 
-    if not SMTP_USER or not SMTP_PASSWORD:
+    if not clean_user or not clean_password:
         print(
             f"[Notifier] Notice: SMTP credentials not set. Email not sent.\n"
             f"           To enable Gmail alerts, set GMAIL_USER and GMAIL_APP_PASSWORD in your .env or GitHub Secrets.\n"
@@ -112,29 +125,96 @@ def send_smtp_email(
         )
         return False
 
-    msg = MIMEMultipart("alternative")
+    # Check for dummy placeholder password
+    if clean_password.lower() in ("abcdefghijklmnop", "your-16-character-google-app-password"):
+        print(
+            f"\n[Notifier] ❌ ERROR: 'abcd efgh ijkl mnop' is just a PLACEHOLDER example!\n"
+            f"           Please set your real 16-character Google App Password in .env:\n"
+            f"           https://myaccount.google.com/apppasswords\n",
+            flush=True,
+        )
+        return False
+
+    # Use mixed multipart when attachment is present, otherwise alternative
+    att_file = Path(attachment_path) if attachment_path else None
+    has_attachment = att_file is not None and att_file.exists()
+
+    if has_attachment:
+        msg = MIMEMultipart("mixed")
+        body_part = MIMEMultipart("alternative")
+        plain_text = text_content or "Please open this email in an HTML-compatible client to view the extraction report."
+        body_part.attach(MIMEText(plain_text, "plain", "utf-8"))
+        body_part.attach(MIMEText(html_content, "html", "utf-8"))
+        msg.attach(body_part)
+
+        try:
+            with open(att_file, "rb") as f:
+                csv_payload = f.read()
+            part = MIMEBase("text", "csv")
+            part.set_payload(csv_payload)
+            encoders.encode_base64(part)
+            filename = attachment_name or att_file.name
+            part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+            msg.attach(part)
+            print(f"[Notifier] 📎 Attached CSV: {filename} ({len(csv_payload) / 1024:.1f} KB)", flush=True)
+        except Exception as att_err:
+            print(f"[Notifier] ⚠️ Could not attach file {att_file}: {att_err}", flush=True)
+    else:
+        msg = MIMEMultipart("alternative")
+        plain_text = text_content or "Please open this email in an HTML-compatible client to view the extraction report."
+        msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+        msg.attach(MIMEText(html_content, "html", "utf-8"))
+
     msg["Subject"] = subject
-    msg["From"] = f"TalentPulse Automation <{SMTP_USER}>"
+    msg["From"] = f"TalentPulse Automation <{clean_user}>"
     msg["To"] = target
 
-    # Fallback plain text
-    plain_text = text_content or "Please open this email in an HTML-compatible client to view the extraction report."
-    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
-    msg.attach(MIMEText(html_content, "html", "utf-8"))
+    ports_to_try = [SMTP_PORT, 465 if SMTP_PORT == 587 else 587]
 
-    try:
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, [target], msg.as_string())
-        server.quit()
-        print(f"[Notifier] ✅ Email sent successfully to {target} (Subject: {subject})", flush=True)
-        return True
-    except Exception as exc:
-        print(f"[Notifier] ⚠️ Failed to send email via SMTP ({SMTP_HOST}:{SMTP_PORT}): {exc}", flush=True)
-        return False
+    for port in ports_to_try:
+        server = None
+        try:
+            if port == 465:
+                import ssl
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(SMTP_HOST, 465, context=context, timeout=25)
+            else:
+                server = smtplib.SMTP(SMTP_HOST, port, timeout=25)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+
+            server.login(clean_user, clean_password)
+            server.sendmail(clean_user, [target], msg.as_string())
+            server.quit()
+            print(f"[Notifier] ✅ Email sent successfully to {target} (Subject: {subject}) via port {port}", flush=True)
+            return True
+        except smtplib.SMTPAuthenticationError:
+            print(
+                f"[Notifier] ❌ GMAIL AUTHENTICATION FAILED (Error 535 BadCredentials):\n"
+                f"           Ensure you use a valid 16-letter App Password at https://myaccount.google.com/apppasswords\n",
+                flush=True,
+            )
+            return False
+        except smtplib.SMTPServerDisconnected:
+            print(
+                f"[Notifier] ❌ GMAIL CONNECTION CLOSED (BadCredentials or Port Error):\n"
+                f"           Verify your 16-letter Google App Password for account: {clean_user}\n",
+                flush=True,
+            )
+            return False
+        except Exception as exc:
+            print(f"[Notifier] ⚠️ Connection on port {port} failed ({exc}). Trying alternate port...", flush=True)
+            continue
+        finally:
+            if server:
+                try:
+                    server.close()
+                except Exception:
+                    pass
+
+    print(f"[Notifier] ❌ All SMTP connection attempts to {SMTP_HOST} failed.", flush=True)
+    return False
 
 
 # ============================================================================
@@ -152,14 +232,41 @@ def send_extraction_success_alert(
     freshness_hours: float = 4.0,
     keywords: Optional[str] = None,
     recipient: Optional[str] = None,
+    attachment_path: Optional[str | Path] = None,
+    attachment_name: Optional[str] = None,
 ) -> bool:
-    """Dispatches a formatted success digest email."""
+    """Dispatches a formatted success digest email with optional CSV attachment."""
     target = recipient or DEFAULT_RECIPIENT
     ts = get_current_timestamps()
     slot_label = f"Slot {slot_number}" if slot_number is not None else "Manual Run"
     duration_str = format_duration(duration_seconds)
 
-    subject = f"✅ [SUCCESS] Harvest Complete: {domain_name} ({slot_label}) - {extracted_jobs} Jobs Found"
+    # Check and format attachment badge
+    att_file = Path(attachment_path) if attachment_path else None
+    has_attachment = att_file is not None and att_file.exists()
+    display_att_name = attachment_name or (att_file.name if att_file else "dataset.csv")
+
+    if has_attachment:
+        file_size_kb = round(os.path.getsize(att_file) / 1024, 1)
+        subject = f"✅ [SUCCESS] Harvest Complete: {domain_name} ({slot_label}) - {extracted_jobs} Jobs (CSV Attached)"
+        attachment_badge = f"""
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:12px 16px; margin-bottom:18px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td width="30" style="font-size:20px; vertical-align:middle;">📎</td>
+                    <td style="vertical-align:middle;">
+                        <div style="font-size:11px; font-weight:800; color:#15803D; text-transform:uppercase; letter-spacing:0.5px;">Attached Dataset (CSV)</div>
+                        <div style="font-size:13px; font-weight:700; color:#166534; margin-top:2px;">
+                            {display_att_name} &bull; <span style="color:#4B5563; font-weight:500;">{extracted_jobs} full job postings ({file_size_kb} KB ready for Excel)</span>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """
+    else:
+        subject = f"✅ [SUCCESS] Harvest Complete: {domain_name} ({slot_label}) - {extracted_jobs} Jobs Found"
+        attachment_badge = ""
 
     # Source breakdown pills
     sources_markup = ""
@@ -222,9 +329,11 @@ def send_extraction_success_alert(
                             </td>
                         </tr>
 
-                        <!-- Key Metrics Grid -->
+                        <!-- Content Body -->
                         <tr>
                             <td style="padding:24px;">
+                                {attachment_badge}
+                                <!-- Key Metrics Grid -->
                                 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
                                     <tr>
                                         <td width="33%" style="background:#F8FAFC; padding:14px; border-radius:10px; border:1px solid #E2E8F0; text-align:center;">
@@ -302,7 +411,13 @@ def send_extraction_success_alert(
     </body>
     </html>
     """
-    return send_smtp_email(subject=subject, html_content=html, recipient=recipient)
+    return send_smtp_email(
+        subject=subject,
+        html_content=html,
+        recipient=recipient,
+        attachment_path=attachment_path,
+        attachment_name=attachment_name,
+    )
 
 
 def send_extraction_failure_alert(
@@ -433,6 +548,21 @@ if __name__ == "__main__":
             {"title": "Data Analyst (PowerBI, SQL)", "company": "Target India", "city": "Bengaluru", "source": "Indeed", "link": "https://indeed.com"},
             {"title": "Full Stack Java Developer", "company": "TCS", "city": "Chennai", "source": "Naukri", "link": "https://naukri.com"},
         ]
+
+        # Use latest_extracted_jobs.csv if available or create a temporary sample for testing
+        test_csv = ROOT_DIR / "Data" / "latest_extracted_jobs.csv"
+        temp_csv = None
+        if not test_csv.exists():
+            import csv
+            temp_csv = ROOT_DIR / "Data" / "sample_test_jobs.csv"
+            temp_csv.parent.mkdir(parents=True, exist_ok=True)
+            with open(temp_csv, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=["title", "company", "city", "source", "link"])
+                writer.writeheader()
+                for row in sample_mock:
+                    writer.writerow(row)
+            test_csv = temp_csv
+
         success = send_extraction_success_alert(
             domain_name="Python Development",
             slot_number=1,
@@ -444,7 +574,14 @@ if __name__ == "__main__":
             freshness_hours=4.0,
             keywords="python developer, python backend, django, fastapi",
             recipient=args.to,
+            attachment_path=test_csv,
+            attachment_name="Sample_Python_Jobs_Harvest.csv",
         )
+        if temp_csv and temp_csv.exists():
+            try:
+                temp_csv.unlink()
+            except Exception:
+                pass
 
     if success:
         print("[Notifier] ✅ Test email delivered successfully!")

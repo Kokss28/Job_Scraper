@@ -216,6 +216,8 @@ def execute_extraction(
     cmd = [
         sys.executable,
         str(ROOT_DIR / "pipeline" / "live_scrape_runner.py"),
+        "--domain",
+        name,
         "--sources",
         sources,
         "--keywords",
@@ -262,6 +264,10 @@ def execute_extraction(
                     keywords=keywords,
                 )
             else:
+                clean_domain = name.replace(" ", "_").replace("&", "and")
+                stamp = datetime.now().strftime("%Y%m%d_%H%M")
+                att_filename = f"Jobs_{clean_domain}_{stamp}.csv"
+
                 send_extraction_success_alert(
                     domain_name=name,
                     slot_number=slot,
@@ -271,6 +277,8 @@ def execute_extraction(
                     sample_jobs=sample_jobs,
                     freshness_hours=freshness,
                     keywords=keywords,
+                    attachment_path=latest_csv if (latest_csv.exists() and extracted_count > 0) else None,
+                    attachment_name=att_filename,
                 )
         except Exception as notify_err:
             log(f"Notice: Email notification could not be dispatched: {notify_err}")

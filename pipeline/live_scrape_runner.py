@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import warnings
 from datetime import datetime
 import logging
@@ -62,6 +63,7 @@ def log(msg: str):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Live Job Scraper Runner")
+    parser.add_argument("--domain", type=str, default=None, help="Domain category name (e.g. 'Python Development', 'Data & Analytics')")
     parser.add_argument("--sources", type=str, default="LinkedIn,Naukri,Indeed", help="Comma-separated sources")
     parser.add_argument("--keywords", type=str, default="Python developer", help="Comma-separated keywords")
     parser.add_argument("--freshness", type=float, default=24.0, help="Manual time range in hours (e.g. 1, 6, 24, 72)")
@@ -136,6 +138,7 @@ def main():
     } if use_indeed else None
 
     log("Connecting to live job feeds...")
+    start_time = time.time()
     try:
         report = run_pipeline(
             store=store,
@@ -147,20 +150,28 @@ def main():
             indeed_kwargs=id_kwargs,
             apply_enrichment=True,
         )
+        duration_seconds = time.time() - start_time
 
-        # Save the current extracted batch to a dedicated CSV file
-        import csv
-        from pipeline.schema import CSV_FIELDS
-        latest_csv = ROOT_DIR / "Data" / "latest_extracted_jobs.csv"
+        # Save the current extracted batch to a dedicated Excel-ready CSV & latest_extracted_jobs.csv
+        from pipeline.audit_logger import (
+            detect_domain_from_keywords,
+            save_batch_extraction_csv,
+            record_extraction_run,
+            print_extraction_summary_card,
+        )
+
+        domain_name, slot_num = detect_domain_from_keywords(keywords, domain_hint=args.domain)
         extracted_batch = getattr(report, "extracted_jobs", None) or getattr(report, "new_jobs", [])
-        
-        with open(latest_csv, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
-            writer.writeheader()
-            for job in extracted_batch:
-                writer.writerow(job.to_csv_row())
 
-        log(f"Current extraction batch ({len(extracted_batch)} jobs from {', '.join([s.capitalize() for s in sources])}) saved to {latest_csv.name}")
+        batch_file_path, batch_filename, batch_count = save_batch_extraction_csv(
+            jobs=extracted_batch,
+            domain=domain_name,
+            keywords=", ".join(keywords),
+            location=location,
+        )
+
+        rel_save_path = str(batch_file_path.relative_to(ROOT_DIR)).replace("\\", "/")
+        log(f"Current extraction batch ({batch_count} jobs from {', '.join([s.capitalize() for s in sources])}) saved to {rel_save_path}")
 
         log("Scraping completed! Syncing to SQLite local database...")
         unified_csv = ROOT_DIR / "Data" / "unified_jobs.csv"
@@ -199,6 +210,35 @@ def main():
             src = _get_val(j, "source", "Unknown")
             by_source[src] = by_source.get(src, 0) + 1
 
+        # Record extraction run into master history CSV (Data/extraction_history.csv)
+        record_extraction_run(
+            domain=domain_name,
+            slot=slot_num,
+            keywords=", ".join(keywords),
+            location=location,
+            sources=", ".join([s.capitalize() for s in sources]),
+            extracted_count=len(extracted_batch),
+            new_jobs_added=new_count,
+            total_db_jobs=total_jobs,
+            by_source=by_source,
+            duration_seconds=duration_seconds,
+            status="SUCCESS",
+            batch_filename=batch_filename,
+            batch_file_path=batch_file_path,
+        )
+
+        # Print executive summary card to terminal
+        print_extraction_summary_card(
+            domain=domain_name,
+            extracted_count=len(extracted_batch),
+            new_jobs_added=new_count,
+            total_db_jobs=total_jobs,
+            batch_filename=batch_filename,
+            duration_seconds=duration_seconds,
+            by_source=by_source,
+            batch_file_path=batch_file_path,
+        )
+
         sample_jobs = []
         for j in extracted_batch[:12]:
             sample_jobs.append({
@@ -212,8 +252,16 @@ def main():
                 "link": _get_val(j, "link", ""),
             })
 
+        rel_batch_path = ""
+        try:
+            rel_batch_path = str(batch_file_path.relative_to(ROOT_DIR)).replace("\\", "/")
+        except Exception:
+            rel_batch_path = str(batch_file_path).replace("\\", "/")
+
         summary_json = {
             "status": "success",
+            "domain": domain_name,
+            "slot": slot_num,
             "extracted_jobs": len(extracted_batch),
             "new_jobs": new_count,
             "total_jobs": total_jobs,
@@ -223,12 +271,35 @@ def main():
             "keywords": keywords,
             "location": location,
             "latest_csv": "latest_extracted_jobs.csv",
+            "batch_csv": batch_filename,
+            "batch_csv_path": rel_batch_path,
             "sample_jobs": sample_jobs,
         }
         print(f"__RESULT_JSON__{json.dumps(summary_json)}", flush=True)
 
     except Exception as exc:
         log(f"Error during scrape execution: {exc}")
+        try:
+            from pipeline.audit_logger import detect_domain_from_keywords, record_extraction_run
+            domain_name, slot_num = detect_domain_from_keywords(
+                keywords if "keywords" in locals() else "",
+                domain_hint=getattr(args, "domain", None) if "args" in locals() else None,
+            )
+            record_extraction_run(
+                domain=domain_name,
+                slot=slot_num,
+                keywords=", ".join(keywords) if "keywords" in locals() else "",
+                location=location if "location" in locals() else "India",
+                sources=", ".join([s.capitalize() for s in sources]) if "sources" in locals() else "Unknown",
+                extracted_count=0,
+                new_jobs_added=0,
+                total_db_jobs=0,
+                duration_seconds=time.time() - start_time if "start_time" in locals() else 0.0,
+                status="FAILED",
+                error_notes=str(exc),
+            )
+        except Exception:
+            pass
         err_json = {
             "status": "error",
             "message": str(exc),
