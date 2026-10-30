@@ -979,7 +979,7 @@ def run_audit() -> bool:
     else:
 
         print(
-            "[PASS] CSV contains expected 16 columns"
+            f"[PASS] CSV contains expected {len(CSV_FIELDS)} columns"
         )
 
     # --------------------------------------------------------

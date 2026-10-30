@@ -1,7 +1,7 @@
 # 🇮🇳 Job Intelligence System & Enterprise Scraper Pipeline
 ### High-Performance Talent Analytics, ML Enrichment & Multi-Source Job Portal
 
-A complete end-to-end talent intelligence platform that scrapes tech job postings from **LinkedIn**, **Naukri**, and **Indeed**, normalizes them into a unified 17-column schema, enriches missing qualifications with **Machine Learning**, eliminates duplicates, and serves the dataset through both local databases (**CSV**, **SQLite**) and a premium **Next.js Enterprise Web Dashboard**.
+A complete end-to-end talent intelligence platform that scrapes tech job postings from **LinkedIn**, **Naukri**, and **Indeed**, normalizes them into a unified 15-column schema, enriches missing qualifications with **Machine Learning**, eliminates duplicates, and serves the dataset through both local databases (**CSV**, **SQLite**) and a premium **Next.js Enterprise Web Dashboard**.
 
 > **🎯 Primary Goal:** Keep one clean, automated, and searchable database of tech opportunities across India with real-time analytics, career tier intelligence, and interactive scraping controls.
 
@@ -23,7 +23,7 @@ A complete end-to-end talent intelligence platform that scrapes tech job posting
   - [Screen 7: Academic Degree Career & Course Advisor](#-screen-7-academic-degree-career--course-advisor)
 - [✨ Key Features](#-key-features)
 - [🗂️ Project Structure](#️-project-structure)
-- [📊 Canonical 17-Column Schema](#-canonical-17-column-schema)
+- [📊 Canonical 15-Column Schema](#-canonical-15-column-schema)
 - [🧰 Requirements & Installation](#-requirements--installation)
 - [🔑 Keyword Configuration](#-keyword-configuration)
 - [🌱 Environment Variables](#-environment-variables)
@@ -50,7 +50,7 @@ flowchart TD
     end
 
     subgraph PROCESSING ["⚡ Normalization & Enrichment Engine"]
-        NORM["🔄 Schema Normalizer<br/>Standardize 17 Columns & Indian Hubs"]
+        NORM["🔄 Schema Normalizer<br/>Standardize 15 Columns & Indian Hubs"]
         VAL["✅ Data Quality Validator<br/>Required Fields & Format Audit"]
         ML["🤖 ML Enrichment<br/>Degree & Specialization Predictor"]
         DEDUP["🧹 Smart Deduplication<br/>Unique ID & URL Cache Matching"]
@@ -301,13 +301,13 @@ An AI-assisted academic career guidance engine that maps candidate qualification
 ## ✨ Key Features
 
 ### 📥 1. Multi-Source Scraping
-- **LinkedIn**: Clean search using Scrapling anti-bot fetcher, customizable freshness hours, and pagination.
+- **LinkedIn**: Fast search using Scrapling anti-bot fetcher with automatic guest API detail enrichment (`/jobs-guest/jobs/api/jobPosting/<id>`) extracting full descriptions, required experience ranges, and skills without browser overhead.
 - **Naukri**: High-fidelity browser automation via Playwright, detailed description parsing, and multi-page crawl.
 - **Indeed**: Broad coverage via JobSpy with location-based filtering.
 - **Centralized Keywords**: Define search queries once in `config.py` — shared across all three scrapers.
 
 ### 🔄 2. Data Normalization & Cleaning
-- **Unified 17-Column Schema**: Every posting is structured into identical columns regardless of origin.
+- **Unified 15-Column Schema**: Every posting is structured into identical columns regardless of origin.
 - **Indian IT Corridor Normalization**: Standardizes non-uniform city/state names into canonical tech hubs.
 - **No Null Values**: Empty fields are cleanly populated with `"Not Specified"` to avoid blank records.
 
@@ -348,7 +348,7 @@ Job_Scraper/
 ├── pipeline/                  # Core processing modules
 │   ├── orchestrator.py        # Pipeline workflow coordinator
 │   ├── normalizer.py          # Unified schema transformation & location cleaning
-│   ├── schema.py              # 17-column data contract definition
+│   ├── schema.py              # 15-column data contract definition
 │   ├── storage.py             # CSV and SQLite read/write operations
 │   ├── enrichment.py          # Machine learning enrichment bridge
 │   ├── live_scrape_runner.py  # Headless live scraper runner for the web API
@@ -399,7 +399,7 @@ Job_Scraper/
 
 ---
 
-## 📊 Canonical 17-Column Schema
+## 📊 Canonical 15-Column Schema
 
 | # | Column Name | Type | Description |
 |:---:|---|---|---|
@@ -407,19 +407,17 @@ Job_Scraper/
 | 2 | `source` | String | Sourcing origin (`LinkedIn`, `Naukri`, `Indeed`) |
 | 3 | `title` | String | Standardized job title |
 | 4 | `company` | String | Hiring organization name |
-| 5 | `search_keyword` | String | Keyword query used during collection |
-| 6 | `city` | String | Normalized Indian tech hub or city |
-| 7 | `state` | String | Normalized state or region |
-| 8 | `country` | String | Country name (`India`, etc.) |
-| 9 | `min_experience_years` | Float | Minimum required experience in years |
-| 10 | `max_experience_years` | Float | Maximum required experience in years |
-| 11 | `experience_review` | String | Parsed experience classification text |
-| 12 | `skills` | String | Comma-delimited extracted technical skills |
-| 13 | `degree_required` | String | Minimum qualification (ML-enriched if missing) |
-| 14 | `specialization_required` | String | Academic major (ML-enriched if missing) |
-| 15 | `collected_at` | Timestamp | ISO 8601 scraping timestamp |
-| 16 | `link` | String | Direct canonical URL to the posting |
-| 17 | `full_description` | String | Full job description text |
+| 5 | `city` | String | Normalized Indian tech hub or city |
+| 6 | `state` | String | Normalized state or region |
+| 7 | `country` | String | Country name (`India`, etc.) |
+| 8 | `min_experience_years` | Float | Minimum required experience in years |
+| 9 | `max_experience_years` | Float | Maximum required experience in years |
+| 10 | `skills` | String | Comma-delimited extracted technical skills |
+| 11 | `degree_required` | String | Minimum qualification (ML-enriched if missing) |
+| 12 | `specialization_required` | String | Academic major (ML-enriched if missing) |
+| 13 | `collected_at` | Timestamp | ISO 8601 scraping timestamp |
+| 14 | `link` | String | Direct canonical URL to the posting |
+| 15 | `full_description` | String | Full job description text |
 
 ---
 
@@ -547,7 +545,7 @@ python tests/test_ui_flows.py
 ```powershell
 python -m pipeline.data_quality
 ```
-Verifies 17-column structural integrity, detects duplicate job IDs, checks required fields, and confirms SQLite $\leftrightarrow$ CSV consistency.
+Verifies 15-column structural integrity, detects duplicate job IDs, checks required fields, and confirms SQLite $\leftrightarrow$ CSV consistency.
 
 ---
 
