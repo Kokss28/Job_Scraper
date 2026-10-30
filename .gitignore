@@ -32,7 +32,6 @@ Data/*
 !Data/Date/**/*.csv
 !Data/Date/*.csv
 !Data/extraction_history.csv
-!Data/latest_extracted_jobs.csv
 *.db
 *.pdf
 *.json
