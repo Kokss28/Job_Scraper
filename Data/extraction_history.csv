@@ -1,0 +1,2 @@
+﻿Extraction_Time_IST,Extraction_Time_UTC,Domain,Slot,Keywords,Location,Sources,Jobs_Extracted_Now,New_Jobs_Added,Total_Database_Jobs,Yield_LinkedIn,Yield_Naukri,Yield_Indeed,Duration_Seconds,Status,Batch_CSV_File,Batch_CSV_Path,Error_Notes
+2026-10-30 06:07:16 PM IST,2026-10-30 12:37:16 UTC,Cloud & DevOps,Slot 3,"cloud engineer, aws devops, azure engineer, kubernetes developer",India,"Linkedin, Naukri, Indeed",275,275,275,92,122,61,174.1,SUCCESS,Jobs_Cloud_DevOps_180711.csv,Data/Date/2026-10-30/Jobs_Cloud_DevOps_180711.csv,
