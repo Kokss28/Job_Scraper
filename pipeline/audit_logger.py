@@ -106,8 +106,6 @@ BATCH_CSV_FIELDS = [
     "skills",
     "degree_required",
     "specialization_required",
-    "search_keyword",
-    "experience_review",
     "link",
     "job_id",
     "extracted_at_utc",

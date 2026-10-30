@@ -41,13 +41,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     source TEXT,
     title TEXT,
     company TEXT,
-    search_keyword TEXT,
     city TEXT,
     state TEXT,
     country TEXT,
     min_experience_years TEXT,
     max_experience_years TEXT,
-    experience_review TEXT,
     skills TEXT,
     degree_required TEXT,
     specialization_required TEXT,
@@ -85,10 +83,22 @@ def create_database():
     cursor.execute("PRAGMA table_info(jobs)")
     existing_columns = {row[1] for row in cursor.fetchall()}
 
+    # Drop obsolete columns if they exist in older databases
+    for col_to_drop in ["search_keyword", "experience_review"]:
+        if col_to_drop in existing_columns:
+            try:
+                print(f"[SQLite] Migrating database: dropping obsolete column '{col_to_drop}'")
+                cursor.execute(f"ALTER TABLE jobs DROP COLUMN {col_to_drop}")
+            except Exception as e:
+                print(f"[SQLite] Note dropping column {col_to_drop}: {e}")
+
+    cursor.execute("PRAGMA table_info(jobs)")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+
     expected_columns = [
-        "job_id", "source", "title", "company", "search_keyword",
+        "job_id", "source", "title", "company",
         "city", "state", "country", "min_experience_years",
-        "max_experience_years", "experience_review", "skills", "degree_required",
+        "max_experience_years", "skills", "degree_required",
         "specialization_required", "collected_at", "link",
         "full_description",
     ]
@@ -161,13 +171,11 @@ def import_csv_to_database(target_csv=None):
                 row.get("source", "Not Specified"),
                 row.get("title", "Not Specified"),
                 row.get("company", "Not Specified"),
-                row.get("search_keyword", "Not Specified"),
                 row.get("city", "Not Specified"),
                 row.get("state", "Not Specified"),
                 row.get("country", "Not Specified"),
                 row.get("min_experience_years", "Not Specified"),
                 row.get("max_experience_years", "Not Specified"),
-                row.get("experience_review", ""),
                 row.get("skills", "Not Specified"),
                 row.get("degree_required", "Not Specified"),
                 row.get("specialization_required", "Not Specified"),
@@ -183,13 +191,11 @@ def import_csv_to_database(target_csv=None):
                     source,
                     title,
                     company,
-                    search_keyword,
                     city,
                     state,
                     country,
                     min_experience_years,
                     max_experience_years,
-                    experience_review,
                     skills,
                     degree_required,
                     specialization_required,
@@ -197,20 +203,18 @@ def import_csv_to_database(target_csv=None):
                     link,
                     full_description
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
                 ON CONFLICT(job_id)
                 DO UPDATE SET
                     source = excluded.source,
                     title = excluded.title,
                     company = excluded.company,
-                    search_keyword = excluded.search_keyword,
                     city = excluded.city,
                     state = excluded.state,
                     country = excluded.country,
                     min_experience_years = excluded.min_experience_years,
                     max_experience_years = excluded.max_experience_years,
-                    experience_review = excluded.experience_review,
                     skills = excluded.skills,
                     degree_required = excluded.degree_required,
                     specialization_required = excluded.specialization_required,
@@ -330,13 +334,11 @@ def clean_job_record(row: dict) -> dict:
         "source": row.get("source") or "Not Specified",
         "title": row.get("title") or "Not Specified",
         "company": row.get("company") or "Not Specified",
-        "search_keyword": row.get("search_keyword") or "Not Specified",
         "city": row.get("city") or "Not Specified",
         "state": row.get("state") or "Not Specified",
         "country": row.get("country") or "Not Specified",
         "min_experience_years": str(row.get("min_experience_years") or "Not Specified"),
         "max_experience_years": str(row.get("max_experience_years") or "Not Specified"),
-        "experience_review": row.get("experience_review") or "",
         "skills": row.get("skills") or "Not Specified",
         "degree_required": row.get("degree_required") or "Not Specified",
         "specialization_required": row.get("specialization_required") or "Not Specified",

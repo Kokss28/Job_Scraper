@@ -128,12 +128,12 @@ def detect_last_harvested_slot() -> Optional[int]:
         if sb_url and sb_key and not sb_key.startswith("your_"):
             from supabase import create_client
             client = create_client(sb_url, sb_key)
-            res = client.table("jobs").select("search_keyword, created_at").order("created_at", desc=True).limit(25).execute()
+            res = client.table("jobs").select("title, created_at").order("created_at", desc=True).limit(25).execute()
             if res.data:
                 for r in res.data:
-                    slot = keyword_to_slot(r.get("search_keyword"))
+                    slot = keyword_to_slot(r.get("title"))
                     if slot is not None:
-                        log(f"Supabase recent job keyword '{r.get('search_keyword')}' matches completed Slot {slot} ({DOMAIN_SLOTS[slot]['name']})")
+                        log(f"Supabase recent job title '{r.get('title')}' matches completed Slot {slot} ({DOMAIN_SLOTS[slot]['name']})")
                         return slot
     except Exception as exc:
         log(f"Supabase state check note: {exc}")

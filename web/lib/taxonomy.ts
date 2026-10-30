@@ -7,13 +7,13 @@ export type UnifiedJobRecord = {
   source: string;
   title: string;
   company: string;
-  search_keyword: string;
+  search_keyword?: string;
   city: string;
   state: string;
   country: string;
   min_experience_years: string;
   max_experience_years: string;
-  experience_review: string;
+  experience_review?: string;
   skills: string;
   degree_required: string;
   specialization_required: string;
