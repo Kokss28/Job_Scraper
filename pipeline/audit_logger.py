@@ -27,7 +27,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "Data"
-DATE_BASE_DIR = DATA_DIR / "date"
+DATE_BASE_DIR = DATA_DIR / "Date"
 EXTRACTIONS_DIR = DATA_DIR / "extractions"
 HISTORY_CSV_PATH = DATA_DIR / "extraction_history.csv"
 LATEST_CSV_PATH = DATA_DIR / "latest_extracted_jobs.csv"
@@ -36,7 +36,7 @@ LATEST_CSV_PATH = DATA_DIR / "latest_extracted_jobs.csv"
 def get_daily_folder(date_str: Optional[str] = None) -> Path:
     """
     Returns (and automatically creates) the date-specific folder:
-    Data/date/<YYYY-MM-DD>/
+    Data/Date/<YYYY-MM-DD>/
     Defaults to today's date in IST.
     """
     if not date_str:
@@ -126,6 +126,8 @@ def get_timestamps() -> Dict[str, str]:
         "date_ist": ist_now.strftime("%Y-%m-%d"),
         "time_ist": ist_now.strftime("%I:%M:%S %p"),
         "stamp": ist_now.strftime("%Y%m%d_%H%M%S"),
+        "time_stamp": ist_now.strftime("%H%M%S"),
+        "time_slug": ist_now.strftime("%I-%M-%S-%p"),
     }
 
 
@@ -162,18 +164,23 @@ def save_batch_extraction_csv(
     date_str: Optional[str] = None,
 ) -> Tuple[Path, str, int]:
     """
-    Saves and appends the extracted jobs into ONE SINGLE consolidated daily file:
-    Data/date/<YYYY-MM-DD>/Jobs_<YYYY-MM-DD>.csv
-    Inside this single file, every row contains the exact extraction time, domain, source,
-    and all job details.
-    Uses UTF-8 BOM (utf-8-sig) so Microsoft Excel opens it seamlessly.
+    Saves the extracted jobs into Data/Date/<YYYY-MM-DD>/:
+    1. A dedicated time-extracted file: Jobs_<Domain>_<HHMMSS>.csv for that specific extraction run.
+    2. A consolidated daily cumulative file: Jobs_<YYYY-MM-DD>.csv without duplicate rows.
+    3. The latest batch file: Data/latest_extracted_jobs.csv for dashboard APIs.
+    Uses UTF-8 BOM (utf-8-sig) so Microsoft Excel opens seamlessly.
     """
     ts = get_timestamps()
     cur_date = date_str or ts["date_ist"]
     daily_folder = get_daily_folder(cur_date)
 
-    filename = f"Jobs_{cur_date}.csv"
-    single_file_path = daily_folder / filename
+    clean_domain = re.sub(r"[^\w\-_]+", "_", domain).strip("_")
+    time_str = ts.get("time_stamp", ts["stamp"].split("_")[1])
+    time_filename = f"Jobs_{clean_domain}_{time_str}.csv"
+    time_file_path = daily_folder / time_filename
+
+    daily_filename = f"Jobs_{cur_date}.csv"
+    daily_file_path = daily_folder / daily_filename
 
     def _extract_job_dict(j: Any) -> Dict[str, Any]:
         if hasattr(j, "to_csv_row"):
@@ -184,55 +191,66 @@ def save_batch_extraction_csv(
             d = {k: getattr(j, k, "") for k in dir(j) if not k.startswith("_")}
         return d
 
-    # Read existing job_ids from the single file to prevent duplicate rows
+    # 1. Write the specific time-extraction CSV file
+    try:
+        with open(time_file_path, "w", newline="", encoding="utf-8-sig") as f_time:
+            writer_time = csv.DictWriter(f_time, fieldnames=BATCH_CSV_FIELDS, extrasaction="ignore")
+            writer_time.writeheader()
+            for item in jobs:
+                row = _extract_job_dict(item)
+                row["extracted_at_ist"] = ts["ist"]
+                row["extracted_at_utc"] = ts["utc"]
+                row["domain"] = domain
+                writer_time.writerow(row)
+    except (PermissionError, OSError) as e:
+        print(f"[AuditLogger] Notice: {time_file_path.name} could not be written: {e}", flush=True)
+
+    # 2. Also append new jobs into the consolidated daily file (Jobs_<YYYY-MM-DD>.csv)
     existing_job_ids = set()
-    file_exists = single_file_path.exists() and single_file_path.stat().st_size > 0
-    if file_exists:
+    daily_exists = daily_file_path.exists() and daily_file_path.stat().st_size > 0
+    if daily_exists:
         try:
-            with open(single_file_path, "r", encoding="utf-8-sig") as f_in:
+            with open(daily_file_path, "r", encoding="utf-8-sig") as f_in:
                 reader = csv.DictReader(f_in)
-                for row in reader:
-                    jid = row.get("job_id")
+                for r in reader:
+                    jid = r.get("job_id")
                     if jid:
                         existing_job_ids.add(jid)
         except Exception:
             pass
 
-    # Append new jobs to the single daily file
-    written_count = 0
     try:
-        with open(single_file_path, "a", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=BATCH_CSV_FIELDS, extrasaction="ignore")
-            if not file_exists:
-                writer.writeheader()
+        with open(daily_file_path, "a", newline="", encoding="utf-8-sig") as f_daily:
+            writer_daily = csv.DictWriter(f_daily, fieldnames=BATCH_CSV_FIELDS, extrasaction="ignore")
+            if not daily_exists:
+                writer_daily.writeheader()
             for item in jobs:
                 row = _extract_job_dict(item)
                 jid = row.get("job_id", "")
                 if jid and jid in existing_job_ids:
-                    continue  # Avoid duplicate entries on the same day
+                    continue
                 row["extracted_at_ist"] = ts["ist"]
                 row["extracted_at_utc"] = ts["utc"]
                 row["domain"] = domain
-                writer.writerow(row)
+                writer_daily.writerow(row)
                 if jid:
                     existing_job_ids.add(jid)
-                written_count += 1
     except (PermissionError, OSError) as e:
-        print(f"[AuditLogger] Notice: {single_file_path.name} is currently open in Excel or another program: {e}", flush=True)
+        print(f"[AuditLogger] Notice: {daily_file_path.name} is currently open in Excel: {e}", flush=True)
 
-    # Update Data/latest_extracted_jobs.csv for web dashboard compatibility
+    # 3. Update Data/latest_extracted_jobs.csv for web dashboard compatibility
     try:
         from pipeline.schema import CSV_FIELDS
-        with open(LATEST_CSV_PATH, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
-            writer.writeheader()
+        with open(LATEST_CSV_PATH, "w", newline="", encoding="utf-8-sig") as f_latest:
+            writer_latest = csv.DictWriter(f_latest, fieldnames=CSV_FIELDS, extrasaction="ignore")
+            writer_latest.writeheader()
             for item in jobs:
                 row = _extract_job_dict(item)
-                writer.writerow(row)
+                writer_latest.writerow(row)
     except (PermissionError, OSError):
         pass
 
-    return single_file_path, filename, len(jobs)
+    return time_file_path, time_filename, len(jobs)
 
 
 def record_extraction_run(
@@ -331,7 +349,7 @@ def print_extraction_summary_card(
     ts = get_timestamps()
     sources_str = ", ".join([f"{k}: {v}" for k, v in (by_source or {}).items()]) if by_source else "Multi-source"
 
-    display_batch = f"Data/date/{ts['date_ist']}/{batch_filename}"
+    display_batch = f"Data/Date/{ts['date_ist']}/{batch_filename}"
     if batch_file_path:
         try:
             display_batch = str(Path(batch_file_path).relative_to(ROOT_DIR)).replace("\\", "/")
@@ -361,7 +379,7 @@ if __name__ == "__main__":
         today_file = today_folder / f"Jobs_{ts['date_ist']}.csv"
 
         print("\n" + "=" * 78)
-        print("📁 DATE-WISE ARCHIVES IN Data/date/:")
+        print("📁 DATE-WISE ARCHIVES IN Data/Date/:")
         if DATE_BASE_DIR.exists():
             date_folders = sorted([d.name for d in DATE_BASE_DIR.iterdir() if d.is_dir()])
             for df_name in date_folders:
@@ -371,9 +389,9 @@ if __name__ == "__main__":
                     import pandas as pd
                     try:
                         df_f = pd.read_csv(cf)
-                        print(f"  • Data/date/{df_name}/{cf.name} -> {len(df_f)} total jobs saved")
+                        print(f"  • Data/Date/{df_name}/{cf.name} -> {len(df_f)} total jobs saved")
                     except Exception:
-                        print(f"  • Data/date/{df_name}/{cf.name}")
+                        print(f"  • Data/Date/{df_name}/{cf.name}")
         else:
             print("  (No date folders created yet)")
         print("=" * 78)
@@ -394,5 +412,5 @@ if __name__ == "__main__":
     else:
         print(f"[AuditLogger] Date Archive Root:   {DATE_BASE_DIR}")
         ts = get_timestamps()
-        print(f"[AuditLogger] Today's Single File: Data/date/{ts['date_ist']}/Jobs_{ts['date_ist']}.csv")
+        print(f"[AuditLogger] Today's Single File: Data/Date/{ts['date_ist']}/Jobs_{ts['date_ist']}.csv")
         print(f"[AuditLogger] Current IST Time:    {ts['ist']}")

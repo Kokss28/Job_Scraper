@@ -237,84 +237,14 @@ def execute_extraction(
         duration = time.time() - start_time
         log(f"Extraction for '{name}' completed successfully in {duration:.1f}s.")
         save_completed_slot(slot)
-
-        # Dispatch automated email alert
-        try:
-            from pipeline.notifier import send_extraction_success_alert, send_extraction_failure_alert
-            latest_csv = ROOT_DIR / "Data" / "latest_extracted_jobs.csv"
-            extracted_count = 0
-            by_source = {}
-            sample_jobs = []
-            if latest_csv.exists():
-                try:
-                    import pandas as pd
-                    df_latest = pd.read_csv(latest_csv)
-                    extracted_count = len(df_latest)
-                    by_source = df_latest["source"].value_counts().to_dict()
-                    sample_jobs = df_latest.head(6).to_dict(orient="records")
-                except Exception:
-                    pass
-
-            if extracted_count == 0 and not dry_run:
-                send_extraction_failure_alert(
-                    domain_name=name,
-                    slot_number=slot,
-                    error_message=f"Zero jobs extracted during scheduled run for '{name}'. Check platform selectors or time window.",
-                    duration_seconds=duration,
-                    keywords=keywords,
-                )
-            else:
-                clean_domain = name.replace(" ", "_").replace("&", "and")
-                stamp = datetime.now().strftime("%Y%m%d_%H%M")
-                att_filename = f"Jobs_{clean_domain}_{stamp}.csv"
-
-                send_extraction_success_alert(
-                    domain_name=name,
-                    slot_number=slot,
-                    extracted_jobs=extracted_count,
-                    duration_seconds=duration,
-                    by_source=by_source,
-                    sample_jobs=sample_jobs,
-                    freshness_hours=freshness,
-                    keywords=keywords,
-                    attachment_path=latest_csv if (latest_csv.exists() and extracted_count > 0) else None,
-                    attachment_name=att_filename,
-                )
-        except Exception as notify_err:
-            log(f"Notice: Email notification could not be dispatched: {notify_err}")
-
         return proc.returncode
     except subprocess.CalledProcessError as err:
         duration = time.time() - start_time
         log(f"Extraction for '{name}' exited with error code {err.returncode}")
-        try:
-            from pipeline.notifier import send_extraction_failure_alert
-            send_extraction_failure_alert(
-                domain_name=name,
-                slot_number=slot,
-                error_message=f"Extraction runner process failed with exit code {err.returncode}",
-                duration_seconds=duration,
-                keywords=keywords,
-            )
-        except Exception:
-            pass
         return err.returncode
     except Exception as exc:
         duration = time.time() - start_time
         log(f"Unexpected error running extraction: {exc}")
-        try:
-            import traceback
-            from pipeline.notifier import send_extraction_failure_alert
-            send_extraction_failure_alert(
-                domain_name=name,
-                slot_number=slot,
-                error_message=str(exc),
-                traceback_text=traceback.format_exc(),
-                duration_seconds=duration,
-                keywords=keywords,
-            )
-        except Exception:
-            pass
         return 1
 
 

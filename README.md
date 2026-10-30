@@ -327,11 +327,12 @@ An AI-assisted academic career guidance engine that maps candidate qualification
 - **Soft Skill Isolation**: Distinguishes hard engineering tools from universal soft skills for razor-sharp learning focus.
 - **Client-Side PDF Generation**: Fast, vectorized 2-page executive dossiers generated instantly in the browser without server roundtrips or printer dialogs.
 
-### 📬 6. Automated Email & Alert Notifications
-- **Automated Execution Digests**: Formatted summary emails sent via Gmail SMTP on completed runs, detailing new job counts, platform contributions, and top employers.
-- **Instant Crash & Timeout Alerts**: Immediate notification triggers if scraping sessions encounter rate limits, network timeouts, or 0-job anomalies.
-- **Zero External Dependencies**: Powered entirely by Python's built-in `smtplib` and `email.mime` modules.
-- **Responsive Inline HTML**: Clean, cross-client email templates styled for instant reading on both desktop and mobile email clients.
+### 📁 6. Date & Time-Partitioned CSV Data Archiving
+- **Date-Wise Organization (Data/Date/<YYYY-MM-DD>/)**: Automatically segregates extracted batches by date in Indian Standard Time (IST).
+- **Time-Stamped Run CSVs (Jobs_<Domain>_<HHMMSS>.csv)**: Every hourly extraction run produces an isolated, immutable CSV file named with the exact domain and extraction time.
+- **Daily Cumulative Dataset (Jobs_<YYYY-MM-DD>.csv)**: Deduplicated rolling aggregate of all jobs harvested on that calendar day.
+- **Master Historical Log (Data/extraction_history.csv)**: Full audit record capturing extraction timestamps, domain, keywords, sources, duration, yield, and status.
+- **Automated GitHub Actions Archiving**: The continuous harvester automatically commits new date-stamped CSVs back to the repository and uploads them as 30-day workflow artifacts.
 
 ---
 
@@ -353,7 +354,7 @@ Job_Scraper/
 │   ├── live_scrape_runner.py  # Headless live scraper runner for the web API
 │   ├── recency.py             # Time window filtering (1h - 30d)
 │   ├── role_matcher.py        # Keyword and title classification
-│   ├── notifier.py            # Automated Gmail SMTP execution & failure alert engine
+│   ├── audit_logger.py        # Date & time-partitioned CSV tracking and audit logger
 │   ├── automated_domain_extractor.py # Sequential keyword slot rotation extractor
 │   └── data_quality.py        # Automated schema and integrity audit
 │

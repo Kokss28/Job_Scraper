@@ -25,9 +25,14 @@ node_modules/
 next-env.d.ts
 
 # Data outputs, databases, and local tracking files
-data/
-Data/
+Data/*
+!Data/Date/
+!Data/Date/**
 *.csv
+!Data/Date/**/*.csv
+!Data/Date/*.csv
+!Data/extraction_history.csv
+!Data/latest_extracted_jobs.csv
 *.db
 *.pdf
 *.json
