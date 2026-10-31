@@ -36,6 +36,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Set up Python 3.10
@@ -89,8 +90,8 @@ jobs:
           git add Data/Date/ Data/extraction_history.csv Data/rolling_state.json -f
           if ! git diff --cached --quiet; then
             git commit -m "chore(data): auto-archive extracted jobs in Data/Date/ [skip ci]"
-            git pull --rebase origin main || true
-            git push origin main
+            git pull --rebase origin main || git rebase --abort || true
+            git push origin HEAD:main
           else
             echo "No data changes in Data/Date/ to commit."
           fi
