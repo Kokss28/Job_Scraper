@@ -73,6 +73,13 @@ def sync_jobs(client: Client) -> int:
         if batch:
             client.table("jobs").upsert(batch, on_conflict="job_id").execute()
             synced += len(batch)
+
+    # Automatically refresh PostgreSQL materialized view for instantaneous dashboard analytics
+    try:
+        client.rpc("refresh_dashboard_stats").execute()
+    except Exception:
+        pass  # Safe fallback if materialized view migration hasn't run yet
+
     return synced
 
 

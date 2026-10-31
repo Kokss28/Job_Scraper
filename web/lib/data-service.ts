@@ -13,7 +13,359 @@ import {
 
 export * from "./taxonomy";
 
-// Fallback CSV parser reading ../Data/unified_jobs.csv
+export interface DashboardStats {
+  totalJobs: number;
+  byLocation: { state: string; city: string; count: number }[];
+  topSkills: { skill: string; count: number }[];
+  dailyTrend: { date: string; count: number }[];
+  isCloudSupabase: boolean;
+}
+
+export interface JobFilterParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+  city?: string;
+  state?: string;
+  skill?: string;
+}
+
+export interface PaginatedJobsResult {
+  jobs: UnifiedJobRecord[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  isCloudSupabase: boolean;
+}
+
+// In-memory cache for fast sub-millisecond responses
+let cachedStats: { data: DashboardStats; timestamp: number } | null = null;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes (aligns with scraper frequency)
+
+export function invalidateJobsCache(): void {
+  cachedStats = null;
+}
+
+// ---------------------------------------------------------------------------
+// 1. HIGH-SPEED AGGREGATED STATS (< 25 KB payload)
+// ---------------------------------------------------------------------------
+export async function getDashboardStats(): Promise<DashboardStats> {
+  if (cachedStats && Date.now() - cachedStats.timestamp < CACHE_TTL_MS) {
+    return cachedStats.data;
+  }
+
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+
+      // 1. Try querying the ultra-fast PostgreSQL Materialized View
+      const { data, error } = await supabase
+        .from("dashboard_stats")
+        .select("total_jobs, by_location, top_skills, daily_trend")
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        const stats: DashboardStats = {
+          totalJobs: Number(data.total_jobs || 0),
+          byLocation: Array.isArray(data.by_location) ? data.by_location : [],
+          topSkills: Array.isArray(data.top_skills) ? data.top_skills : [],
+          dailyTrend: Array.isArray(data.daily_trend) ? data.daily_trend : [],
+          isCloudSupabase: true,
+        };
+        cachedStats = { data: stats, timestamp: Date.now() };
+        return stats;
+      }
+
+      // 2. Fallback if Materialized View hasn't been executed yet:
+      // Query exact total count and top recent rows for instant aggregation
+      const countRes = await supabase.from("jobs").select("job_id", { count: "exact", head: true });
+      const total = countRes.count || 0;
+
+      const sampleRes = await supabase
+        .from("jobs")
+        .select("city, state, skills, collected_at")
+        .order("collected_at", { ascending: false })
+        .limit(500);
+
+      const locMap = new Map<string, number>();
+      const skillMap = new Map<string, number>();
+      const dateMap = new Map<string, number>();
+
+      for (const r of sampleRes.data || []) {
+        if (r.city && r.city !== "Not Specified") {
+          const key = `${r.state || "Other"}||${r.city}`;
+          locMap.set(key, (locMap.get(key) || 0) + 1);
+        }
+        if (r.skills && r.skills !== "Not Specified") {
+          for (const s of String(r.skills).split(",")) {
+            const sk = s.trim();
+            if (sk && sk.length > 1) {
+              skillMap.set(sk, (skillMap.get(sk) || 0) + 1);
+            }
+          }
+        }
+        if (r.collected_at) {
+          const d = String(r.collected_at).slice(0, 10);
+          dateMap.set(d, (dateMap.get(d) || 0) + 1);
+        }
+      }
+
+      const byLocation = Array.from(locMap.entries())
+        .map(([k, count]) => {
+          const [state, city] = k.split("||");
+          return { state, city, count };
+        })
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 50);
+
+      const topSkills = Array.from(skillMap.entries())
+        .map(([skill, count]) => ({ skill, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30);
+
+      const dailyTrend = Array.from(dateMap.entries())
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 30);
+
+      const stats: DashboardStats = {
+        totalJobs: total,
+        byLocation,
+        topSkills,
+        dailyTrend,
+        isCloudSupabase: true,
+      };
+      cachedStats = { data: stats, timestamp: Date.now() };
+      return stats;
+    } catch (err) {
+      console.warn("Could not query Supabase stats, falling back to local:", err);
+    }
+  }
+
+  // Local fallback stats
+  const localJobs = loadJobsFromLocalCsv();
+  const locMap = new Map<string, number>();
+  const skillMap = new Map<string, number>();
+  const dateMap = new Map<string, number>();
+
+  for (const r of localJobs) {
+    if (r.city && r.city !== "Not Specified") {
+      const key = `${r.state || "Other"}||${r.city}`;
+      locMap.set(key, (locMap.get(key) || 0) + 1);
+    }
+    if (r.skills && r.skills !== "Not Specified") {
+      for (const s of String(r.skills).split(",")) {
+        const sk = s.trim();
+        if (sk && sk.length > 1) {
+          skillMap.set(sk, (skillMap.get(sk) || 0) + 1);
+        }
+      }
+    }
+    if (r.collected_at) {
+      const d = String(r.collected_at).slice(0, 10);
+      dateMap.set(d, (dateMap.get(d) || 0) + 1);
+    }
+  }
+
+  const stats: DashboardStats = {
+    totalJobs: localJobs.length,
+    byLocation: Array.from(locMap.entries())
+      .map(([k, count]) => {
+        const [state, city] = k.split("||");
+        return { state, city, count };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 50),
+    topSkills: Array.from(skillMap.entries())
+      .map(([skill, count]) => ({ skill, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 30),
+    dailyTrend: Array.from(dateMap.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => b.date.localeCompare(a.date)),
+    isCloudSupabase: false,
+  };
+  cachedStats = { data: stats, timestamp: Date.now() };
+  return stats;
+}
+
+// ---------------------------------------------------------------------------
+// 2. SERVER-PAGINATED JOBS (Only 20 to 50 lightweight card rows)
+// ---------------------------------------------------------------------------
+export async function getPaginatedJobs(
+  params: JobFilterParams = {}
+): Promise<PaginatedJobsResult> {
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.min(100, Math.max(10, params.pageSize || 25));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+
+      let query = supabase
+        .from("jobs")
+        .select(
+          "job_id, source, title, company, city, state, country, min_experience_years, max_experience_years, skills, degree_required, collected_at, link",
+          { count: "exact" }
+        );
+
+      // Server-side text search
+      if (params.query?.trim()) {
+        const q = params.query.trim();
+        query = query.or(
+          `title.ilike.%${q}%,company.ilike.%${q}%,skills.ilike.%${q}%,city.ilike.%${q}%`
+        );
+      }
+
+      // City filter
+      if (params.city && params.city !== "All India") {
+        query = query.ilike("city", `%${params.city.trim()}%`);
+      }
+
+      // State filter
+      if (params.state) {
+        query = query.ilike("state", `%${params.state.trim()}%`);
+      }
+
+      // Skill filter
+      if (params.skill) {
+        query = query.ilike("skills", `%${params.skill.trim()}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("collected_at", { ascending: false, nullsFirst: false })
+        .range(from, to);
+
+      if (!error && data) {
+        const totalCount = count || 0;
+        const enriched: UnifiedJobRecord[] = data.map((j: any) => {
+          const minExp = parseExpNumber(j.min_experience_years);
+          const maxExp = parseExpNumber(j.max_experience_years);
+          const edu = classifyEducation(j.degree_required);
+          return {
+            ...j,
+            min_exp_num: minExp,
+            max_exp_num: maxExp,
+            career_tier: computeCareerTier(minExp, maxExp),
+            normalized_location: normalizeIndianHub(j.city, j.state, j.country),
+            edu_cluster: edu.edu_cluster,
+            edu_subcluster: edu.edu_subcluster,
+            edu_degrees: edu.edu_degrees,
+            exp_display: formatExpDisplay(minExp, maxExp),
+          };
+        });
+
+        return {
+          jobs: enriched,
+          totalCount,
+          page,
+          pageSize,
+          totalPages: Math.ceil(totalCount / pageSize),
+          isCloudSupabase: true,
+        };
+      }
+    } catch (e) {
+      console.warn("Supabase paginated query failed, falling back to local CSV:", e);
+    }
+  }
+
+  // Local fallback filtering
+  const allLocal = loadJobsFromLocalCsv();
+  let filtered = allLocal;
+
+  if (params.query?.trim()) {
+    const q = params.query.toLowerCase().trim();
+    filtered = filtered.filter(
+      (j) =>
+        j.title?.toLowerCase().includes(q) ||
+        j.company?.toLowerCase().includes(q) ||
+        j.skills?.toLowerCase().includes(q)
+    );
+  }
+
+  if (params.city && params.city !== "All India") {
+    const c = params.city.toLowerCase();
+    filtered = filtered.filter((j) => j.city?.toLowerCase().includes(c));
+  }
+
+  if (params.skill) {
+    const s = params.skill.toLowerCase();
+    filtered = filtered.filter((j) => j.skills?.toLowerCase().includes(s));
+  }
+
+  const totalCount = filtered.length;
+  const pageSlice = filtered.slice(from, to + 1);
+
+  return {
+    jobs: pageSlice,
+    totalCount,
+    page,
+    pageSize,
+    totalPages: Math.ceil(totalCount / pageSize),
+    isCloudSupabase: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 3. ON-DEMAND FULL DESCRIPTION (< 5 KB per click)
+// ---------------------------------------------------------------------------
+export async function getJobFullDescription(jobId: string): Promise<string | null> {
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("full_description")
+        .eq("job_id", jobId)
+        .maybeSingle();
+
+      if (!error && data?.full_description) {
+        return data.full_description;
+      }
+    } catch (e) {
+      console.warn("Could not fetch full_description from Supabase:", e);
+    }
+  }
+
+  const allLocal = loadJobsFromLocalCsv();
+  const match = allLocal.find((j) => j.job_id === jobId);
+  return match?.full_description || "Full job description is not available for this posting.";
+}
+
+// ---------------------------------------------------------------------------
+// 4. BACKWARD-COMPATIBLE FAST CATALOG LOADER (For legacy sub-pages)
+// ---------------------------------------------------------------------------
+let cachedCatalog: {
+  jobs: UnifiedJobRecord[];
+  isCloudSupabase: boolean;
+  timestamp: number;
+} | null = null;
+
+export async function getJobsCatalog(): Promise<{
+  jobs: UnifiedJobRecord[];
+  isCloudSupabase: boolean;
+}> {
+  if (cachedCatalog && Date.now() - cachedCatalog.timestamp < CACHE_TTL_MS) {
+    return { jobs: cachedCatalog.jobs, isCloudSupabase: cachedCatalog.isCloudSupabase };
+  }
+
+  // Delegate to paginated fetch with 100 recent rows for ultra-fast response
+  const paginated = await getPaginatedJobs({ page: 1, pageSize: 100 });
+  cachedCatalog = {
+    jobs: paginated.jobs,
+    isCloudSupabase: paginated.isCloudSupabase,
+    timestamp: Date.now(),
+  };
+  return { jobs: paginated.jobs, isCloudSupabase: paginated.isCloudSupabase };
+}
+
+// ---------------------------------------------------------------------------
+// 5. LOCAL CSV FALLBACK PARSER
+// ---------------------------------------------------------------------------
 function loadJobsFromLocalCsv(): UnifiedJobRecord[] {
   try {
     let csvPath = path.resolve(process.cwd(), "../Data/unified_jobs.csv");
@@ -47,11 +399,7 @@ function loadJobsFromLocalCsv(): UnifiedJobRecord[] {
         min_exp_num: minExp,
         max_exp_num: maxExp,
         career_tier: computeCareerTier(minExp, maxExp),
-        normalized_location: normalizeIndianHub(
-          obj.city,
-          obj.state,
-          obj.country
-        ),
+        normalized_location: normalizeIndianHub(obj.city, obj.state, obj.country),
         edu_cluster: edu.edu_cluster,
         edu_subcluster: edu.edu_subcluster,
         edu_degrees: edu.edu_degrees,
@@ -89,94 +437,4 @@ function parseCsvLine(text: string): string[] {
   }
   result.push(cur.trim());
   return result;
-}
-
-// In-memory cache for fast sub-millisecond responses
-let cachedCatalog: {
-  jobs: UnifiedJobRecord[];
-  isCloudSupabase: boolean;
-  timestamp: number;
-} | null = null;
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds
-
-export function invalidateJobsCache(): void {
-  cachedCatalog = null;
-}
-
-// Master loader: tries Supabase first; falls back cleanly to local CSV
-export async function getJobsCatalog(): Promise<{
-  jobs: UnifiedJobRecord[];
-  isCloudSupabase: boolean;
-}> {
-  if (cachedCatalog && Date.now() - cachedCatalog.timestamp < CACHE_TTL_MS) {
-    return { jobs: cachedCatalog.jobs, isCloudSupabase: cachedCatalog.isCloudSupabase };
-  }
-
-  if (hasEnvVars) {
-    try {
-      const supabase = await createClient();
-      // Supabase / PostgREST limits single requests to 1,000 rows by default.
-      // Fetch in chunks of 1,000 to retrieve ALL extracted jobs without truncation.
-      const PAGE_SIZE = 1000;
-      let allRawJobs: any[] = [];
-      let page = 0;
-
-      while (true) {
-        const from = page * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
-        const { data, error } = await supabase
-          .from("jobs")
-          .select("*")
-          .order("collected_at", { ascending: false })
-          .range(from, to);
-
-        if (error) {
-          console.warn("Supabase query page error:", error);
-          break;
-        }
-
-        if (data && data.length > 0) {
-          allRawJobs.push(...data);
-          if (data.length < PAGE_SIZE) {
-            break;
-          }
-          page++;
-        } else {
-          break;
-        }
-      }
-
-      if (allRawJobs.length > 0) {
-        const enriched: UnifiedJobRecord[] = allRawJobs.map((j: any) => {
-          const minExp = parseExpNumber(j.min_experience_years);
-          const maxExp = parseExpNumber(j.max_experience_years);
-          const edu = classifyEducation(j.degree_required);
-          return {
-            ...j,
-            min_exp_num: minExp,
-            max_exp_num: maxExp,
-            career_tier: computeCareerTier(minExp, maxExp),
-            normalized_location: normalizeIndianHub(
-              j.city,
-              j.state,
-              j.country
-            ),
-            edu_cluster: edu.edu_cluster,
-            edu_subcluster: edu.edu_subcluster,
-            edu_degrees: edu.edu_degrees,
-            exp_display: formatExpDisplay(minExp, maxExp),
-          };
-        });
-        cachedCatalog = { jobs: enriched, isCloudSupabase: true, timestamp: Date.now() };
-        return { jobs: enriched, isCloudSupabase: true };
-      }
-    } catch (e) {
-      console.warn("Supabase query failed, falling back to local catalog:", e);
-    }
-  }
-
-  // Local fallback
-  const localJobs = loadJobsFromLocalCsv();
-  cachedCatalog = { jobs: localJobs, isCloudSupabase: false, timestamp: Date.now() };
-  return { jobs: localJobs, isCloudSupabase: false };
 }
