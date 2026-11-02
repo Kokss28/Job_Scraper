@@ -35,6 +35,7 @@ import {
   Tooltip,
 } from "recharts";
 import { type UnifiedJobRecord, isCityMatchStrict } from "@/lib/taxonomy";
+import { type DashboardStats } from "@/lib/data-service";
 import {
   INDIA_STATES,
   INDIA_MAP_VIEWBOX,
@@ -52,6 +53,10 @@ export interface SelectedStateInfo {
 interface TalentPulseDashboardProps {
   initialJobs: UnifiedJobRecord[];
   isCloudSupabase?: boolean;
+  initialStats?: DashboardStats;
+  totalJobsCount?: number;
+  initialPage?: number;
+  initialTotalPages?: number;
 }
 
 export interface CityNode {
@@ -960,15 +965,42 @@ function CustomExpTooltip({ active, payload, label }: { active?: boolean; payloa
 export function TalentPulseDashboard({
   initialJobs,
   isCloudSupabase = false,
+  initialStats,
+  totalJobsCount,
+  initialPage = 1,
+  initialTotalPages = 1,
 }: TalentPulseDashboardProps) {
   // Hold active job catalog in state (seeded by initialJobs) so newly extracted jobs update automatically
   const [jobs, setJobs] = useState<UnifiedJobRecord[]>(initialJobs);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [loadingDescription, setLoadingDescription] = useState<boolean>(false);
 
   // Synchronize state when initialJobs prop changes
   useEffect(() => {
     setJobs(initialJobs);
   }, [initialJobs]);
+
+  const handleSelectJob = async (job: UnifiedJobRecord) => {
+    setSelectedJob(job);
+    if (!job.full_description || job.full_description === "Not Specified") {
+      setLoadingDescription(true);
+      try {
+        const res = await fetch(`/api/jobs/${encodeURIComponent(job.job_id)}`);
+        const json = await res.json();
+        if (json.success && json.fullDescription) {
+          setSelectedJob((prev) =>
+            prev && prev.job_id === job.job_id
+              ? { ...prev, full_description: json.fullDescription }
+              : prev
+          );
+        }
+      } catch (err) {
+        console.warn("Could not load job description:", err);
+      } finally {
+        setLoadingDescription(false);
+      }
+    }
+  };
 
   // 2-Level Progressive Disclosure Architecture:
   // Level 1: selectedState === null (National Overview)
@@ -994,9 +1026,20 @@ export function TalentPulseDashboard({
     setIsMounted(true);
   }, []);
 
-  // Pre-calculate city job distributions across full catalog (strictly pure city jobs, no mixed locations)
+  // Pre-calculate city job distributions from database stats or catalog
   const cityCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    if (initialStats?.byLocation && initialStats.byLocation.length > 0) {
+      for (const node of CITY_NODES) {
+        const nodeLower = node.name.toLowerCase();
+        const match = initialStats.byLocation.find((l) =>
+          l.city.toLowerCase() === nodeLower ||
+          l.city.toLowerCase().includes(nodeLower)
+        );
+        counts[node.name] = match ? match.count : node.baseCount;
+      }
+      return counts;
+    }
     for (const node of CITY_NODES) {
       const matching = jobs.filter((j) =>
         isCityMatchStrict(j.city, node.name, j.normalized_location)
@@ -1004,7 +1047,7 @@ export function TalentPulseDashboard({
       counts[node.name] = jobs.length > 0 ? matching.length : node.baseCount;
     }
     return counts;
-  }, [jobs]);
+  }, [jobs, initialStats]);
 
   // Cities that have active jobs in the catalog, sorted by count descending
   const citiesWithJobs = useMemo(() => {
@@ -1656,7 +1699,7 @@ export function TalentPulseDashboard({
   }, [displayJobs, startIndex, endIndex]);
 
   // Metric counts
-  const totalLiveJobs = jobs.length;
+  const totalLiveJobs = initialStats?.totalJobs || totalJobsCount || jobs.length;
   const currentCityCount =
     selectedCity !== "All India"
       ? (cityCounts[selectedCity] !== undefined
@@ -2751,7 +2794,7 @@ export function TalentPulseDashboard({
                     <tr
                       key={job.job_id}
                       className="hover:bg-indigo-50/40 transition-colors group cursor-pointer"
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => handleSelectJob(job)}
                     >
                       {/* Job Title */}
                       <td className="py-4 px-4 font-bold text-slate-900 text-sm">
@@ -2978,12 +3021,19 @@ export function TalentPulseDashboard({
                 </div>
               )}
 
-              {selectedJob.full_description && (
+              {selectedJob && (
                 <div>
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Description Overview:</span>
-                  <p className="text-xs text-slate-800 mt-1 leading-relaxed max-h-48 overflow-y-auto bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    {selectedJob.full_description}
-                  </p>
+                  {loadingDescription ? (
+                    <div className="flex items-center gap-2 mt-1 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                      Loading detailed job description from database...
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-800 mt-1 leading-relaxed max-h-48 overflow-y-auto bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      {selectedJob.full_description || "No full description available for this position."}
+                    </p>
+                  )}
                 </div>
               )}
 

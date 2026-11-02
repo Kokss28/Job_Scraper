@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJobsCatalog, invalidateJobsCache } from "@/lib/data-service";
+import { getDashboardStats, getPaginatedJobs, invalidateJobsCache } from "@/lib/data-service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,50 +13,55 @@ export async function GET(req: NextRequest) {
       invalidateJobsCache();
     }
 
-    const { jobs, isCloudSupabase } = await getJobsCatalog();
-    const total = jobs.length;
+    // High-speed pre-aggregated stats (< 25 KB)
+    const stats = await getDashboardStats();
 
-    // Determine jobs collected today using current UTC calendar date (scraper timestamps are in UTC)
-    // as well as local date
-    const now = new Date();
-    const todayUtc = now.toISOString().slice(0, 10);
-    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-    let todayCount = 0;
-    let latestTime = 0;
-
-    for (const j of jobs) {
-      if (j.collected_at) {
-        const col = String(j.collected_at);
-        if (col.startsWith(todayUtc) || col.startsWith(todayLocal)) {
-          todayCount++;
-        }
-        const t = new Date(col).getTime();
-        if (!isNaN(t) && t > latestTime) {
-          latestTime = t;
-        }
-      }
+    if (statsOnly) {
+      return NextResponse.json({
+        success: true,
+        total: stats.totalJobs,
+        byLocation: stats.byLocation,
+        topSkills: stats.topSkills,
+        dailyTrend: stats.dailyTrend,
+        isCloudSupabase: stats.isCloudSupabase,
+      });
     }
 
-    // Accurate day-over-day growth percentage
-    const baseline = Math.max(1, total - todayCount);
-    const growthPercentage = total > 0 ? (todayCount / baseline) * 100 : 0;
-    const formattedGrowth = todayCount > 0 ? `↑ +${growthPercentage.toFixed(1)}% today` : `0.0% today`;
+    // Server-side paginated jobs query
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const pageSize = parseInt(searchParams.get("pageSize") || "25", 10);
+    const query = searchParams.get("q") || searchParams.get("query") || "";
+    const city = searchParams.get("city") || "";
+    const state = searchParams.get("state") || "";
+    const skill = searchParams.get("skill") || "";
+
+    const paginated = await getPaginatedJobs({
+      page,
+      pageSize,
+      query,
+      city,
+      state,
+      skill,
+    });
 
     return NextResponse.json({
       success: true,
-      total,
-      todayCount,
-      growthPercentage: Number(growthPercentage.toFixed(2)),
-      formattedGrowth,
-      latestCollectedAt: latestTime > 0 ? new Date(latestTime).toISOString() : null,
-      isCloudSupabase,
-      ...(statsOnly ? {} : { jobs }),
+      total: paginated.totalCount,
+      page: paginated.page,
+      pageSize: paginated.pageSize,
+      totalPages: paginated.totalPages,
+      jobs: paginated.jobs,
+      isCloudSupabase: paginated.isCloudSupabase,
+      stats: {
+        totalJobs: stats.totalJobs,
+        byLocation: stats.byLocation,
+        topSkills: stats.topSkills,
+      },
     });
   } catch (error: any) {
     console.error("API /api/jobs error:", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to fetch jobs catalog" },
+      { success: false, error: error?.message || "Failed to fetch jobs data" },
       { status: 500 }
     );
   }
