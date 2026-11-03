@@ -337,6 +337,99 @@ export async function getJobFullDescription(jobId: string): Promise<string | nul
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 4B. DEGREE REPORT JOBS LOADER (Full Market Intelligence with Month / Timeframe Filtering)
+// ---------------------------------------------------------------------------
+export async function getDegreeReportJobs(timeframe: string = "all"): Promise<{
+  jobs: UnifiedJobRecord[];
+  isCloudSupabase: boolean;
+}> {
+  const normalizedTimeframe = (timeframe || "all").toLowerCase();
+  const cacheKey = `__degree_report_cache_${normalizedTimeframe}`;
+  const cached = (globalThis as any)[cacheKey];
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return { jobs: cached.jobs, isCloudSupabase: cached.isCloudSupabase };
+  }
+
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+      let query = supabase
+        .from("jobs")
+        .select(
+          "job_id, source, title, company, city, state, country, min_experience_years, max_experience_years, skills, degree_required, collected_at, link"
+        )
+        .order("collected_at", { ascending: false });
+
+      const now = new Date();
+      if (/^\d{4}-\d{2}$/.test(normalizedTimeframe)) {
+        const [yearStr, monthStr] = normalizedTimeframe.split("-");
+        const y = parseInt(yearStr, 10);
+        const m = parseInt(monthStr, 10);
+        const start = new Date(y, m - 1, 1).toISOString();
+        const end = new Date(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1).toISOString();
+        query = query.gte("collected_at", start).lt("collected_at", end);
+      } else if (normalizedTimeframe === "this_month") {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        query = query.gte("collected_at", startOfMonth);
+      } else if (normalizedTimeframe === "last_month") {
+        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+        const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        query = query.gte("collected_at", startOfLastMonth).lt("collected_at", startOfThisMonth);
+      } else if (normalizedTimeframe === "30d") {
+        const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gte("collected_at", cutoff);
+      } else if (normalizedTimeframe === "7d") {
+        const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gte("collected_at", cutoff);
+      }
+
+      // Fetch all available rows for the selected timeframe (in chunks of 1,000)
+      const CHUNK_SIZE = 1000;
+      const MAX_CHUNKS = normalizedTimeframe === "all" ? 50 : 20;
+      let allRows: any[] = [];
+
+      for (let p = 0; p < MAX_CHUNKS; p++) {
+        const { data, error } = await query.range(p * CHUNK_SIZE, (p + 1) * CHUNK_SIZE - 1);
+        if (error || !data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < CHUNK_SIZE) break;
+      }
+
+      if (allRows.length > 0) {
+        const enriched: UnifiedJobRecord[] = allRows.map((j: any) => {
+          const minExp = parseExpNumber(j.min_experience_years);
+          const maxExp = parseExpNumber(j.max_experience_years);
+          const edu = classifyEducation(j.degree_required);
+          return {
+            ...j,
+            min_exp_num: minExp,
+            max_exp_num: maxExp,
+            career_tier: computeCareerTier(minExp, maxExp),
+            normalized_location: normalizeIndianHub(j.city, j.state, j.country),
+            edu_cluster: edu.edu_cluster,
+            edu_subcluster: edu.edu_subcluster,
+            edu_degrees: edu.edu_degrees,
+            exp_display: formatExpDisplay(minExp, maxExp),
+          };
+        });
+
+        const result = { jobs: enriched, isCloudSupabase: true };
+        (globalThis as any)[cacheKey] = { ...result, timestamp: Date.now() };
+        return result;
+      }
+    } catch (e) {
+      console.warn("Supabase degree report query failed, falling back to local catalog:", e);
+    }
+  }
+
+  // Local fallback
+  const localJobs = loadJobsFromLocalCsv();
+  const result = { jobs: localJobs, isCloudSupabase: false };
+  (globalThis as any)[cacheKey] = { ...result, timestamp: Date.now() };
+  return result;
+}
+
 // 4. BACKWARD-COMPATIBLE FAST CATALOG LOADER (For legacy sub-pages)
 // ---------------------------------------------------------------------------
 let cachedCatalog: {

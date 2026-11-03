@@ -527,11 +527,64 @@ export function generateDegreeCareerReport(
   const degreeKey = (query.degree || "bsc").toLowerCase();
   const degreeConfig = DEGREE_PATTERNS[degreeKey] || DEGREE_PATTERNS.bsc;
   const experienceFilter = query.experience || "fresher";
+  const timeframe = (query.timeframe || "all").toLowerCase();
 
-  const totalMarketJobs = jobs.length;
+  // 0. Timeframe / Month filter
+  let timeFiltered = jobs;
+  if (timeframe && timeframe !== "all") {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    if (/^\d{4}-\d{2}$/.test(timeframe)) {
+      const [yearStr, monthStr] = timeframe.split("-");
+      const y = parseInt(yearStr, 10);
+      const m = parseInt(monthStr, 10);
+      timeFiltered = jobs.filter((j) => {
+        if (!j.collected_at) return false;
+        const d = new Date(j.collected_at);
+        return !isNaN(d.getTime()) && d.getFullYear() === y && d.getMonth() === m - 1;
+      });
+    } else if (timeframe === "this_month") {
+      timeFiltered = jobs.filter((j) => {
+        if (!j.collected_at) return false;
+        const d = new Date(j.collected_at);
+        return !isNaN(d.getTime()) && d.getFullYear() === curYear && d.getMonth() === curMonth;
+      });
+    } else if (timeframe === "last_month") {
+      const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
+      const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+      timeFiltered = jobs.filter((j) => {
+        if (!j.collected_at) return false;
+        const d = new Date(j.collected_at);
+        return !isNaN(d.getTime()) && d.getFullYear() === prevYear && d.getMonth() === prevMonth;
+      });
+    } else if (timeframe === "30d") {
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      timeFiltered = jobs.filter((j) => {
+        if (!j.collected_at) return false;
+        const d = new Date(j.collected_at);
+        return !isNaN(d.getTime()) && d >= cutoff;
+      });
+    } else if (timeframe === "7d") {
+      const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      timeFiltered = jobs.filter((j) => {
+        if (!j.collected_at) return false;
+        const d = new Date(j.collected_at);
+        return !isNaN(d.getTime()) && d >= cutoff;
+      });
+    }
+  }
+
+  // Fallback to original jobs if timeframe produced 0 records
+  if (timeFiltered.length === 0 && jobs.length > 0) {
+    timeFiltered = jobs;
+  }
+
+  const totalMarketJobs = timeFiltered.length;
 
   // 1. Filter jobs by degree pattern
-  let filtered = jobs.filter((job) => {
+  let filtered = timeFiltered.filter((job) => {
     if (degreeKey === "all") return true;
     const deg = String(job.degree_required || "");
     const desc = String(job.full_description || "");

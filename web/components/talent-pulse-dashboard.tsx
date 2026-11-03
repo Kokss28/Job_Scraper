@@ -1732,16 +1732,16 @@ export function TalentPulseDashboard({
       }
     }
 
-    // Accurate growth percentage based on today's new jobs over prior baseline
-    const baseline = Math.max(1, jobs.length - todayCount);
-    const growth = (todayCount / baseline) * 100;
+    // Option B: True Share of Total Database
+    const totalCatalog = totalLiveJobs || jobs.length || 1;
+    const growth = (todayCount / totalCatalog) * 100;
 
     return {
       count: todayCount,
       percentage: growth,
       formatted: todayCount > 0 ? `↑ +${growth.toFixed(1)}% today` : `0.0% today`,
     };
-  }, [jobs]);
+  }, [jobs, totalLiveJobs]);
 
   // Trigger live crawler extraction and automatically sync database afterwards
   const handleTriggerExtraction = async () => {
@@ -1961,7 +1961,7 @@ export function TalentPulseDashboard({
             </span>
             <span
               id="kpi-today-growth-badge"
-              title={`${todayStats.count.toLocaleString()} jobs collected today out of ${totalLiveJobs.toLocaleString()} total`}
+              title={`${todayStats.count.toLocaleString()} new jobs collected today (${todayStats.percentage.toFixed(1)}% of ${totalLiveJobs.toLocaleString()} total database jobs)}`}
               className="text-xs font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-full transition-all"
             >
               {todayStats.formatted}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJobsCatalog } from "@/lib/data-service";
+import { getDegreeReportJobs } from "@/lib/data-service";
 import { generateDegreeCareerReport } from "@/lib/degree-matching";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +9,10 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const degree = searchParams.get("degree") || "bsc";
     const experience = searchParams.get("experience") || "fresher";
-    const timeframe = searchParams.get("timeframe") || "30d";
+    const timeframe = searchParams.get("timeframe") || "all";
     const search = searchParams.get("search") || "";
 
-    const { jobs, isCloudSupabase } = await getJobsCatalog();
+    const { jobs, isCloudSupabase } = await getDegreeReportJobs(timeframe);
 
     const report = generateDegreeCareerReport(jobs, {
       degree,
