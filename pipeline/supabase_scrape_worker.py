@@ -52,18 +52,23 @@ def supabase_client() -> Client:
     return create_client(url, key)
 
 
-def sync_jobs(client: Client) -> int:
-    csv_path = Path(OUTPUT_DIR) / "unified_jobs.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(f"Scraper output not found: {csv_path}")
-
+def sync_jobs(client: Client, jobs_batch: list[Any] | None = None) -> int:
     synced = 0
-    with csv_path.open("r", newline="", encoding="utf-8-sig") as source:
-        reader = csv.DictReader(source)
-        batch: list[dict[str, Any]] = []
-        for row in reader:
+    batch: list[dict[str, Any]] = []
+
+    if jobs_batch is not None:
+        from dataclasses import asdict, is_dataclass
+        for item in jobs_batch:
+            if is_dataclass(item):
+                row = asdict(item)
+            elif isinstance(item, dict):
+                row = item
+            elif hasattr(item, "__dict__"):
+                row = item.__dict__
+            else:
+                continue
             record = clean_job_record(row)
-            if not record["job_id"]:
+            if not record or not record.get("job_id"):
                 continue
             batch.append(record)
             if len(batch) >= 100:
@@ -73,6 +78,23 @@ def sync_jobs(client: Client) -> int:
         if batch:
             client.table("jobs").upsert(batch, on_conflict="job_id").execute()
             synced += len(batch)
+    else:
+        csv_path = Path(OUTPUT_DIR) / "unified_jobs.csv"
+        if csv_path.exists():
+            with csv_path.open("r", newline="", encoding="utf-8-sig") as source:
+                reader = csv.DictReader(source)
+                for row in reader:
+                    record = clean_job_record(row)
+                    if not record["job_id"]:
+                        continue
+                    batch.append(record)
+                    if len(batch) >= 100:
+                        client.table("jobs").upsert(batch, on_conflict="job_id").execute()
+                        synced += len(batch)
+                        batch.clear()
+                if batch:
+                    client.table("jobs").upsert(batch, on_conflict="job_id").execute()
+                    synced += len(batch)
 
     # Automatically refresh PostgreSQL materialized view for instantaneous dashboard analytics
     try:

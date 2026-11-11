@@ -199,7 +199,7 @@ def main():
             try:
                 from pipeline.supabase_scrape_worker import supabase_client, sync_jobs
                 client = supabase_client()
-                synced = sync_jobs(client)
+                synced = sync_jobs(client, jobs_batch=extracted_batch)
                 log(f"Supabase Cloud synchronized: {synced} jobs updated.")
             except Exception as sb_err:
                 log(f"Supabase sync note: {sb_err}")
