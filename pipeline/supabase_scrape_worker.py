@@ -85,7 +85,7 @@ def sync_jobs(client: Client, jobs_batch: list[Any] | None = None) -> int:
                 reader = csv.DictReader(source)
                 for row in reader:
                     record = clean_job_record(row)
-                    if not record["job_id"]:
+                    if not record or not record.get("job_id"):
                         continue
                     batch.append(record)
                     if len(batch) >= 100:

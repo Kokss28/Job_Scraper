@@ -39,7 +39,7 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = Path(
     os.getenv(
         "PIPELINE_OUTPUT_DIR",
-        BASE_DIR / "Data"
+        BASE_DIR / ".cache"
     )
 )
 

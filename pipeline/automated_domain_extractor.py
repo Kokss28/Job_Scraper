@@ -73,7 +73,7 @@ DOMAIN_SLOTS: List[Dict[str, Any]] = [
 ]
 
 
-STATE_FILE = ROOT_DIR / "Data" / "rolling_state.json"
+STATE_FILE = ROOT_DIR / ".cache" / "rolling_state.json"
 
 
 def log(msg: str):

@@ -324,13 +324,31 @@ def get_supabase_client():
         return None
 
 
-def clean_job_record(row: dict) -> dict:
+def clean_job_record(row: dict) -> dict | None:
     """
-    Standardize a CSV row into a clean dictionary ready for Supabase upsert.
+    Standardize a job record into a clean dictionary ready for Supabase upsert.
     Ensures all expected database schema columns exist and defaults are applied.
+    Rejects malformed, column-shifted, or missing link records.
     """
+    import re
+
+    job_id = (row.get("job_id") or "").strip()
+    link = (row.get("link") or "").strip()
+
+    # Reject empty ID or empty link
+    if not job_id or not link:
+        return None
+
+    # Defense against column shifting (H3):
+    # - link must be an HTTP/HTTPS URL
+    # - job_id must not be a date or timestamp
+    if not (link.startswith("http://") or link.startswith("https://")):
+        return None
+    if re.match(r"^\d{4}-\d{2}-\d{2}", job_id):
+        return None
+
     return {
-        "job_id": (row.get("job_id") or "").strip(),
+        "job_id": job_id,
         "source": row.get("source") or "Not Specified",
         "title": row.get("title") or "Not Specified",
         "company": row.get("company") or "Not Specified",
@@ -343,7 +361,7 @@ def clean_job_record(row: dict) -> dict:
         "degree_required": row.get("degree_required") or "Not Specified",
         "specialization_required": row.get("specialization_required") or "Not Specified",
         "collected_at": row.get("collected_at") or "Not Specified",
-        "link": row.get("link") or "Not Specified",
+        "link": link,
         "full_description": row.get("full_description") or "Not Specified",
     }
 
@@ -382,7 +400,7 @@ def sync_csv_to_supabase(target_csv=None, batch_size=100) -> dict:
         reader = csv.DictReader(file)
         for row in reader:
             record = clean_job_record(row)
-            if not record["job_id"]:
+            if not record or not record.get("job_id"):
                 skipped += 1
                 continue
 
@@ -482,7 +500,9 @@ def sync_supabase_to_sqlite(target_db=None, target_csv=None, batch_size=1000) ->
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         for j in all_jobs:
-            writer.writerow(clean_job_record(j))
+            rec = clean_job_record(j)
+            if rec:
+                writer.writerow(rec)
 
     cursor.execute("SELECT COUNT(*) FROM jobs")
     total_local = cursor.fetchone()[0]

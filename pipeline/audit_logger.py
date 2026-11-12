@@ -338,8 +338,8 @@ def print_extraction_summary_card(
     extracted_count: int,
     new_jobs_added: int,
     total_db_jobs: int,
-    batch_filename: str,
-    duration_seconds: float,
+    batch_filename: str = "",
+    duration_seconds: float = 0.0,
     by_source: Optional[Dict[str, int]] = None,
     batch_file_path: Optional[Path] = None,
 ):
@@ -347,26 +347,19 @@ def print_extraction_summary_card(
     ts = get_timestamps()
     sources_str = ", ".join([f"{k}: {v}" for k, v in (by_source or {}).items()]) if by_source else "Multi-source"
 
-    display_batch = f"Data/Date/{ts['date_ist']}/{batch_filename}"
-    if batch_file_path:
-        try:
-            display_batch = str(Path(batch_file_path).relative_to(ROOT_DIR)).replace("\\", "/")
-        except Exception:
-            display_batch = str(batch_file_path).replace("\\", "/")
-
     print("\n" + "=" * 78)
-    print("📊 EXTRACTION RUN COMPLETE — SINGLE DAILY EXCEL DATASET UPDATED")
+    print("🚀 EXTRACTION COMPLETE — DIRECT POSTGRESQL (SUPABASE) CLOUD")
     print("=" * 78)
     print(f"  • Extraction Time (IST):  {ts['ist']}")
     print(f"  • Extraction Time (UTC):  {ts['utc']}")
     print(f"  • Target Domain:          {domain}")
     print(f"  • Jobs Extracted in Run:  {extracted_count} jobs")
-    print(f"  • New Jobs Added:         +{new_jobs_added} new jobs")
+    print(f"  • Ingested / Synced:      +{new_jobs_added} jobs")
     print(f"  • Total Database Size:    {total_db_jobs} cumulative jobs")
     print(f"  • Platform Yield:         {sources_str}")
     print(f"  • Execution Runtime:      {duration_seconds:.1f}s")
-    print(f"  • Single Daily File:      {display_batch}")
-    print(f"  • Master Historical Log:  Data/extraction_history.csv")
+    print(f"  • Target Destination:     PostgreSQL Supabase Cloud (Direct In-Memory Stream)")
+    print(f"  • Local Files:            Zero disk CSV clutter")
     print("=" * 78 + "\n", flush=True)
 
 

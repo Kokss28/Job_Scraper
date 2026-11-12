@@ -10,7 +10,7 @@ echo   - Slot 1: Python Development
 echo   - Slot 2: Java Development
 echo   - Slot 3: Cloud ^& DevOps
 echo.
-echo Extracted CSVs will be saved automatically to Data\Date\YYYY-MM-DD\
+echo Extracted jobs are streamed directly into Supabase PostgreSQL Cloud in real time.
 echo Press Ctrl+C in this window at any time to pause or exit.
 echo ==============================================================================
 echo.

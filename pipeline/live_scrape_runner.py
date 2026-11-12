@@ -159,50 +159,28 @@ def main():
         # Save the current extracted batch to a dedicated Excel-ready CSV & latest_extracted_jobs.csv
         from pipeline.audit_logger import (
             detect_domain_from_keywords,
-            save_batch_extraction_csv,
-            record_extraction_run,
             print_extraction_summary_card,
         )
 
         domain_name, slot_num = detect_domain_from_keywords(keywords, domain_hint=args.domain)
         extracted_batch = getattr(report, "extracted_jobs", None) or getattr(report, "new_jobs", [])
 
-        batch_file_path, batch_filename, batch_count = save_batch_extraction_csv(
-            jobs=extracted_batch,
-            domain=domain_name,
-            keywords=", ".join(keywords),
-            location=location,
-        )
-
-        rel_save_path = str(batch_file_path.relative_to(ROOT_DIR)).replace("\\", "/")
-        log(f"Current extraction batch ({batch_count} jobs from {', '.join([s.capitalize() for s in sources])}) saved to {rel_save_path}")
-
-        log("Scraping completed! Syncing to SQLite local database...")
-        unified_csv = ROOT_DIR / "Data" / "unified_jobs.csv"
-        if unified_csv.exists():
-            import_csv_to_database(unified_csv)
-
-        # Check total count in SQLite
-        import sqlite3
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM jobs")
-            total_jobs = cursor.fetchone()[0]
-
-        new_count = report.new_jobs_written
-        log(f"Catalog successfully synced. Total jobs in database: {total_jobs} (+{new_count} newly added to catalog, {len(extracted_batch)} in this batch)")
-
-        # Attempt Supabase sync if credentials available
+        # Direct in-memory stream to PostgreSQL (Supabase Cloud)
         sb_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
         sb_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        synced = 0
+        total_jobs = 0
+
         if sb_url and sb_key and not sb_key.startswith("your_"):
             try:
                 from pipeline.supabase_scrape_worker import supabase_client, sync_jobs
                 client = supabase_client()
                 synced = sync_jobs(client, jobs_batch=extracted_batch)
-                log(f"Supabase Cloud synchronized: {synced} jobs updated.")
+                log(f"Supabase Cloud synchronized: {synced} jobs directly upserted.")
+                count_res = client.table("jobs").select("count", count="exact").execute()
+                total_jobs = count_res.count or 0
             except Exception as sb_err:
-                log(f"Supabase sync note: {sb_err}")
+                log(f"Supabase direct sync note: {sb_err}")
 
         def _get_val(obj, key, default=""):
             if isinstance(obj, dict):
@@ -214,33 +192,14 @@ def main():
             src = _get_val(j, "source", "Unknown")
             by_source[src] = by_source.get(src, 0) + 1
 
-        # Record extraction run into master history CSV (Data/extraction_history.csv)
-        record_extraction_run(
-            domain=domain_name,
-            slot=slot_num,
-            keywords=", ".join(keywords),
-            location=location,
-            sources=", ".join([s.capitalize() for s in sources]),
-            extracted_count=len(extracted_batch),
-            new_jobs_added=new_count,
-            total_db_jobs=total_jobs,
-            by_source=by_source,
-            duration_seconds=duration_seconds,
-            status="SUCCESS",
-            batch_filename=batch_filename,
-            batch_file_path=batch_file_path,
-        )
-
         # Print executive summary card to terminal
         print_extraction_summary_card(
             domain=domain_name,
             extracted_count=len(extracted_batch),
-            new_jobs_added=new_count,
+            new_jobs_added=synced,
             total_db_jobs=total_jobs,
-            batch_filename=batch_filename,
             duration_seconds=duration_seconds,
             by_source=by_source,
-            batch_file_path=batch_file_path,
         )
 
         sample_jobs = []

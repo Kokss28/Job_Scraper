@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { createClient } from "@/lib/supabase/server";
 
 // RFC 4180 compliant CSV parser supporting quoted newlines and escaped double quotes
 function parseCsvRecords(text: string): string[][] {
@@ -142,10 +143,60 @@ export async function GET(request: Request) {
       if (fs.existsSync(latestBatchPath)) {
         targetPath = latestBatchPath;
       } else {
-        return NextResponse.json(
-          { error: "Extracted jobs CSV file not found on disk." },
-          { status: 404 }
-        );
+        // Direct PostgreSQL Export from Supabase Cloud
+        try {
+          const supabase = await createClient();
+          let query = supabase
+            .from("jobs")
+            .select("job_id,source,title,company,city,state,country,min_experience_years,max_experience_years,skills,degree_required,specialization_required,collected_at,link")
+            .order("collected_at", { ascending: false })
+            .limit(5000);
+
+          if (sourcesParam) {
+            const allowed = sourcesParam.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+            if (allowed.length === 1) {
+              query = query.ilike("source", `%${allowed[0]}%`);
+            }
+          }
+
+          const { data: dbJobs, error } = await query;
+          if (error || !dbJobs || dbJobs.length === 0) {
+            return NextResponse.json(
+              { error: "No jobs available in database to export." },
+              { status: 404 }
+            );
+          }
+
+          const headers = [
+            "job_id", "source", "title", "company", "city", "state", "country",
+            "min_experience_years", "max_experience_years", "skills",
+            "degree_required", "specialization_required", "collected_at", "link"
+          ];
+
+          const csvRows = [
+            headers.join(","),
+            ...dbJobs.map((row: any) =>
+              headers
+                .map((h) => `"${String(row[h] || "").replace(/"/g, '""')}"`)
+                .join(",")
+            ),
+          ].join("\r\n");
+
+          const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+          return new NextResponse(csvRows, {
+            status: 200,
+            headers: {
+              "Content-Type": "text/csv; charset=utf-8",
+              "Content-Disposition": `attachment; filename="extracted_jobs_cloud_${timestamp}.csv"`,
+              "Cache-Control": "no-store, no-cache, must-revalidate",
+            },
+          });
+        } catch (dbErr: any) {
+          return NextResponse.json(
+            { error: `Database export error: ${dbErr?.message || dbErr}` },
+            { status: 500 }
+          );
+        }
       }
     }
 

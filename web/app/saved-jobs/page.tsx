@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { getJobsCatalog } from "@/lib/data-service";
 
+export const dynamic = "force-dynamic";
+
 export default async function SavedJobsPage() {
   const { isCloudSupabase } = await getJobsCatalog();
   let userEmail: string | null = null;
