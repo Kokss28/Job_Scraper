@@ -21,6 +21,9 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  Calendar,
+  Clock,
+  ChevronDown,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -34,8 +37,8 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { type UnifiedJobRecord, isCityMatchStrict } from "@/lib/taxonomy";
-import { type DashboardStats } from "@/lib/data-service";
+import { type UnifiedJobRecord, isCityMatchStrict, CITY_SEARCH_ALIASES } from "@/lib/taxonomy";
+import type { DashboardStats } from "@/lib/data-service";
 import {
   INDIA_STATES,
   INDIA_MAP_VIEWBOX,
@@ -49,6 +52,22 @@ export interface SelectedStateInfo {
   name: string;
   totalJobs: number;
 }
+
+export interface TimeWindowOption {
+  key: string;
+  label: string;
+  shortLabel: string;
+  hours: number | null;
+}
+
+export const TIME_WINDOWS: TimeWindowOption[] = [
+  { key: "all", label: "All Time", shortLabel: "All Time", hours: null },
+  { key: "2h", label: "Last 2 Hours", shortLabel: "Last 2h", hours: 2 },
+  { key: "4h", label: "Last 4 Hours", shortLabel: "Last 4h", hours: 4 },
+  { key: "12h", label: "Last 12 Hours", shortLabel: "Last 12h", hours: 12 },
+  { key: "24h", label: "Last 24 Hours", shortLabel: "Last 24h", hours: 24 },
+  { key: "7d", label: "Last 7 Days", shortLabel: "Last 7d", hours: 168 },
+];
 
 interface TalentPulseDashboardProps {
   initialJobs: UnifiedJobRecord[];
@@ -91,6 +110,34 @@ const CITY_NODES: CityNode[] = [
     lw: 88,
     tier: 1,
     baseCount: 2840,
+  },
+  {
+    name: "Gurugram",
+    fullName: "Gurugram (Gurgaon), Haryana",
+    state: "HR",
+    stateId: "hr",
+    x: 176,
+    y: 222,
+    labelPos: "left",
+    lx: 104,
+    ly: 218,
+    lw: 70,
+    tier: 1,
+    baseCount: 1200,
+  },
+  {
+    name: "Noida",
+    fullName: "Noida / Greater Noida, Uttar Pradesh",
+    state: "UP",
+    stateId: "up",
+    x: 198,
+    y: 218,
+    labelPos: "right",
+    lx: 212,
+    ly: 214,
+    lw: 64,
+    tier: 1,
+    baseCount: 1100,
   },
   {
     name: "Mumbai",
@@ -317,6 +364,20 @@ const CITY_NODES: CityNode[] = [
     lw: 76,
     tier: 2,
     baseCount: 260,
+  },
+  {
+    name: "Raipur",
+    fullName: "Raipur, Chhattisgarh",
+    state: "CT",
+    stateId: "ct",
+    x: 295,
+    y: 382,
+    labelPos: "right",
+    lx: 308,
+    ly: 376,
+    lw: 74,
+    tier: 2,
+    baseCount: 180,
   },
   {
     name: "Surat",
@@ -832,6 +893,10 @@ const TALENT_CORRIDORS = [
   { x1: 184, y1: 602, x2: 210, y2: 638 }, // Coimbatore - Madurai
   { x1: 210, y1: 638, x2: 186, y2: 670 }, // Madurai - Thiruvananthapuram
   { x1: 130, y1: 456, x2: 130, y2: 515 }, // Pune - Goa
+  { x1: 186, y1: 210, x2: 176, y2: 222 }, // Delhi - Gurugram
+  { x1: 186, y1: 210, x2: 198, y2: 218 }, // Delhi - Noida
+  { x1: 231, y1: 385, x2: 295, y2: 382 }, // Nagpur - Raipur
+  { x1: 295, y1: 382, x2: 366, y2: 407 }, // Raipur - Bhubaneswar
 ];
 
 const CANONICAL_SKILL_MAP: Record<string, string> = {
@@ -1022,8 +1087,10 @@ export function TalentPulseDashboard({
   const [serverTotalCount, setServerTotalCount] = useState<number | null>(null);
   const [isServerLoading, setIsServerLoading] = useState<boolean>(false);
   const [isMounted, setIsMounted] = useState<boolean>(false);
-  const [mapViewMode, setMapViewMode] = useState<"all" | "major">("all");
+  const [mapViewMode, setMapViewMode] = useState<"all" | "major">("major");
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
+  const [timeWindow, setTimeWindow] = useState<string>("all");
+  const [timeWindowOpen, setTimeWindowOpen] = useState<boolean>(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1032,14 +1099,36 @@ export function TalentPulseDashboard({
   // Pre-calculate city job distributions from database stats or catalog
   const cityCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    for (const node of CITY_NODES) {
+      counts[node.name] = 0;
+    }
+
     if (initialStats?.byLocation && initialStats.byLocation.length > 0) {
-      for (const node of CITY_NODES) {
-        const nodeLower = node.name.toLowerCase();
-        const match = initialStats.byLocation.find((l) =>
-          l.city.toLowerCase() === nodeLower ||
-          l.city.toLowerCase().includes(nodeLower)
-        );
-        counts[node.name] = match ? match.count : 0;
+      for (const loc of initialStats.byLocation) {
+        if (!loc.city) continue;
+        const locLower = loc.city.toLowerCase().trim();
+
+        // 1. Direct or alias match using CITY_SEARCH_ALIASES
+        let matched = false;
+        for (const node of CITY_NODES) {
+          const nodeKey = node.name.toLowerCase();
+          const aliases = CITY_SEARCH_ALIASES[nodeKey] || [nodeKey];
+          if (aliases.some((a) => locLower.includes(a))) {
+            counts[node.name] = (counts[node.name] || 0) + loc.count;
+            matched = true;
+            break;
+          }
+        }
+
+        // 2. Fallback substring match if not caught by aliases
+        if (!matched) {
+          for (const node of CITY_NODES) {
+            if (locLower.includes(node.name.toLowerCase())) {
+              counts[node.name] = (counts[node.name] || 0) + loc.count;
+              break;
+            }
+          }
+        }
       }
       return counts;
     }
@@ -1065,14 +1154,46 @@ export function TalentPulseDashboard({
       counts[state.id] = 0;
     }
 
+    const stateLookup = new Map<string, string>();
+    for (const s of INDIA_STATES) {
+      stateLookup.set(s.name.toLowerCase(), s.id);
+      stateLookup.set(s.id.toLowerCase(), s.id);
+    }
+    const codeMap: Record<string, string> = {
+      ka: "ka", tn: "tn", mh: "mh", tg: "tg", ts: "tg", dl: "dl", hr: "hr",
+      up: "up", kl: "kl", gj: "gj", wb: "wb", rj: "rj", mp: "mp", pb: "pb",
+      ch: "ch", or: "or", od: "or", ct: "ct", cg: "ct", ap: "ap", br: "br",
+      ut: "ut", uk: "ut", jh: "jh", as: "as", ar: "ar", ga: "ga", jk: "jk",
+    };
+
     if (initialStats?.byLocation && initialStats.byLocation.length > 0) {
       for (const item of initialStats.byLocation) {
-        if (!item.state) continue;
-        const sMatch = INDIA_STATES.find(
-          (s) => s.name.toLowerCase() === item.state.toLowerCase() || s.id.toLowerCase() === item.state.toLowerCase()
-        );
-        if (sMatch && counts[sMatch.id] !== undefined) {
-          counts[sMatch.id] += item.count;
+        let matchedId: string | null = null;
+        if (item.state) {
+          const sRaw = item.state.toLowerCase().trim();
+          const sFirst = sRaw.split(",")[0].trim();
+          if (stateLookup.has(sRaw)) {
+            matchedId = stateLookup.get(sRaw)!;
+          } else if (stateLookup.has(sFirst)) {
+            matchedId = stateLookup.get(sFirst)!;
+          } else if (codeMap[sFirst]) {
+            matchedId = codeMap[sFirst];
+          }
+        }
+        // If state was unassigned or 'Other', resolve from city node
+        if (!matchedId && item.city) {
+          const cLower = item.city.toLowerCase().trim();
+          for (const node of CITY_NODES) {
+            const nodeKey = node.name.toLowerCase();
+            const aliases = CITY_SEARCH_ALIASES[nodeKey] || [nodeKey];
+            if (aliases.some((a) => cLower.includes(a))) {
+              matchedId = node.stateId;
+              break;
+            }
+          }
+        }
+        if (matchedId && counts[matchedId] !== undefined) {
+          counts[matchedId] += item.count;
         }
       }
       return counts;
@@ -1256,10 +1377,10 @@ export function TalentPulseDashboard({
     setCurrentPage(1);
   };
 
-  // Automatically reset to page 1 when city, state, skill filter, or search query changes
+  // Automatically reset to page 1 when city, state, skill filter, search query, or time window changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCity, selectedState, selectedSkillFilter, searchQuery]);
+  }, [selectedCity, selectedState, selectedSkillFilter, searchQuery, timeWindow]);
 
   // Refresh job catalog from database (calls /api/jobs)
   const refreshFromDatabase = useCallback(async (forced: boolean = false) => {
@@ -1287,15 +1408,16 @@ export function TalentPulseDashboard({
     return () => clearInterval(interval);
   }, [refreshFromDatabase]);
 
-  // Server-side full database search & filtering across all Supabase records (H4 fix)
+  // Server-side full database search & filtering across all Supabase records (H4 fix + Recency)
   useEffect(() => {
     const hasSearch = searchQuery.trim().length > 0;
     const hasSkill = Boolean(selectedSkillFilter);
     const hasCity = selectedCity && selectedCity !== "All India";
     const hasState = Boolean(selectedState);
+    const hasTimeWindow = timeWindow !== "all";
 
     // If national default overview with no search/filters and on page 1, use initial preloaded jobs
-    if (!hasSearch && !hasSkill && !hasCity && !hasState && currentPage === 1) {
+    if (!hasSearch && !hasSkill && !hasCity && !hasState && !hasTimeWindow && currentPage === 1) {
       setServerJobs(null);
       setServerTotalCount(null);
       return;
@@ -1313,6 +1435,11 @@ export function TalentPulseDashboard({
         if (hasCity) params.set("city", selectedCity);
         if (hasState && selectedState) params.set("state", selectedState.name);
 
+        const currentWindow = TIME_WINDOWS.find((w) => w.key === timeWindow);
+        if (currentWindow?.hours) {
+          params.set("hours", String(currentWindow.hours));
+        }
+
         const res = await fetch(`/api/jobs?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
@@ -1329,7 +1456,7 @@ export function TalentPulseDashboard({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedSkillFilter, selectedCity, selectedState, currentPage]);
+  }, [searchQuery, selectedSkillFilter, selectedCity, selectedState, timeWindow, currentPage]);
 
   // Dynamic relative time for last extraction run
   const lastExtractionText = useMemo(() => {
@@ -1354,17 +1481,18 @@ export function TalentPulseDashboard({
     return `${diffDays} Day${diffDays > 1 ? "s" : ""} Ago`;
   }, [jobs]);
 
-  // Nodes to display on the India map based on the 2-level progressive disclosure architecture:
-  // Strictly display locations that actually have active jobs in the database (count > 0).
-  // Locations with 0 jobs are never shown; as soon as new jobs are extracted for any city,
-  // that location is automatically added to the map with its live job volume!
+  // Nodes to display on the India map based on progressive disclosure:
+  // When mapViewMode is 'all', display all 54 national GIS tech nodes across India.
+  // When mapViewMode is 'major', display all active tech hubs with live jobs in the database.
+  // State drill-down displays all regional hubs within that selected state.
   const displayedCityNodes = useMemo(() => {
-    // Only include cities that have active jobs in the database
-    let list = CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
+    let list = mapViewMode === "all"
+      ? CITY_NODES
+      : CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
 
     // LEVEL 2: State Drill-Down (State Selected)
     if (selectedState) {
-      list = list.filter((c) => c.stateId === selectedState.id);
+      list = CITY_NODES.filter((c) => c.stateId === selectedState.id);
     }
 
     // If a specific city is selected, ensure it remains in the rendered list so user never loses sight of selection
@@ -1402,6 +1530,7 @@ export function TalentPulseDashboard({
     selectedCity,
     hoveredCity,
     cityCounts,
+    mapViewMode,
   ]);
 
   // Current active city info
@@ -1768,35 +1897,48 @@ export function TalentPulseDashboard({
 
   // Dynamically compute today's additions and accurate growth percentage from database timestamps
   const todayStats = useMemo(() => {
-    if (!jobs || jobs.length === 0) {
+    const totalCount = initialStats?.totalJobs || totalJobsCount || (jobs ? jobs.length : 0);
+    if (totalCount === 0) {
       return { count: 0, percentage: 0, formatted: "0.0% today" };
     }
 
     const now = new Date();
-    // Scraper writes ISO strings in UTC (e.g. 2026-10-28T06:45:00.022498+00:00)
+    // UTC and Local date string (e.g. 2026-11-12)
     const todayUtc = now.toISOString().slice(0, 10);
     const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
     let todayCount = 0;
-    for (const j of jobs) {
-      if (j.collected_at) {
-        const col = String(j.collected_at);
-        if (col.startsWith(todayUtc) || col.startsWith(todayLocal)) {
-          todayCount++;
+    // 1. Check pre-aggregated daily trend from Supabase materialized view
+    if (initialStats?.dailyTrend && Array.isArray(initialStats.dailyTrend)) {
+      const todayMatch = initialStats.dailyTrend.find(
+        (d) => d.date.startsWith(todayUtc) || d.date.startsWith(todayLocal)
+      );
+      if (todayMatch && typeof todayMatch.count === "number") {
+        todayCount = todayMatch.count;
+      }
+    }
+
+    // 2. Fallback to scanning catalog if dailyTrend had no entry
+    if (todayCount === 0 && jobs) {
+      for (const j of jobs) {
+        if (j.collected_at) {
+          const col = String(j.collected_at);
+          if (col.startsWith(todayUtc) || col.startsWith(todayLocal)) {
+            todayCount++;
+          }
         }
       }
     }
 
-    // Accurate growth percentage based on today's new jobs over prior baseline
-    const baseline = Math.max(1, jobs.length - todayCount);
-    const growth = (todayCount / baseline) * 100;
+    // Option B: Real percentage = today's additions divided by the full database count
+    const growth = (todayCount / totalCount) * 100;
 
     return {
       count: todayCount,
       percentage: growth,
       formatted: todayCount > 0 ? `↑ +${growth.toFixed(1)}% today` : `0.0% today`,
     };
-  }, [jobs]);
+  }, [jobs, initialStats, totalJobsCount]);
 
   // Trigger live crawler extraction and automatically sync database afterwards
   const handleTriggerExtraction = async () => {
@@ -1828,59 +1970,27 @@ export function TalentPulseDashboard({
     }
   };
 
-  // Export current city jobs to CSV (strictly saves selected city, eliminates mixed locations)
+  // Export current city jobs to CSV directly from Supabase Cloud with active time window and city filters
   const handleExportCityCsv = () => {
-    const jobsToExport = displayJobs;
-    const headers = [
-      "Job ID",
-      "Title",
-      "Company",
-      "City",
-      "Experience",
-      "Source",
-      "Skills",
-      "Link",
-    ];
-    const exportName =
-      selectedCity !== "All India"
-        ? selectedCity
-        : selectedState
-        ? selectedState.name
-        : "all_india";
+    const selectedWindow = TIME_WINDOWS.find((w) => w.key === timeWindow);
+    const params = new URLSearchParams({ batch: "all" });
 
-    const rows = jobsToExport.map((j) => {
-      // Clean, single-city location without mixed other cities
-      const cleanCity =
-        selectedCity !== "All India"
-          ? selectedCity
-          : j.city && j.city !== "Not Specified"
-          ? j.city
-          : j.normalized_location || (selectedState ? selectedState.name : "India");
+    if (selectedWindow?.hours) {
+      params.set("hours", String(selectedWindow.hours));
+    }
+    if (selectedCity && selectedCity !== "All India") {
+      params.set("city", selectedCity);
+    }
+    if (selectedState) {
+      params.set("state", selectedState.name);
+    }
 
-      return [
-        `"${j.job_id}"`,
-        `"${(j.title || "").replace(/"/g, '""')}"`,
-        `"${(j.company || "").replace(/"/g, '""')}"`,
-        `"${cleanCity.replace(/"/g, '""')}"`,
-        `"${(j.exp_display || j.min_experience_years || "").replace(/"/g, '""')}"`,
-        `"${(j.source || "").replace(/"/g, '""')}"`,
-        `"${(j.skills || "").replace(/"/g, '""')}"`,
-        `"${(j.link || "").replace(/"/g, '""')}"`,
-      ];
-    });
-
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute(
-      "download",
-      `${exportName.toLowerCase().replace(/\s+/g, "_")}_jobs.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const exportUrl = `/api/scraper/export?${params.toString()}`;
+    const a = document.createElement("a");
+    a.href = exportUrl;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -1990,6 +2100,73 @@ export function TalentPulseDashboard({
               <span className="text-[10px] text-emerald-700 underline ml-0.5 font-semibold">Reset</span>
             )}
           </button>
+
+          {/* Extraction Recency (Calendar / Clock) Time-Window Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              id="time-window-dropdown-btn"
+              onClick={() => setTimeWindowOpen((prev) => !prev)}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-950 border border-slate-300 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Filter jobs & export by extraction recency"
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span>
+                {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label || "All Time"}
+              </span>
+              <ChevronDown
+                className={`w-3 h-3 text-slate-400 transition-transform ${
+                  timeWindowOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {timeWindowOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setTimeWindowOpen(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-indigo-600" />
+                    <span>Extraction Recency</span>
+                  </div>
+                  {TIME_WINDOWS.map((w) => {
+                    const active = timeWindow === w.key;
+                    return (
+                      <button
+                        key={w.key}
+                        type="button"
+                        onClick={() => {
+                          setTimeWindow(w.key);
+                          setTimeWindowOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center justify-between transition-colors ${
+                          active
+                            ? "bg-indigo-50 text-indigo-700 font-bold"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              active ? "bg-indigo-600" : "bg-slate-300"
+                            }`}
+                          />
+                          {w.label}
+                        </span>
+                        {active && (
+                          <span className="text-[10px] font-bold text-indigo-600">Active</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2104,6 +2281,36 @@ export function TalentPulseDashboard({
                   : "National proportional density map — bubble sizes scale by live hiring volume. Click any state to drill down"}
               </p>
             </div>
+
+            {/* View Mode Toggle: Active Hubs vs All India GIS Hubs */}
+            {!selectedState && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMapViewMode("major")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    mapViewMode === "major"
+                      ? "bg-white text-indigo-700 shadow-2xs border border-slate-200/80"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Show active tech hubs with live jobs extracted in the database"
+                >
+                  Active Hubs ({citiesWithJobs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapViewMode("all")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    mapViewMode === "all"
+                      ? "bg-white text-indigo-700 shadow-2xs border border-slate-200/80"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Show all national GIS benchmark tech nodes across India"
+                >
+                  All Hubs ({CITY_NODES.length})
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 2-Level Progressive Disclosure Navigation & Breadcrumb Bar */}
@@ -2562,7 +2769,7 @@ export function TalentPulseDashboard({
                 </span>
                 <span>•</span>
                 <span>
-                  {selectedState ? `${selectedState.totalJobs} State Roles` : `${jobs.length} Positions`}
+                  {selectedState ? `${selectedState.totalJobs.toLocaleString()} State Roles` : `${totalLiveJobs.toLocaleString()} Positions`}
                 </span>
               </div>
             </div>
@@ -2772,22 +2979,45 @@ export function TalentPulseDashboard({
             </h3>
             <span className="text-xs font-semibold text-slate-600" id="table-count-label">
               (Showing {totalDisplayCount > 0 ? `${startIndex + 1}–${endIndex}` : "0"} of{" "}
-              {totalDisplayCount.toLocaleString()} matching records • Page {safeCurrentPage} of {totalPages})
+              {totalDisplayCount.toLocaleString()} matching records
+              {timeWindow !== "all" && (
+                <span className="text-indigo-600 font-bold ml-1">
+                  • {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label}
+                </span>
+              )}{" "}
+              • Page {safeCurrentPage} of {totalPages})
               {isServerLoading && <span className="ml-2 text-indigo-600 animate-pulse text-[11px] font-bold">Searching...</span>}
             </span>
           </div>
 
-          {selectedSkillFilter && (
-            <div className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-900 px-3 py-1 rounded-lg border border-indigo-200 font-bold shadow-2xs">
-              <span>Filter: <strong>{selectedSkillFilter}</strong></span>
-              <button
-                onClick={() => setSelectedSkillFilter(null)}
-                className="hover:text-indigo-950 ml-1"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {timeWindow !== "all" && (
+              <div className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-900 px-3 py-1 rounded-lg border border-indigo-200 font-bold shadow-2xs">
+                <Clock className="w-3 h-3 text-indigo-600" />
+                <span>Recency: <strong>{TIME_WINDOWS.find((w) => w.key === timeWindow)?.label}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => setTimeWindow("all")}
+                  className="hover:text-indigo-950 ml-1 cursor-pointer"
+                  title="Clear time window filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {selectedSkillFilter && (
+              <div className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-900 px-3 py-1 rounded-lg border border-indigo-200 font-bold shadow-2xs">
+                <span>Filter: <strong>{selectedSkillFilter}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSkillFilter(null)}
+                  className="hover:text-indigo-950 ml-1 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Data Table */}

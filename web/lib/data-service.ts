@@ -9,6 +9,8 @@ import {
   computeCareerTier,
   formatExpDisplay,
   normalizeIndianHub,
+  CITY_SEARCH_ALIASES,
+  CITY_TO_STATE_FALLBACK,
 } from "./taxonomy";
 
 export * from "./taxonomy";
@@ -28,6 +30,7 @@ export interface JobFilterParams {
   city?: string;
   state?: string;
   skill?: string;
+  hours?: number;
 }
 
 export interface PaginatedJobsResult {
@@ -78,26 +81,59 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         return stats;
       }
 
-      // 2. Fallback if Materialized View hasn't been executed yet:
-      // Query exact total count and top recent rows for instant aggregation
+      // 2. High-speed full database location resolution across all jobs
       const countRes = await supabase.from("jobs").select("job_id", { count: "exact", head: true });
       const total = countRes.count || 0;
 
-      const sampleRes = await supabase
+      // Parallel batch query for city, state across the entire database (chunks of 1000)
+      const CHUNK_SIZE = 1000;
+      const chunkPromises: PromiseLike<any>[] = [];
+      for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+        chunkPromises.push(
+          supabase
+            .from("jobs")
+            .select("city, state")
+            .range(offset, offset + CHUNK_SIZE - 1)
+        );
+      }
+
+      // Simultaneously fetch recent 2000 jobs for skills and daily trends
+      const samplePromise = supabase
         .from("jobs")
-        .select("city, state, skills, collected_at")
+        .select("skills, collected_at")
         .order("collected_at", { ascending: false })
-        .limit(500);
+        .limit(2000);
+
+      const [chunkResults, sampleRes] = await Promise.all([
+        Promise.all(chunkPromises),
+        samplePromise,
+      ]);
 
       const locMap = new Map<string, number>();
       const skillMap = new Map<string, number>();
       const dateMap = new Map<string, number>();
 
-      for (const r of sampleRes.data || []) {
-        if (r.city && r.city !== "Not Specified") {
-          const key = `${r.state || "Other"}||${r.city}`;
-          locMap.set(key, (locMap.get(key) || 0) + 1);
+      for (const res of chunkResults) {
+        for (const r of res.data || []) {
+          const rawCity = (r.city || "").trim();
+          if (rawCity && rawCity !== "Not Specified" && rawCity !== "Remote") {
+            let stateVal = (r.state || "").trim();
+            if (!stateVal || stateVal === "Not Specified" || stateVal === "Other") {
+              const cLower = rawCity.toLowerCase();
+              for (const [cKey, sVal] of Object.entries(CITY_TO_STATE_FALLBACK)) {
+                if (cLower.includes(cKey)) {
+                  stateVal = sVal;
+                  break;
+                }
+              }
+            }
+            const key = `${stateVal || "Other"}||${rawCity}`;
+            locMap.set(key, (locMap.get(key) || 0) + 1);
+          }
         }
+      }
+
+      for (const r of sampleRes.data || []) {
         if (r.skills && r.skills !== "Not Specified") {
           for (const s of String(r.skills).split(",")) {
             const sk = s.trim();
@@ -112,13 +148,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         }
       }
 
+      // Return all locations with authentic database counts
       const byLocation = Array.from(locMap.entries())
         .map(([k, count]) => {
           const [state, city] = k.split("||");
           return { state, city, count };
         })
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 50);
+        .sort((a, b) => b.count - a.count);
 
       const topSkills = Array.from(skillMap.entries())
         .map(([skill, count]) => ({ skill, count }))
@@ -221,9 +257,12 @@ export async function getPaginatedJobs(
         );
       }
 
-      // City filter
+      // City filter with alias expansion
       if (params.city && params.city !== "All India") {
-        query = query.ilike("city", `%${params.city.trim()}%`);
+        const cLower = params.city.trim().toLowerCase();
+        const aliases = CITY_SEARCH_ALIASES[cLower] || [cLower];
+        const orConditions = aliases.map((a) => `city.ilike.%${a}%`).join(",");
+        query = query.or(orConditions);
       }
 
       // State filter
@@ -234,6 +273,12 @@ export async function getPaginatedJobs(
       // Skill filter
       if (params.skill) {
         query = query.ilike("skills", `%${params.skill.trim()}%`);
+      }
+
+      // Time window recency filter (hours)
+      if (params.hours && params.hours > 0) {
+        const cutoff = new Date(Date.now() - params.hours * 60 * 60 * 1000).toISOString();
+        query = query.gte("collected_at", cutoff);
       }
 
       const { data, count, error } = await query
@@ -288,8 +333,12 @@ export async function getPaginatedJobs(
   }
 
   if (params.city && params.city !== "All India") {
-    const c = params.city.toLowerCase();
-    filtered = filtered.filter((j) => j.city?.toLowerCase().includes(c));
+    const c = params.city.toLowerCase().trim();
+    const aliases = CITY_SEARCH_ALIASES[c] || [c];
+    filtered = filtered.filter((j) => {
+      const jc = (j.city || "").toLowerCase();
+      return aliases.some((a) => jc.includes(a));
+    });
   }
 
   if (params.skill) {

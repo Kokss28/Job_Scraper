@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
+import { CITY_SEARCH_ALIASES } from "@/lib/taxonomy";
 
 // RFC 4180 compliant CSV parser supporting quoted newlines and escaped double quotes
 function parseCsvRecords(text: string): string[][] {
@@ -88,6 +89,10 @@ export async function GET(request: Request) {
     const batch = searchParams.get("batch"); // 'latest' or 'all'
     const sourcesParam = searchParams.get("sources"); // comma-separated e.g. "LinkedIn,Naukri,Indeed"
     const freshnessParam = searchParams.get("freshness"); // hours e.g. "24" or "72"
+    const hoursParam = searchParams.get("hours") || freshnessParam;
+    const cityParam = searchParams.get("city");
+    const stateParam = searchParams.get("state");
+    const hours = hoursParam ? parseFloat(hoursParam) : 0;
     const recentOnly = searchParams.get("recent");
 
     let rootDir = process.cwd();
@@ -150,7 +155,23 @@ export async function GET(request: Request) {
             .from("jobs")
             .select("job_id,source,title,company,city,state,country,min_experience_years,max_experience_years,skills,degree_required,specialization_required,collected_at,link")
             .order("collected_at", { ascending: false })
-            .limit(5000);
+            .limit(10000);
+
+          if (hours > 0) {
+            const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+            query = query.gte("collected_at", cutoff);
+          }
+
+          if (cityParam && cityParam !== "All India") {
+            const cLower = cityParam.trim().toLowerCase();
+            const aliases = CITY_SEARCH_ALIASES[cLower] || [cLower];
+            const orConditions = aliases.map((a) => `city.ilike.%${a}%`).join(",");
+            query = query.or(orConditions);
+          }
+
+          if (stateParam) {
+            query = query.ilike("state", `%${stateParam.trim()}%`);
+          }
 
           if (sourcesParam) {
             const allowed = sourcesParam.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -162,7 +183,7 @@ export async function GET(request: Request) {
           const { data: dbJobs, error } = await query;
           if (error || !dbJobs || dbJobs.length === 0) {
             return NextResponse.json(
-              { error: "No jobs available in database to export." },
+              { error: "No jobs matching your filter criteria were found to export." },
               { status: 404 }
             );
           }
@@ -183,11 +204,15 @@ export async function GET(request: Request) {
           ].join("\r\n");
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+          const hoursTag = hours > 0 ? `last_${hours}h_` : "";
+          const cityTag = cityParam && cityParam !== "All India" ? `${cityParam.toLowerCase().replace(/[^a-z0-9]/g, "_")}_` : "";
+          const filename = `extracted_jobs_${cityTag}${hoursTag}${timestamp}.csv`;
+
           return new NextResponse(csvRows, {
             status: 200,
             headers: {
               "Content-Type": "text/csv; charset=utf-8",
-              "Content-Disposition": `attachment; filename="extracted_jobs_cloud_${timestamp}.csv"`,
+              "Content-Disposition": `attachment; filename="${filename}"`,
               "Cache-Control": "no-store, no-cache, must-revalidate",
             },
           });

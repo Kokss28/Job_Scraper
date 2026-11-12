@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const city = searchParams.get("city") || "";
     const state = searchParams.get("state") || "";
     const skill = searchParams.get("skill") || "";
+    const hours = parseInt(searchParams.get("hours") || "0", 10);
 
     const paginated = await getPaginatedJobs({
       page,
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
       city,
       state,
       skill,
+      hours: hours > 0 ? hours : undefined,
     });
 
     return NextResponse.json({
