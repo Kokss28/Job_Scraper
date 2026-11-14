@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     const experience = searchParams.get("experience") || "fresher";
     const timeframe = searchParams.get("timeframe") || "30d";
     const search = searchParams.get("search") || "";
+    const date = searchParams.get("date") || searchParams.get("dates") || "";
 
     const { jobs, isCloudSupabase } = await getJobsCatalog();
 
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
       experience,
       timeframe,
       search,
+      date,
     });
 
     return NextResponse.json({

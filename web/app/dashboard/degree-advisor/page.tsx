@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   GraduationCap,
   Download,
-  Copy,
-  Check,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
   Briefcase,
   Code2,
   MapPin,
@@ -13,7 +14,6 @@ import {
   Sparkles,
   BookOpen,
   Search,
-  FileText,
   Filter,
   CheckCircle2,
   Building2,
@@ -36,17 +36,41 @@ import { generateDirectDegreePdf } from "@/lib/degree-pdf-generator";
 export default function DegreeAdvisorPage() {
   const [selectedDegree, setSelectedDegree] = useState("bsc");
   const [selectedExp, setSelectedExp] = useState("fresher");
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [viewYear, setViewYear] = useState(2026);
+  const [viewMonth, setViewMonth] = useState(10); // November (0-indexed: 10 = Nov)
+  const calendarRef = useRef<HTMLDivElement>(null);
   const [selectedCurriculumId, setSelectedCurriculumId] = useState("da");
   const [selectedSkillFilter, setSelectedSkillFilter] = useState<string | null>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DegreeReportData | null>(null);
-  const [copied, setCopied] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch report data whenever degree or experience changes
+  // Reset pagination to page 1 whenever degree, exp, dates, search, or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDegree, selectedExp, selectedDates, searchTerm, selectedSkillFilter, selectedCategoryFilter]);
+
+  // Close calendar popover on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+        setShowCalendar(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch report data whenever degree, experience or extraction date changes
   useEffect(() => {
     let isMounted = true;
     async function fetchReport() {
@@ -57,6 +81,9 @@ export default function DegreeAdvisorPage() {
           degree: selectedDegree,
           experience: selectedExp,
         });
+        if (selectedDates.length > 0) {
+          queryParams.set("dates", selectedDates.join(","));
+        }
         const res = await fetch(`/api/degree-report?${queryParams.toString()}`);
         if (!res.ok) throw new Error("Failed to load degree intelligence report");
         const json = await res.json();
@@ -76,7 +103,115 @@ export default function DegreeAdvisorPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedDegree, selectedExp]);
+  }, [selectedDegree, selectedExp, selectedDates]);
+
+  // Map of available extraction dates to counts
+  const availableDateMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (data?.availableDates) {
+      for (const item of data.availableDates) {
+        map.set(item.date, item.count);
+      }
+    }
+    return map;
+  }, [data?.availableDates]);
+
+  // Days in current month for the multi-date calendar
+  const calendarDays = useMemo(() => {
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const startDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sun
+    const blanks = Array.from({ length: startDayOfWeek }, () => null);
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const dayNum = i + 1;
+      const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+      const count = availableDateMap.get(dateStr) || 0;
+      return { dayNum, dateStr, count };
+    });
+    return [...blanks, ...days];
+  }, [viewYear, viewMonth, availableDateMap]);
+
+  const formattedDateRange = useMemo(() => {
+    if (selectedDates.length === 0) return null;
+    const sorted = [...selectedDates].sort();
+    const startD = new Date(sorted[0] + "T00:00:00");
+    const endD = new Date(sorted[sorted.length - 1] + "T00:00:00");
+    if (sorted.length === 1 || sorted[0] === sorted[sorted.length - 1]) {
+      return startD.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    }
+    const startStr = startD.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    const endStr = endD.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    return `${startStr} – ${endStr}`;
+  }, [selectedDates]);
+
+  // Click 1 (start) then Click 13 (end) -> full range covered!
+  const handleToggleDate = (dateStr: string) => {
+    if (!rangeStart) {
+      setRangeStart(dateStr);
+      setSelectedDates([dateStr]);
+    } else {
+      const d1 = new Date(rangeStart + "T00:00:00");
+      const d2 = new Date(dateStr + "T00:00:00");
+      const minD = d1 <= d2 ? d1 : d2;
+      const maxD = d1 <= d2 ? d2 : d1;
+
+      const datesInRange: string[] = [];
+      const curr = new Date(minD);
+      while (curr <= maxD) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, "0");
+        const d = String(curr.getDate()).padStart(2, "0");
+        datesInRange.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
+      setSelectedDates(datesInRange);
+      setRangeStart(null);
+      setHoverDate(null);
+    }
+    setSelectedSkillFilter(null);
+    setSelectedCategoryFilter(null);
+  };
+
+  const handleSelectMonth = () => {
+    const monthDates: string[] = [];
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      if (availableDateMap.has(dateStr)) {
+        monthDates.push(dateStr);
+      }
+    }
+    setSelectedDates((prev) => Array.from(new Set([...prev, ...monthDates])));
+    setRangeStart(null);
+    setHoverDate(null);
+    setSelectedSkillFilter(null);
+    setSelectedCategoryFilter(null);
+  };
+
+  const handleClearDates = () => {
+    setSelectedDates([]);
+    setRangeStart(null);
+    setHoverDate(null);
+    setSelectedSkillFilter(null);
+    setSelectedCategoryFilter(null);
+  };
+
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
 
   // Active curriculum track
   const activeCurriculum = useMemo(() => {
@@ -132,6 +267,14 @@ export default function DegreeAdvisorPage() {
 
     return jobs;
   }, [data?.sampleJobs, searchTerm, selectedSkillFilter, selectedCategoryFilter]);
+
+  // Pagination calculation for verified matching jobs table (10 jobs per page)
+  const totalPages = Math.ceil(filteredJobs.length / PAGE_SIZE) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedJobs = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE;
+    return filteredJobs.slice(start, start + PAGE_SIZE);
+  }, [filteredJobs, safeCurrentPage, PAGE_SIZE]);
 
   // Dynamically switch In-Demand Skills based on selected category (e.g. choose DA -> show DA skills)
   // Strictly filter out any soft skills (Communication, Teamwork, etc.) to guarantee 100% technical skills
@@ -199,108 +342,6 @@ export default function DegreeAdvisorPage() {
     }
   };
 
-  // Download Markdown summary handler
-  const handleDownloadMarkdown = () => {
-    if (!data) return;
-
-    const mdContent = `# 🎓 Academic Career & Course Curriculum Report: ${data.degreeLabel}
-**Generated Date:** ${new Date().toLocaleDateString("en-IN", {
-      dateStyle: "full",
-    })}
-**Target Qualification:** ${data.degreeLabel}
-**Active Openings Tracked:** ${data.eligibleJobsCount} Eligible Openings
-
----
-
-## 📊 1. Market Opportunity Overview
-- **Total Eligible Openings:** ${data.eligibleJobsCount} (${data.eligibilityRate}% of total hiring market)
-- **Fresher-Friendly (0–1 Year):** ${data.fresherJobsCount} (${data.fresherRate}% accessible to graduates)
-- **Top In-Demand Category:** ${data.topCategories[0]?.category || "DA: Data Analytics & BI"} (${data.topCategories[0]?.percentage || 0}%)
-- **Top Demanded Prerequisite:** ${data.topSkills[0]?.name || "Python"} (Required in ${data.topSkills[0]?.percentage || 0}% of postings)
-
----
-
-## 📂 2. Job Categories Breakdown (DA, DE, AI, SE, QA, Cloud)
-${data.topCategories
-  .map(
-    (c) =>
-      `- **[${c.code}] ${c.category}:** ${c.count} openings (${c.percentage}% share)`
-  )
-  .join("\n")}
-
----
-
-## 📚 3. Recommended Course Tracks & Deep Topic Breakdowns
-
-${data.courseCurriculums
-  .map(
-    (c) => `### 🔹 Course: [${c.code}] ${c.title}
-*Market Fit:* ${c.badge}
-*Overview:* ${c.overview}
-*Prerequisites:* ${c.prerequisites}
-
-#### Detailed Topics to Study Inside:
-${c.modules
-  .map(
-    (m) => `**${m.moduleName}:**\n${m.topics.map((t) => `  - ${t}`).join("\n")}`
-  )
-  .join("\n\n")}
-
-#### Recommended Capstone Project:
-- **Project Title:** ${c.capstoneProject.title}
-- **Description:** ${c.capstoneProject.description}
-- **Tools Used:** ${c.capstoneProject.tools.join(", ")}
-`
-  )
-  .join("\n---\n\n")}
-
----
-
-## 🛠️ 4. Most In-Demand Skills Ranking
-${data.topSkills
-  .map(
-    (s, idx) =>
-      `${idx + 1}. **${s.name}** — ${s.percentage}% frequency [Tier: ${s.tier.toUpperCase()}]`
-  )
-  .join("\n")}
-
----
-
-## 💼 5. Sample Verified Live Openings
-| Company | Role | Location | Exp Req. | Key Skills |
-| :--- | :--- | :--- | :--- | :--- |
-${data.sampleJobs
-  .slice(0, 10)
-  .map(
-    (j) =>
-      `| **${j.company}** | ${j.title} | ${j.city} | ${j.min_exp_years}y | ${j.skills.join(", ")} |`
-  )
-  .join("\n")}
-
----
-*Generated by TalentPulse Academic Job Intelligence Engine.*
-`;
-
-    const blob = new Blob([mdContent], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.degree.toUpperCase()}_Career_Curriculum_Report_${new Date().toISOString().slice(0, 10)}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Copy Markdown to Clipboard
-  const handleCopyMarkdown = () => {
-    if (!data) return;
-    const summary = `🎓 Career & Course Report for ${data.degreeLabel}: ${data.eligibleJobsCount} openings. Top Categories: ${data.topCategories.slice(0, 3).map((c) => `${c.code} (${c.percentage}%)`).join(", ")}. Top Skill: ${data.topSkills[0]?.name || "SQL"}.`;
-    navigator.clipboard.writeText(summary);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  };
-
   return (
     <div className="w-full bg-[#F1F5F9] text-slate-900 min-h-screen p-4 sm:p-6 lg:p-8 space-y-6 select-none">
       {/* =========================================================================
@@ -319,9 +360,6 @@ ${data.sampleJobs
               </span>
             </h1>
           </div>
-          <p className="text-sm text-slate-500 mt-1.5">
-            Identify which career domains (DA, DE, AI, SE, QA) have the most jobs and the exact course curriculums required.
-          </p>
         </div>
 
         {/* Action Buttons */}
@@ -346,35 +384,6 @@ ${data.sampleJobs
               </>
             )}
           </button>
-
-          <button
-            onClick={handleDownloadMarkdown}
-            data-testid="btn-download-md"
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-semibold shadow-xs transition-all hover:scale-[1.02] cursor-pointer"
-            title="Download full Markdown report"
-          >
-            <FileText className="w-4 h-4 text-indigo-600" />
-            <span>Export Markdown</span>
-          </button>
-
-          <button
-            onClick={handleCopyMarkdown}
-            data-testid="btn-copy-summary"
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-sm font-medium shadow-xs transition-all cursor-pointer"
-            title="Copy summary to clipboard"
-          >
-            {copied ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-600" />
-                <span className="text-emerald-600 font-semibold">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4" />
-                <span>Copy Summary</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -382,25 +391,211 @@ ${data.sampleJobs
           INTERACTIVE DEGREE SELECTOR & EXPERIENCE FILTER (Clean White Card)
       ========================================================================== */}
       <div className="space-y-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
             <GraduationCap className="w-4 h-4 text-indigo-600" />
             <span>Select Your Target Academic Degree:</span>
           </div>
-          <div className="text-xs text-indigo-600 font-semibold">
-            Computed across {data?.totalMarketJobs.toLocaleString() || "6,300+"} live verified job postings
+
+          {/* Side of Degree Session: Calendar-Only Multi-Date Range Filter */}
+          <div className="flex items-center gap-2 relative" ref={calendarRef}>
+            {/* Live Count / Date Badge */}
+            <div className="text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-50/80 text-indigo-700 border border-indigo-100 whitespace-nowrap shadow-xs">
+              {rangeStart ? (
+                <span>
+                  📅 Start: <strong>{new Date(rangeStart + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</strong>. Click end date (e.g. 13)...
+                </span>
+              ) : selectedDates.length > 0 ? (
+                <span>
+                  📅 <strong>{formattedDateRange}</strong> ({selectedDates.length} {selectedDates.length === 1 ? "day" : "days"} • <strong>{data?.totalMarketJobs.toLocaleString() || 0}</strong> verified jobs)
+                </span>
+              ) : (
+                <span>
+                  Computed across <strong>{data?.totalMarketJobs.toLocaleString() || "11,461"}</strong> live verified postings
+                </span>
+              )}
+            </div>
+
+            {/* Calendar Icon Button (Click to toggle multi-date picker) */}
+            <button
+              type="button"
+              onClick={() => setShowCalendar((prev) => !prev)}
+              data-testid="calendar-filter-btn"
+              className={`p-2 rounded-xl border transition-all cursor-pointer relative shadow-xs flex items-center justify-center ${
+                selectedDates.length > 0 || rangeStart
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-600/20 ring-2 ring-indigo-400/30"
+                  : "bg-white hover:bg-slate-50 text-indigo-600 hover:text-indigo-700 border-slate-200 hover:border-indigo-300"
+              }`}
+              title="Click to open calendar and select extraction date range (e.g. 1 to 13)"
+              aria-label="Filter by extraction date"
+            >
+              <Calendar className="w-5 h-5" />
+              {(selectedDates.length > 0 || rangeStart) && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-xs">
+                  {selectedDates.length || 1}
+                </span>
+              )}
+            </button>
+
+            {(selectedDates.length > 0 || rangeStart) && (
+              <button
+                type="button"
+                onClick={handleClearDates}
+                className="px-2.5 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Reset to all extraction dates"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>All</span>
+              </button>
+            )}
+
+            {/* Interactive Multi-Date Range Calendar Popover */}
+            {showCalendar && (
+              <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 w-76 sm:w-84 animate-in fade-in zoom-in-95 duration-150">
+                {/* Month Navigation */}
+                <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={prevMonth}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                    title="Previous month"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div className="text-sm font-bold text-slate-800">
+                    {new Date(viewYear, viewMonth, 1).toLocaleDateString("en-IN", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={nextMonth}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                    title="Next month"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Days of week header */}
+                <div className="grid grid-cols-7 gap-1 text-center mb-1 text-[11px] font-bold text-slate-400">
+                  {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                    <div key={d} className="py-1">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Days Grid with Range Selection (Click 1 then Click 13 -> full covered) */}
+                <div className="grid grid-cols-7 gap-1 text-center" onMouseLeave={() => setHoverDate(null)}>
+                  {calendarDays.map((cell, idx) => {
+                    if (!cell) {
+                      return <div key={`blank-${idx}`} className="h-8" />;
+                    }
+                    const isSelected = selectedDates.includes(cell.dateStr);
+                    const isRangeStart = rangeStart === cell.dateStr;
+                    const isInHoverRange = Boolean(
+                      rangeStart &&
+                      hoverDate &&
+                      cell.dateStr >= (rangeStart <= hoverDate ? rangeStart : hoverDate) &&
+                      cell.dateStr <= (rangeStart <= hoverDate ? hoverDate : rangeStart)
+                    );
+                    const hasJobs = cell.count > 0;
+                    return (
+                      <button
+                        key={cell.dateStr}
+                        type="button"
+                        onClick={() => handleToggleDate(cell.dateStr)}
+                        onMouseEnter={() => {
+                          if (rangeStart) setHoverDate(cell.dateStr);
+                        }}
+                        disabled={!hasJobs}
+                        className={`h-8 rounded-lg text-xs font-semibold flex flex-col items-center justify-center relative transition-all cursor-pointer ${
+                          isRangeStart
+                            ? "bg-indigo-600 text-white shadow-md font-bold scale-[1.08] ring-2 ring-indigo-400 ring-offset-1 z-10"
+                            : isSelected
+                            ? "bg-indigo-600 text-white shadow-xs font-bold"
+                            : isInHoverRange
+                            ? "bg-indigo-100 text-indigo-700 font-semibold"
+                            : hasJobs
+                            ? "text-slate-800 hover:bg-indigo-50 hover:text-indigo-600"
+                            : "text-slate-300 cursor-not-allowed"
+                        }`}
+                        title={
+                          hasJobs
+                            ? `${cell.dateStr}: ${cell.count} jobs extracted`
+                            : `${cell.dateStr}: No extractions`
+                        }
+                      >
+                        <span>{cell.dayNum}</span>
+                        {hasJobs && !isSelected && !isInHoverRange && !isRangeStart && (
+                          <span className="w-1 h-1 bg-indigo-500 rounded-full mt-0.5" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Range Selection Helper Hint */}
+                <div className="mt-2 text-[10.5px] text-center text-slate-500 font-medium">
+                  {rangeStart ? (
+                    <span className="text-indigo-600 font-semibold">
+                      Click end date (e.g. 13) to cover full range
+                    </span>
+                  ) : selectedDates.length > 0 ? (
+                    <span>
+                      Selected range: <strong>{formattedDateRange}</strong>
+                    </span>
+                  ) : (
+                    <span>Click start date, then click end date to cover range</span>
+                  )}
+                </div>
+
+                {/* Popover Footer Controls */}
+                <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleSelectMonth}
+                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer"
+                    >
+                      Select Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearDates}
+                      className="px-2 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRangeStart(null);
+                      setHoverDate(null);
+                      setShowCalendar(false);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-colors shadow-xs cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Degree Pills */}
-        <div className="flex flex-wrap gap-2">
+        {/* Properly Aligned Degree Cards (Symmetrical 3 Columns x 2 Rows) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
-            { id: "bsc", label: "B.Sc. (Bachelor of Science / CS / IT)", icon: "🎓" },
-            { id: "msc", label: "M.Sc. (Master of Science / CS / IT)", icon: "🔬" },
-            { id: "bca", label: "BCA (Bachelor of Computer Applications)", icon: "💻" },
-            { id: "mca", label: "MCA (Master of Computer Applications)", icon: "🚀" },
-            { id: "btech", label: "B.E. / B.Tech (Engineering)", icon: "⚙️" },
-            { id: "all", label: "All Degrees (Any Graduate / Open)", icon: "🌐" },
+            { id: "bsc", title: "B.Sc.", subtitle: "Bachelor of Science (CS / IT)", icon: "🎓" },
+            { id: "msc", title: "M.Sc.", subtitle: "Master of Science (CS / IT)", icon: "🔬" },
+            { id: "bca", title: "BCA", subtitle: "Bachelor of Computer Applications", icon: "💻" },
+            { id: "mca", title: "MCA", subtitle: "Master of Computer Applications", icon: "🚀" },
+            { id: "btech", title: "B.E. / B.Tech", subtitle: "Engineering & Technology", icon: "⚙️" },
+            { id: "all", title: "All Degrees", subtitle: "Any Graduate / Open Market", icon: "🌐" },
           ].map((item) => (
             <button
               key={item.id}
@@ -410,14 +605,37 @@ ${data.sampleJobs
                 setSelectedCategoryFilter(null);
               }}
               data-testid={`degree-btn-${item.id}`}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-3.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 selectedDegree === item.id
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20 ring-2 ring-indigo-500/30 scale-[1.02]"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200/80 border border-slate-200"
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/20 ring-2 ring-indigo-400/30"
+                  : "bg-slate-50/90 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300"
               }`}
             >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-xs ${
+                  selectedDegree === item.id
+                    ? "bg-white/20 text-white"
+                    : "bg-white border border-slate-200/80"
+                }`}
+              >
+                {item.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div
+                  className={`text-sm font-bold truncate leading-tight ${
+                    selectedDegree === item.id ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  {item.title}
+                </div>
+                <div
+                  className={`text-xs truncate mt-0.5 ${
+                    selectedDegree === item.id ? "text-indigo-100" : "text-slate-500"
+                  }`}
+                >
+                  {item.subtitle}
+                </div>
+              </div>
             </button>
           ))}
         </div>
@@ -1005,7 +1223,7 @@ ${data.sampleJobs
           {/* =========================================================================
               CURATED LIVE JOBS TABLE (Searchable, Filterable by Skill & Direct Apply)
           ========================================================================== */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-xs">
+          <div id="jobs-table-card" className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -1031,7 +1249,14 @@ ${data.sampleJobs
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Showing {filteredJobs.length} live openings welcoming {data.degree.toUpperCase()} candidates
+                  {filteredJobs.length === 0 ? (
+                    <span>No matching live openings</span>
+                  ) : (
+                    <span>
+                      Showing {(safeCurrentPage - 1) * PAGE_SIZE + 1}–{Math.min(safeCurrentPage * PAGE_SIZE, filteredJobs.length)} of{" "}
+                      <strong>{filteredJobs.length}</strong> live openings welcoming {data.degree.toUpperCase()} candidates (Page {safeCurrentPage} of {totalPages})
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -1082,7 +1307,7 @@ ${data.sampleJobs
                       </td>
                     </tr>
                   ) : (
-                    filteredJobs.map((job) => (
+                    paginatedJobs.map((job) => (
                       <tr
                         key={job.job_id}
                         className="hover:bg-slate-50/80 transition-colors"
@@ -1146,6 +1371,78 @@ ${data.sampleJobs
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls (10 jobs per page) */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-3 border-t border-slate-100 text-xs text-slate-600">
+                <div className="text-slate-500 font-medium">
+                  Showing {(safeCurrentPage - 1) * PAGE_SIZE + 1} to {Math.min(safeCurrentPage * PAGE_SIZE, filteredJobs.length)} of {filteredJobs.length} matching jobs
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Previous Page Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.max(1, p - 1));
+                      document.getElementById("jobs-table-card")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    disabled={safeCurrentPage <= 1}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
+
+                  {/* Page Number Buttons */}
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1)
+                    .filter((pageNum) => {
+                      if (totalPages <= 7) return true;
+                      if (pageNum === 1 || pageNum === totalPages) return true;
+                      return Math.abs(pageNum - safeCurrentPage) <= 2;
+                    })
+                    .map((pageNum, idx, arr) => {
+                      const prevPageNum = arr[idx - 1];
+                      const hasGap = prevPageNum && pageNum - prevPageNum > 1;
+                      const isActive = pageNum === safeCurrentPage;
+
+                      return (
+                        <React.Fragment key={pageNum}>
+                          {hasGap && <span className="px-1 text-slate-400 select-none">...</span>}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentPage(pageNum);
+                              document.getElementById("jobs-table-card")?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                            className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-indigo-600 text-white shadow-xs scale-105"
+                                : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+
+                  {/* Next Page Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.min(totalPages, p + 1));
+                      document.getElementById("jobs-table-card")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    disabled={safeCurrentPage >= totalPages}
+                    className="px-3 py-1.5 rounded-xl border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:border-slate-300 disabled:text-slate-500 cursor-pointer flex items-center gap-1 shadow-xs"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

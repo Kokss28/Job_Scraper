@@ -1,7 +1,14 @@
-import { LoginForm } from "@/components/login-form";
+import { PortalLoginForm } from "@/components/portal-login-form";
+
+export const metadata = {
+  title: "User Sign In | Job Portal",
+  description: "Sign in to access verified job postings and track your applications",
+};
 
 export default function Page() {
   return (
-    <main className="auth-page"><section className="auth-card"><div className="auth-brand"><span className="brand-mark">J</span>Job Intelligence</div><p className="eyebrow">Welcome back</p><h1>Sign in to your dashboard</h1><p className="auth-subtitle">Continue to your jobs and saved opportunities.</p><LoginForm /></section></main>
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-indigo-50/40 flex items-center justify-center p-4 sm:p-6">
+      <PortalLoginForm />
+    </div>
   );
 }

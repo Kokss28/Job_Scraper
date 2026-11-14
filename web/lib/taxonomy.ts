@@ -479,3 +479,58 @@ export function isCityMatchStrict(
   return true;
 }
 
+// ============================================================================
+// FILTER OPTIONS CONFIGURATION (AUTHENTIC SUPABASE DATABASE DISTRIBUTION)
+// ============================================================================
+
+export interface ExpFilterOption {
+  key: string;
+  label: string;
+  subtitle: string;
+  dbValues?: readonly string[];
+}
+
+export const EXPERIENCE_FILTER_OPTIONS: readonly ExpFilterOption[] = [
+  { key: "all", label: "All Experience", subtitle: "All Seniority Levels" },
+  {
+    key: "0-2",
+    label: "0 - 2 Yrs",
+    subtitle: "Fresher & Entry",
+    dbValues: ["0", "0.08", "0.25", "0.6", "00", "01", "1", "1.5", "1.6", "2", "2.00", "2.5"],
+  },
+  {
+    key: "3-5",
+    label: "3 - 5 Yrs",
+    subtitle: "Mid-Level",
+    dbValues: ["03", "05", "3", "3.5", "3.6", "30", "35", "4", "4.5", "4.6", "40", "45", "5", "5.00", "5.1", "5.5", "50", "510", "57"],
+  },
+  {
+    key: "6-8",
+    label: "6 - 8 Yrs",
+    subtitle: "Senior",
+    dbValues: ["08", "6", "6.00", "65", "68", "7", "7.5", "8"],
+  },
+  {
+    key: "8+",
+    label: "8+ Yrs",
+    subtitle: "Lead & Staff",
+    dbValues: ["8", "9", "90", "10", "100", "11", "12", "125", "13", "14", "140", "15", "16", "17", "18", "20", "23", "25"],
+  },
+] as const;
+
+export interface SourceFilterOption {
+  key: string;
+  label: string;
+  countLabel: string;
+  badgeBg: string;
+  badgeText: string;
+}
+
+export const SOURCE_FILTER_OPTIONS: readonly SourceFilterOption[] = [
+  { key: "all", label: "All Sources", countLabel: "11,241 Jobs", badgeBg: "bg-slate-100", badgeText: "text-slate-700" },
+  { key: "LinkedIn", label: "LinkedIn", countLabel: "4,902 Jobs", badgeBg: "bg-sky-50", badgeText: "text-sky-700" },
+  { key: "Indeed", label: "Indeed", countLabel: "3,343 Jobs", badgeBg: "bg-indigo-50", badgeText: "text-indigo-700" },
+  { key: "Naukri", label: "Naukri", countLabel: "2,996 Jobs", badgeBg: "bg-amber-50", badgeText: "text-amber-800" },
+] as const;
+
+

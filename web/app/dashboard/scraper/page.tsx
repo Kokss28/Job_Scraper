@@ -1,15 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import {
   Terminal,
   Play,
-  CheckCircle2,
   AlertCircle,
   RefreshCw,
-  ArrowRight,
-  Database,
   Download,
   FileSpreadsheet,
   MapPin,
@@ -22,7 +18,6 @@ import {
   Check,
   Copy,
   Clock,
-  Compass
 } from "lucide-react";
 
 export default function ScraperStudioPage() {
@@ -34,9 +29,8 @@ export default function ScraperStudioPage() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [logs, setLogs] = useState<string[]>([]);
   const [resultStats, setResultStats] = useState<{ newJobs: number; totalJobs: number; extractedJobs?: number } | null>(null);
-  const [bySourceStats, setBySourceStats] = useState<Record<string, number> | null>(null);
   const [sampleJobs, setSampleJobs] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"table" | "terminal" | "telemetry">("table");
+  const [activeTab, setActiveTab] = useState<"table" | "terminal">("table");
   const [copiedLogs, setCopiedLogs] = useState<boolean>(false);
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -52,8 +46,6 @@ export default function ScraperStudioPage() {
     );
   };
 
-  const locationPresets = ["All India", "Coimbatore", "Bengaluru", "Chennai", "Hyderabad", "Pune", "Remote"];
-  const keywordPresets = ["Python developer", "Data Analyst", "Data Engineer", "AI / ML Engineer", "Full Stack Developer"];
 
   const handleCopyLogs = () => {
     if (logs.length === 0) return;
@@ -78,7 +70,6 @@ export default function ScraperStudioPage() {
     ]);
     setActiveTab("terminal");
     setResultStats(null);
-    setBySourceStats(null);
 
     try {
       const res = await fetch("/api/scraper/live", {
@@ -140,9 +131,6 @@ export default function ScraperStudioPage() {
                 const newCount = data.result?.new_jobs ?? 0;
                 const total = data.result?.total_jobs ?? 0;
                 setResultStats({ newJobs: newCount, totalJobs: total, extractedJobs: extractedCount });
-                if (data.result?.by_source) {
-                  setBySourceStats(data.result.by_source);
-                }
                 if (data.result?.sample_jobs) {
                   setSampleJobs(data.result.sample_jobs);
                 }
@@ -185,9 +173,6 @@ export default function ScraperStudioPage() {
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
             Live Scraper &amp; Ingestion Studio
           </h1>
-          <p className="text-slate-600 text-xs md:text-sm mt-1 max-w-2xl leading-relaxed font-medium">
-            Harvest real-time postings across LinkedIn, Naukri, and Indeed. Automatically parses complete job descriptions, experience bounds, and exact degree requirements directly into SQLite and Supabase Cloud.
-          </p>
         </div>
 
         {/* Top Badges & Actions */}
@@ -197,17 +182,6 @@ export default function ScraperStudioPage() {
             <Cloud className="w-3.5 h-3.5 text-emerald-600" />
             <span>Supabase Cloud: Active</span>
           </div>
-
-          <a
-            href="/api/scraper/export?batch=latest"
-            download="extracted_jobs.csv"
-            data-testid="top-download-csv-btn"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all shrink-0"
-            title="Download last extracted batch as CSV"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download Last Batch
-          </a>
         </div>
       </div>
 
@@ -244,28 +218,6 @@ export default function ScraperStudioPage() {
                   }`}
                 >
                   All 3
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSources(["Naukri"])}
-                  className={`px-2.5 py-1 rounded-lg transition-all font-bold border ${
-                    sources.length === 1 && sources.includes("Naukri")
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                      : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900"
-                  }`}
-                >
-                  Naukri Only
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSources(["LinkedIn"])}
-                  className={`px-2.5 py-1 rounded-lg transition-all font-bold border ${
-                    sources.length === 1 && sources.includes("LinkedIn")
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                      : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900"
-                  }`}
-                >
-                  LinkedIn Only
                 </button>
               </div>
             </div>
@@ -307,23 +259,6 @@ export default function ScraperStudioPage() {
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 font-semibold"
               placeholder="e.g. Python developer, data analyst"
             />
-            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">Suggestions:</span>
-              {keywordPresets.map((kw) => (
-                <button
-                  key={kw}
-                  type="button"
-                  onClick={() => setKeywords(kw)}
-                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
-                    keywords === kw
-                      ? "bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs"
-                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:text-slate-900 font-medium"
-                  }`}
-                >
-                  {kw}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Target Location Filter */}
@@ -343,25 +278,8 @@ export default function ScraperStudioPage() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 font-semibold"
-              placeholder="e.g. India, Bengaluru, Pune, Hyderabad"
+              placeholder="e.g. India"
             />
-            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">Cities:</span>
-              {locationPresets.map((loc) => (
-                <button
-                  key={loc}
-                  type="button"
-                  onClick={() => setLocation(loc === "All India" ? "India" : loc)}
-                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
-                    (loc === "All India" && (location === "India" || !location)) || location === loc
-                      ? "bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs"
-                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:text-slate-900 font-medium"
-                  }`}
-                >
-                  {loc}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Search Time Range (in Hours) */}
@@ -393,30 +311,8 @@ export default function ScraperStudioPage() {
                 Hours
               </div>
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">Presets:</span>
-              {[
-                { label: "24h (1 Day)", val: 24 },
-                { label: "72h (3 Days)", val: 72 },
-                { label: "7d (1 Week)", val: 168 },
-                { label: "4h", val: 4 },
-              ].map((p) => (
-                <button
-                  key={p.val}
-                  type="button"
-                  onClick={() => setFreshness(p.val)}
-                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
-                    Number(freshness) === p.val
-                      ? "bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs"
-                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:text-slate-900 font-medium"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
-              Target postings published within the last <span className="text-slate-900 font-bold">{freshness}h</span> (e.g. 24 for 1 day, 72 for 3 days).
+            <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+              Target postings published within the last <span className="text-slate-800 font-bold">{freshness}h</span> (e.g. 24 for 1 day, 72 for 3 days).
             </p>
           </div>
 
@@ -444,47 +340,14 @@ export default function ScraperStudioPage() {
             )}
           </button>
 
-          {/* Status notification */}
-          {status !== "idle" && (
+          {/* Status notification on error only */}
+          {status === "error" && (
             <div
               data-testid="scrape-status-banner"
-              className={`p-3.5 rounded-xl text-xs flex flex-col gap-2 border shadow-xs ${
-                status === "running"
-                  ? "bg-indigo-50 text-indigo-900 border-indigo-200"
-                  : status === "success"
-                  ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-                  : "bg-rose-50 text-rose-900 border-rose-200"
-              }`}
+              className="p-3.5 rounded-xl text-xs flex items-center gap-2 border shadow-xs bg-rose-50 text-rose-900 border-rose-200"
             >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  {status === "running" && <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" />}
-                  {status === "success" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                  {status === "error" && <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
-                  <span className="font-bold text-[11px] leading-tight">{statusMessage}</span>
-                </div>
-
-                {status === "success" && (
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/api/scraper/export?batch=latest&sources=${sources.join(",")}&freshness=${freshness}`}
-                      download="latest_extracted_jobs.csv"
-                      data-testid="banner-download-csv-btn"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-sm transition-all"
-                    >
-                      <Download className="w-3 h-3" />
-                      Download Batch CSV
-                    </a>
-                    <Link
-                      href="/dashboard"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm transition-all"
-                    >
-                      Explore
-                      <ArrowRight className="w-3 h-3" />
-                    </Link>
-                  </div>
-                )}
-              </div>
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span className="font-bold text-[11px] leading-tight">{statusMessage}</span>
             </div>
           )}
         </div>
@@ -493,46 +356,8 @@ export default function ScraperStudioPage() {
         {/* RIGHT COLUMN: Live Operations & Monitoring Deck (7 Cols) */}
         {/* ========================================================= */}
         <div className="lg:col-span-7 rounded-2xl bg-white border border-slate-200 shadow-xs overflow-hidden flex flex-col">
-          {/* Pipeline Stepper Bar */}
-          <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-            <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
-              <Compass className="w-3.5 h-3.5 text-indigo-600" />
-              Automated Pipeline Stages
-            </span>
-
-            <div className="flex items-center gap-1.5 text-[10px]">
-              <span className={`px-2.5 py-1 rounded-md font-bold border flex items-center gap-1 ${
-                status === "running"
-                  ? "bg-indigo-100 text-indigo-800 border-indigo-300"
-                  : status === "success"
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                  : "bg-white text-slate-600 border-slate-200 shadow-xs"
-              }`}>
-                1. Web Crawl
-              </span>
-              <span className="text-slate-400 font-bold">➔</span>
-              <span className={`px-2.5 py-1 rounded-md font-bold border flex items-center gap-1 ${
-                status === "running"
-                  ? "bg-indigo-100 text-indigo-800 border-indigo-300"
-                  : status === "success"
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                  : "bg-white text-slate-600 border-slate-200 shadow-xs"
-              }`}>
-                2. Degree &amp; Exp Parsing
-              </span>
-              <span className="text-slate-400 font-bold">➔</span>
-              <span className={`px-2.5 py-1 rounded-md font-bold border flex items-center gap-1 ${
-                status === "success"
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                  : "bg-white text-slate-600 border-slate-200 shadow-xs"
-              }`}>
-                3. Supabase Cloud Sync
-              </span>
-            </div>
-          </div>
-
           {/* Navigation Tabs */}
-          <div className="flex items-center justify-between px-5 pt-3 border-b border-slate-200 bg-slate-50/50">
+          <div className="flex items-center justify-between px-5 pt-3.5 pb-0 border-b border-slate-200 bg-slate-50/60">
             <div className="flex gap-2">
               <button
                 type="button"
@@ -569,19 +394,6 @@ export default function ScraperStudioPage() {
                   </span>
                 )}
               </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("telemetry")}
-                className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
-                  activeTab === "telemetry"
-                    ? "border-indigo-600 text-indigo-600"
-                    : "border-transparent text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <Database className="w-3.5 h-3.5" />
-                Sync Telemetry
-              </button>
             </div>
 
             {/* Quick Copy Logs button if on terminal */}
@@ -598,13 +410,13 @@ export default function ScraperStudioPage() {
           </div>
 
           {/* TAB CONTENT CONTAINER */}
-          <div className="p-5 flex-1 min-h-[380px] flex flex-col justify-between">
+          <div className="p-5 flex-1 min-h-[360px] flex flex-col">
             {/* TAB 1: Fresh Batch Table */}
             {activeTab === "table" && (
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 flex flex-col">
                 {sampleJobs.length > 0 ? (
                   <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-xs">
-                    <div className="max-h-[340px] overflow-y-auto divide-y divide-slate-100">
+                    <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
                       {sampleJobs.map((job, idx) => (
                         <div key={idx} className="p-3 hover:bg-indigo-50/50 transition-colors flex items-center justify-between gap-3 text-xs">
                           <div className="min-w-0 flex-1">
@@ -657,7 +469,7 @@ export default function ScraperStudioPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-64 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
+                  <div className="flex-1 min-h-[300px] flex flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
                     <Briefcase className="w-10 h-10 text-slate-400 mb-3" />
                     <h4 className="text-sm font-bold text-slate-800">No Fresh Batch Scraped in Current Session</h4>
                     <p className="text-xs text-slate-500 max-w-sm mt-1 font-medium">
@@ -670,7 +482,7 @@ export default function ScraperStudioPage() {
 
             {/* TAB 2: Live Console Terminal */}
             {activeTab === "terminal" && (
-              <div className="rounded-xl bg-[#0F172A] border border-slate-800 p-4 font-mono text-[11px] text-slate-200 space-y-1 max-h-[340px] overflow-y-auto shadow-inner">
+              <div className="rounded-xl bg-[#0F172A] border border-slate-800 p-4 font-mono text-[11px] text-slate-200 space-y-1 min-h-[300px] max-h-[380px] overflow-y-auto shadow-inner">
                 {logs.length > 0 ? (
                   logs.map((logLine, idx) => (
                     <div key={idx} className="leading-relaxed font-mono">
@@ -686,7 +498,7 @@ export default function ScraperStudioPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-slate-400 italic py-8 text-center font-medium">
+                  <div className="text-slate-400 italic py-16 text-center font-medium">
                     Awaiting scraper dispatch... Console logs will stream here in real time.
                   </div>
                 )}
@@ -694,77 +506,34 @@ export default function ScraperStudioPage() {
               </div>
             )}
 
-            {/* TAB 3: Telemetry & Platform Breakdown */}
-            {activeTab === "telemetry" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center shadow-xs">
-                    <span className="text-[11px] text-slate-600 uppercase font-bold block mb-1">LinkedIn</span>
-                    <span className="text-2xl font-black text-blue-600">
-                      {bySourceStats ? (bySourceStats["LinkedIn"] ?? bySourceStats["linkedin"] ?? 0) : "-"}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-1">Guest + API</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center shadow-xs">
-                    <span className="text-[11px] text-slate-600 uppercase font-bold block mb-1">Naukri</span>
-                    <span className="text-2xl font-black text-emerald-600">
-                      {bySourceStats ? (bySourceStats["Naukri"] ?? bySourceStats["naukri"] ?? 0) : "-"}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-1">Deep Page Scraped</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center shadow-xs">
-                    <span className="text-[11px] text-slate-600 uppercase font-bold block mb-1">Indeed</span>
-                    <span className="text-2xl font-black text-indigo-600">
-                      {bySourceStats ? (bySourceStats["Indeed"] ?? bySourceStats["indeed"] ?? 0) : "-"}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-1">JobSpy Backend</span>
-                  </div>
+            {/* Bottom Actions Bar on Right Deck: ONLY shown once extraction is completed */}
+            {status === "success" && (
+              <div className="pt-3.5 mt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>Download options:</span>
                 </div>
-
-                <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 text-xs space-y-2">
-                  <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <Cloud className="w-3.5 h-3.5 text-indigo-600" />
-                    Supabase Cloud Sync Verification
-                  </span>
-                  <p className="text-slate-700 text-[11px] leading-relaxed font-medium">
-                    All harvested jobs are verified with unique <code className="text-indigo-800 font-mono font-bold">job_id</code> hashing, cleaned via regular expressions and NLP enrichment, and automatically synchronized into your live cloud table <code className="text-indigo-800 font-mono font-bold">public.jobs</code>.
-                  </p>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/api/scraper/export?batch=latest&sources=${sources.join(",")}&freshness=${freshness}`}
+                    download="latest_extracted_jobs.csv"
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 transition-all flex items-center gap-1.5 text-xs shadow-xs"
+                    title="Download newly extracted batch as CSV"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-700" />
+                    Download Batch CSV
+                  </a>
+                  <a
+                    href="/api/scraper/export?batch=all"
+                    download="master_all_jobs.csv"
+                    className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 font-bold border border-slate-300 transition-all text-xs shadow-xs"
+                    title="Download complete unified catalog of all verified jobs"
+                  >
+                    Download Catalog
+                  </a>
                 </div>
               </div>
             )}
-
-            {/* Bottom Actions Bar on Right Deck */}
-            <div className="pt-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
-              <div className="flex items-center gap-2 text-slate-600 font-medium">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <span>Download options:</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={`/api/scraper/export?batch=latest&sources=${sources.join(",")}&freshness=${freshness}`}
-                  download="latest_extracted_jobs.csv"
-                  className="px-3.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 transition-all flex items-center gap-1.5 text-xs shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-700" />
-                  Recent Batch CSV
-                </a>
-                <a
-                  href="/api/scraper/export?batch=history"
-                  download="extraction_history.csv"
-                  className="px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold border border-indigo-200 transition-all flex items-center gap-1.5 text-xs shadow-xs"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
-                  Extraction Log CSV
-                </a>
-                <a
-                  href="/api/scraper/export?batch=all"
-                  download="master_all_jobs.csv"
-                  className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 font-bold border border-slate-300 transition-all text-xs shadow-xs"
-                >
-                  Full Catalog
-                </a>
-              </div>
-            </div>
           </div>
         </div>
       </div>

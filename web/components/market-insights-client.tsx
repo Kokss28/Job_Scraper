@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import {
   Building2,
   MapPin,
-  GraduationCap,
   TrendingUp,
   Globe,
   Award,
@@ -64,24 +63,7 @@ export function MarketInsightsClient({
       .map(([company, count]) => ({ company, count }));
   }, [jobs]);
 
-  // Macro Education Cluster Metrics (4-Tier Hierarchy from Streamlit Dashboard)
-  const eduClusterCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      undergrad: 0,
-      postgrad: 0,
-      doctorate: 0,
-      open: 0,
-    };
 
-    for (const j of jobs) {
-      const cluster = j.edu_cluster || "";
-      if (cluster.includes("Undergraduate")) counts.undergrad++;
-      else if (cluster.includes("Postgraduate")) counts.postgrad++;
-      else if (cluster.includes("Doctorate")) counts.doctorate++;
-      else counts.open++;
-    }
-    return counts;
-  }, [jobs]);
 
   // Sub-Cluster Track Distribution
   const eduTrackStats = useMemo(() => {
@@ -142,25 +124,20 @@ export function MarketInsightsClient({
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
           Market &amp; Geographic Hiring Hubs
         </h1>
-        <p className="text-slate-600 text-xs md:text-sm mt-1 font-medium max-w-2xl">
-          Macro analytics across premier tech corridors, enterprise hiring organizations, and sourcing platform yield.
-        </p>
       </div>
 
-      {/* Row 1: Hubs & Employers */}
+      {/* 2x2 Analytics Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Hubs Bar */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-emerald-600" />
-                Top Indian IT Hubs Concentration
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                Active job volume across major technology clusters
-              </p>
-            </div>
+        {/* Chart 1: Hubs Bar */}
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              Top Indian IT Hubs Concentration
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+              Active job volume across major technology clusters
+            </p>
           </div>
 
           <div className="h-72 w-full pt-4">
@@ -198,18 +175,16 @@ export function MarketInsightsClient({
           </div>
         </div>
 
-        {/* Top Companies */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Award className="w-4 h-4 text-indigo-600" />
-                Premier Hiring Enterprises
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                Organizations with the highest volume of open tech vacancies
-              </p>
-            </div>
+        {/* Chart 2: Top Companies */}
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Award className="w-4 h-4 text-indigo-600" />
+              Premier Hiring Enterprises
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+              Organizations with the highest volume of open tech vacancies
+            </p>
           </div>
 
           <div className="h-72 w-full pt-4">
@@ -243,74 +218,8 @@ export function MarketInsightsClient({
             </ResponsiveContainer>
           </div>
         </div>
-      </div>
 
-      {/* Row 2: Macro Educational Clustering (4-Tier Hierarchy as in Streamlit) */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-indigo-600" />
-            Educational Qualifications &amp; Cluster Matrix
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5 font-medium">
-            Macro clustering taxonomy: Undergraduate, Postgraduate, Doctorate, and Open entry tiers across India.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-indigo-600 shadow-xs">
-            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Undergraduate / Any Graduate
-            </div>
-            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
-              {eduClusterCounts.undergrad.toLocaleString()}
-            </div>
-            <div className="text-xs text-indigo-600 font-bold mt-0.5">
-              {((eduClusterCounts.undergrad / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-violet-600 shadow-xs">
-            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Postgraduate / Master&apos;s
-            </div>
-            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
-              {eduClusterCounts.postgrad.toLocaleString()}
-            </div>
-            <div className="text-xs text-violet-600 font-bold mt-0.5">
-              {((eduClusterCounts.postgrad / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-emerald-600 shadow-xs">
-            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Doctorate &amp; Research
-            </div>
-            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
-              {eduClusterCounts.doctorate.toLocaleString()}
-            </div>
-            <div className="text-xs text-emerald-600 font-bold mt-0.5">
-              {((eduClusterCounts.doctorate / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-amber-500 shadow-xs">
-            <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Open / No Degree Required
-            </div>
-            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1">
-              {eduClusterCounts.open.toLocaleString()}
-            </div>
-            <div className="text-xs text-amber-600 font-bold mt-0.5">
-              {((eduClusterCounts.open / (totalJobs || 1)) * 100).toFixed(1)}% of catalog
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Row 3: Degrees & Platform Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Education Track Distribution */}
+        {/* Chart 3: Education Track Distribution */}
         <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -322,7 +231,7 @@ export function MarketInsightsClient({
             </p>
           </div>
 
-          <div className="h-64 w-full pt-4">
+          <div className="h-72 w-full pt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={eduTrackStats}
@@ -354,7 +263,7 @@ export function MarketInsightsClient({
           </div>
         </div>
 
-        {/* Platform Sourcing Share */}
+        {/* Chart 4: Platform Sourcing Share */}
         <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -366,7 +275,7 @@ export function MarketInsightsClient({
             </p>
           </div>
 
-          <div className="h-64 w-full pt-4">
+          <div className="h-72 w-full pt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={platformStats}>
                 <XAxis dataKey="source" stroke="#94a3b8" fontSize={11} tick={{ fill: "#475569", fontWeight: 600 }} />

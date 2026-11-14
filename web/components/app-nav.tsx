@@ -23,6 +23,11 @@ export function AppNav({
       href: "/dashboard",
     },
     {
+      id: "nav-degree-advisor",
+      label: "Degree Career Advisor",
+      href: "/dashboard/degree-advisor",
+    },
+    {
       id: "nav-live-extraction",
       label: "Live Extraction",
       href: "/dashboard/scraper",
@@ -31,22 +36,6 @@ export function AppNav({
       id: "nav-india-map",
       label: "India Job Map",
       href: "/dashboard/market",
-    },
-
-    {
-      id: "nav-degree-advisor",
-      label: "Degree Career Advisor",
-      href: "/dashboard/degree-advisor",
-    },
-    {
-      id: "nav-jobs-directory",
-      label: "All Jobs Directory",
-      href: "/dashboard#directory",
-    },
-    {
-      id: "nav-csv-exports",
-      label: "CSV Exports",
-      href: "/dashboard#export",
     },
     {
       id: "nav-extraction-history",
@@ -75,7 +64,7 @@ export function AppNav({
       </div>
 
       {/* Navigation Links */}
-      <div className="flex-1 py-2 px-3 space-y-1">
+      <div className="flex-1 py-2 px-3 space-y-1.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
 
@@ -91,11 +80,11 @@ export function AppNav({
               }`}
             >
               <span
-                className={`w-2 h-2 rounded-full transition-all ${
+                className={`w-2 h-2 rounded-full shrink-0 transition-all ${
                   isActive ? "bg-indigo-400 ring-4 ring-indigo-500/30" : "bg-slate-500"
                 }`}
               ></span>
-              <span>{item.label}</span>
+              <span className="truncate">{item.label}</span>
             </Link>
           );
         })}

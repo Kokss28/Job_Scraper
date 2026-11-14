@@ -37,7 +37,14 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { type UnifiedJobRecord, isCityMatchStrict, CITY_SEARCH_ALIASES } from "@/lib/taxonomy";
+import {
+  type UnifiedJobRecord,
+  isCityMatchStrict,
+  CITY_SEARCH_ALIASES,
+  EXPERIENCE_FILTER_OPTIONS,
+  SOURCE_FILTER_OPTIONS,
+  parseExpNumber,
+} from "@/lib/taxonomy";
 import type { DashboardStats } from "@/lib/data-service";
 import {
   INDIA_STATES,
@@ -1092,6 +1099,14 @@ export function TalentPulseDashboard({
   const [timeWindow, setTimeWindow] = useState<string>("all");
   const [timeWindowOpen, setTimeWindowOpen] = useState<boolean>(false);
 
+  // Column Filters: Location, Experience, Sources
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("all");
+  const [selectedExpFilter, setSelectedExpFilter] = useState<string>("all");
+  const [locationDropdownOpen, setLocationDropdownOpen] = useState<boolean>(false);
+  const [expDropdownOpen, setExpDropdownOpen] = useState<boolean>(false);
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState<boolean>(false);
+  const [locationSearchText, setLocationSearchText] = useState<string>("");
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -1146,6 +1161,61 @@ export function TalentPulseDashboard({
     const list = CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
     return list.sort((a, b) => (cityCounts[b.name] || 0) - (cityCounts[a.name] || 0));
   }, [cityCounts]);
+
+  // Dynamic list of locations with jobs, searchable for the location filter dropdown
+  const filteredLocationList = useMemo(() => {
+    let list = citiesWithJobs.map((c) => ({
+      name: c.name,
+      fullName: c.fullName,
+      state: c.state,
+      count: cityCounts[c.name] || 0,
+    }));
+
+    if (locationSearchText.trim()) {
+      const q = locationSearchText.toLowerCase().trim();
+      list = list.filter(
+        (c) => c.name.toLowerCase().includes(q) || c.fullName.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [citiesWithJobs, cityCounts, locationSearchText]);
+
+  // Global click-outside listener to dismiss filter dropdowns cleanly
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-dropdown-id='location-filter']")) {
+        setLocationDropdownOpen(false);
+      }
+      if (!target.closest("[data-dropdown-id='exp-filter']")) {
+        setExpDropdownOpen(false);
+      }
+      if (!target.closest("[data-dropdown-id='source-filter']")) {
+        setSourceDropdownOpen(false);
+      }
+      if (!target.closest("[data-dropdown-id='time-window-filter']")) {
+        setTimeWindowOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleGlobalClick);
+    return () => document.removeEventListener("mousedown", handleGlobalClick);
+  }, []);
+
+  const handleClearAllFilters = () => {
+    setSelectedCity("All India");
+    setSelectedState(null);
+    setSelectedSourceFilter("all");
+    setSelectedExpFilter("all");
+    setSelectedSkillFilter(null);
+    setTimeWindow("all");
+    setSearchInput("");
+    setSearchQuery("");
+    setCurrentPage(1);
+    setLocationDropdownOpen(false);
+    setExpDropdownOpen(false);
+    setSourceDropdownOpen(false);
+    setTimeWindowOpen(false);
+  };
 
   // Dynamic state job counts computed from active database catalog
   const stateJobCounts = useMemo(() => {
@@ -1255,6 +1325,7 @@ export function TalentPulseDashboard({
   // Top 10 locations calculated dynamically by total job count from database
   const top10NationalHubs = useMemo(() => {
     return [...CITY_NODES]
+      .filter((c) => (cityCounts[c.name] || 0) > 0)
       .sort((a, b) => {
         const countA = cityCounts[a.name] || 0;
         const countB = cityCounts[b.name] || 0;
@@ -1310,9 +1381,10 @@ export function TalentPulseDashboard({
     };
   }, [selectedState]);
 
-  // Talent Corridors: strictly show on hover over an active node
+  // Talent Corridors: strictly show on hover over an active node that has > 0 jobs
   const activeCorridors = useMemo(() => {
     if (!hoveredCity) return [];
+    if ((cityCounts[hoveredCity] || 0) <= 0) return [];
     const hoveredNode = CITY_NODES.find(
       (c) => c.name.toLowerCase() === hoveredCity.toLowerCase()
     );
@@ -1322,10 +1394,15 @@ export function TalentPulseDashboard({
         (Math.abs(c.x1 - hoveredNode.x) < 8 && Math.abs(c.y1 - hoveredNode.y) < 8) ||
         (Math.abs(c.x2 - hoveredNode.x) < 8 && Math.abs(c.y2 - hoveredNode.y) < 8)
     );
-  }, [hoveredCity]);
+  }, [hoveredCity, cityCounts]);
 
   // State selection handler: drills down into Level 2 (State view)
+  // Clicking the active state toggles back to National Overview
   const handleStateClick = (state: { id: string; name: string }) => {
+    if (selectedState?.id === state.id) {
+      handleResetToNational();
+      return;
+    }
     const totalJobs = stateJobCounts[state.id] || 0;
     setSelectedState({
       id: state.id,
@@ -1347,8 +1424,9 @@ export function TalentPulseDashboard({
   };
 
   // Dedicated city switch handler that cleanly resets active skill filter and page
+  // Clicking the active city toggles back to National (or state level)
   const handleCitySelect = (cityName: string) => {
-    if (cityName === "All India") {
+    if (cityName === "All India" || selectedCity.toLowerCase() === cityName.toLowerCase()) {
       if (selectedState) {
         setSelectedCity("All India");
       } else {
@@ -1377,10 +1455,10 @@ export function TalentPulseDashboard({
     setCurrentPage(1);
   };
 
-  // Automatically reset to page 1 when city, state, skill filter, search query, or time window changes
+  // Automatically reset to page 1 when city, state, skill filter, search query, time window, or column filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCity, selectedState, selectedSkillFilter, searchQuery, timeWindow]);
+  }, [selectedCity, selectedState, selectedSkillFilter, searchQuery, timeWindow, selectedSourceFilter, selectedExpFilter]);
 
   // Refresh job catalog from database (calls /api/jobs)
   const refreshFromDatabase = useCallback(async (forced: boolean = false) => {
@@ -1408,16 +1486,18 @@ export function TalentPulseDashboard({
     return () => clearInterval(interval);
   }, [refreshFromDatabase]);
 
-  // Server-side full database search & filtering across all Supabase records (H4 fix + Recency)
+  // Server-side full database search & filtering across all Supabase records (H4 fix + Recency + Column filters)
   useEffect(() => {
     const hasSearch = searchQuery.trim().length > 0;
     const hasSkill = Boolean(selectedSkillFilter);
     const hasCity = selectedCity && selectedCity !== "All India";
     const hasState = Boolean(selectedState);
     const hasTimeWindow = timeWindow !== "all";
+    const hasSource = selectedSourceFilter !== "all";
+    const hasExp = selectedExpFilter !== "all";
 
     // If national default overview with no search/filters and on page 1, use initial preloaded jobs
-    if (!hasSearch && !hasSkill && !hasCity && !hasState && !hasTimeWindow && currentPage === 1) {
+    if (!hasSearch && !hasSkill && !hasCity && !hasState && !hasTimeWindow && !hasSource && !hasExp && currentPage === 1) {
       setServerJobs(null);
       setServerTotalCount(null);
       return;
@@ -1434,6 +1514,8 @@ export function TalentPulseDashboard({
         if (hasSkill && selectedSkillFilter) params.set("skill", selectedSkillFilter);
         if (hasCity) params.set("city", selectedCity);
         if (hasState && selectedState) params.set("state", selectedState.name);
+        if (hasSource) params.set("source", selectedSourceFilter);
+        if (hasExp) params.set("experience", selectedExpFilter);
 
         const currentWindow = TIME_WINDOWS.find((w) => w.key === timeWindow);
         if (currentWindow?.hours) {
@@ -1456,7 +1538,7 @@ export function TalentPulseDashboard({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedSkillFilter, selectedCity, selectedState, timeWindow, currentPage]);
+  }, [searchQuery, selectedSkillFilter, selectedCity, selectedState, timeWindow, selectedSourceFilter, selectedExpFilter, currentPage]);
 
   // Dynamic relative time for last extraction run
   const lastExtractionText = useMemo(() => {
@@ -1481,26 +1563,27 @@ export function TalentPulseDashboard({
     return `${diffDays} Day${diffDays > 1 ? "s" : ""} Ago`;
   }, [jobs]);
 
-  // Nodes to display on the India map based on progressive disclosure:
-  // When mapViewMode is 'all', display all 54 national GIS tech nodes across India.
-  // When mapViewMode is 'major', display all active tech hubs with live jobs in the database.
-  // State drill-down displays all regional hubs within that selected state.
+  // Nodes to display on the India map: strictly locations with > 0 jobs in the database
+  // Eliminates all 0-job nodes, bubbles, and badges across national and state views
   const displayedCityNodes = useMemo(() => {
-    let list = mapViewMode === "all"
-      ? CITY_NODES
-      : CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
+    // Only include cities that have > 0 jobs in the database
+    let list = CITY_NODES.filter((c) => (cityCounts[c.name] || 0) > 0);
 
-    // LEVEL 2: State Drill-Down (State Selected)
+    // LEVEL 2: State Drill-Down (State Selected) - only keep regional hubs that have > 0 jobs
     if (selectedState) {
-      list = CITY_NODES.filter((c) => c.stateId === selectedState.id);
+      list = list.filter((c) => c.stateId === selectedState.id);
     }
 
-    // If a specific city is selected, ensure it remains in the rendered list so user never loses sight of selection
+    // If a specific city is selected, ensure it has > 0 jobs before keeping it
     if (selectedCity !== "All India") {
       const selectedNode = CITY_NODES.find(
         (c) => c.name.toLowerCase() === selectedCity.toLowerCase()
       );
-      if (selectedNode && !list.some((c) => c.name.toLowerCase() === selectedNode.name.toLowerCase())) {
+      if (
+        selectedNode &&
+        (cityCounts[selectedNode.name] || 0) > 0 &&
+        !list.some((c) => c.name.toLowerCase() === selectedNode.name.toLowerCase())
+      ) {
         list = [...list, selectedNode];
       }
     }
@@ -1530,7 +1613,6 @@ export function TalentPulseDashboard({
     selectedCity,
     hoveredCity,
     cityCounts,
-    mapViewMode,
   ]);
 
   // Current active city info
@@ -1827,8 +1909,33 @@ export function TalentPulseDashboard({
       });
     }
 
+    // 3. Source filter (LinkedIn, Indeed, Naukri)
+    if (selectedSourceFilter && selectedSourceFilter !== "all") {
+      const s = selectedSourceFilter.toLowerCase();
+      list = list.filter((j) => (j.source || "").toLowerCase().includes(s));
+    }
+
+    // 4. Experience filter (0-2 Yrs, 3-5 Yrs, 6-8 Yrs, 8+ Yrs)
+    if (selectedExpFilter && selectedExpFilter !== "all") {
+      list = list.filter((j) => {
+        const minExp = j.min_exp_num !== undefined && j.min_exp_num !== null
+          ? j.min_exp_num
+          : parseExpNumber(j.min_experience_years);
+        const maxExp = j.max_exp_num !== undefined && j.max_exp_num !== null
+          ? j.max_exp_num
+          : parseExpNumber(j.max_experience_years);
+        const exp = minExp !== null ? minExp : maxExp;
+        if (exp === null) return false;
+        if (selectedExpFilter === "0-2") return exp <= 2.0;
+        if (selectedExpFilter === "3-5") return exp >= 3.0 && exp <= 5.0;
+        if (selectedExpFilter === "6-8") return exp >= 6.0 && exp <= 8.0;
+        if (selectedExpFilter === "8+") return exp >= 8.0;
+        return true;
+      });
+    }
+
     return list;
-  }, [activeAnalyticsJobs, selectedSkillFilter, searchQuery]);
+  }, [activeAnalyticsJobs, selectedSkillFilter, searchQuery, selectedSourceFilter, selectedExpFilter]);
 
   // Authentic display jobs: returns filteredJobs, or DEMO jobs only if DB is 100% empty
   const displayJobs = useMemo(() => {
@@ -1984,6 +2091,12 @@ export function TalentPulseDashboard({
     if (selectedState) {
       params.set("state", selectedState.name);
     }
+    if (selectedSourceFilter && selectedSourceFilter !== "all") {
+      params.set("source", selectedSourceFilter);
+    }
+    if (selectedExpFilter && selectedExpFilter !== "all") {
+      params.set("experience", selectedExpFilter);
+    }
 
     const exportUrl = `/api/scraper/export?${params.toString()}`;
     const a = document.createElement("a");
@@ -2071,102 +2184,6 @@ export function TalentPulseDashboard({
             <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isSyncing ? "animate-spin" : ""}`} />
             <span>{isSyncing ? "Syncing..." : "Sync DB"}</span>
           </button>
-
-          {/* Export CSV Button */}
-          <button
-            onClick={handleExportCityCsv}
-            id="export-csv-btn"
-            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-950 border border-slate-300 transition-colors flex items-center gap-1.5 shadow-xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span>Export CSV</span>
-          </button>
-
-          {/* Selected Region Pill Badge */}
-          <button
-            type="button"
-            id="selected-region-pill-btn"
-            onClick={() => {
-              if (selectedCity !== "All India") {
-                handleCitySelect("All India");
-              }
-            }}
-            title={selectedCity !== "All India" ? "Click to view All India" : "Currently viewing All India"}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100/70 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-            <span>{selectedCity}</span>
-            {selectedCity !== "All India" && (
-              <span className="text-[10px] text-emerald-700 underline ml-0.5 font-semibold">Reset</span>
-            )}
-          </button>
-
-          {/* Extraction Recency (Calendar / Clock) Time-Window Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              id="time-window-dropdown-btn"
-              onClick={() => setTimeWindowOpen((prev) => !prev)}
-              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-950 border border-slate-300 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-              title="Filter jobs & export by extraction recency"
-            >
-              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-              <span>
-                {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label || "All Time"}
-              </span>
-              <ChevronDown
-                className={`w-3 h-3 text-slate-400 transition-transform ${
-                  timeWindowOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {timeWindowOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setTimeWindowOpen(false)}
-                />
-                <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-50 animate-in fade-in zoom-in-95">
-                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
-                    <Clock className="w-3 h-3 text-indigo-600" />
-                    <span>Extraction Recency</span>
-                  </div>
-                  {TIME_WINDOWS.map((w) => {
-                    const active = timeWindow === w.key;
-                    return (
-                      <button
-                        key={w.key}
-                        type="button"
-                        onClick={() => {
-                          setTimeWindow(w.key);
-                          setTimeWindowOpen(false);
-                          setCurrentPage(1);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center justify-between transition-colors ${
-                          active
-                            ? "bg-indigo-50 text-indigo-700 font-bold"
-                            : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              active ? "bg-indigo-600" : "bg-slate-300"
-                            }`}
-                          />
-                          {w.label}
-                        </span>
-                        {active && (
-                          <span className="text-[10px] font-bold text-indigo-600">Active</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
 
@@ -2260,144 +2277,38 @@ export function TalentPulseDashboard({
       {/* MIDDLE SECTION: MAP (LEFT) & DRILLDOWN (RIGHT) */}
       {/* ==================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT CARD: Geographic Job Density (India) */}
-        <div className="lg:col-span-7 xl:col-span-7 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
-                  Geographic Job Density (India)
-                </h2>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  {selectedState
-                    ? `${selectedState.name} (${displayedCityNodes.length} Hubs)`
-                    : `${citiesWithJobs.length} Active Hubs`}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                {selectedState
-                  ? `Drill-down view of ${selectedState.name} — click local city hubs to isolate city demand`
-                  : "National proportional density map — bubble sizes scale by live hiring volume. Click any state to drill down"}
-              </p>
-            </div>
-
-            {/* View Mode Toggle: Active Hubs vs All India GIS Hubs */}
-            {!selectedState && (
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setMapViewMode("major")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    mapViewMode === "major"
-                      ? "bg-white text-indigo-700 shadow-2xs border border-slate-200/80"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                  title="Show active tech hubs with live jobs extracted in the database"
-                >
-                  Active Hubs ({citiesWithJobs.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapViewMode("all")}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    mapViewMode === "all"
-                      ? "bg-white text-indigo-700 shadow-2xs border border-slate-200/80"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                  title="Show all national GIS benchmark tech nodes across India"
-                >
-                  All Hubs ({CITY_NODES.length})
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 2-Level Progressive Disclosure Navigation & Breadcrumb Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 pt-1 border-b border-slate-100 text-xs">
-            {selectedState ? (
-              /* Level 2 Breadcrumb Navigation */
-              <div className="flex items-center gap-1.5 flex-wrap" id="map-state-breadcrumb">
-                <button
-                  type="button"
-                  onClick={handleResetToNational}
-                  className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <span>All India</span>
-                </button>
-                <span className="text-slate-400 font-bold">/</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCity("All India")}
-                  className={`font-bold transition-colors cursor-pointer ${
-                    selectedCity === "All India"
-                      ? "text-slate-900 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-200"
-                      : "text-indigo-600 hover:text-indigo-800 hover:underline"
-                  }`}
-                >
-                  <span>{selectedState.name}</span>
-                  <span className="ml-1 text-[11px] font-semibold text-indigo-700">
-                    ({selectedState.totalJobs.toLocaleString()} Jobs)
-                  </span>
-                </button>
-                {selectedCity !== "All India" && (
-                  <>
-                    <span className="text-slate-400 font-bold">/</span>
-                    <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                      {selectedCity} ({cityCounts[selectedCity] || 0} Jobs)
-                    </span>
-                  </>
-                )}
-              </div>
-            ) : (
-              /* Level 1 National Overview Info */
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
-                  National Overview
-                </span>
-                <span className="text-slate-400">•</span>
-                <span className="text-xs text-slate-500 font-medium">
-                  Showing {displayedCityNodes.length} Proportional Hubs • Click any state polygon or hub to drill down
-                </span>
-              </div>
-            )}
-
-            {/* Reset Controls */}
-            <div className="flex items-center gap-2 shrink-0">
-              {selectedState && (
-                <button
-                  type="button"
-                  onClick={handleResetToNational}
-                  id="reset-view-breadcrumb-btn"
-                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
-                  title="Reset camera back to National Overview"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  <span>Reset View</span>
-                </button>
-              )}
+        {/* LEFT CARD: Pure Minimal Interactive India Map */}
+        <div className="lg:col-span-7 xl:col-span-7 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-xs flex flex-col justify-center relative overflow-hidden">
+          <div
+            className="w-full h-full min-h-[580px] sm:min-h-[620px] rounded-xl border border-slate-200/80 bg-[#FAFAFC] relative overflow-hidden select-none flex items-center justify-center p-2 cursor-default"
+            onClick={handleResetToNational}
+            title={selectedState || selectedCity !== "All India" ? "Click map canvas outside to reset to full India map" : undefined}
+          >
+            {/* 1-Click Floating Return Control (visible only when drilled into a state or city) */}
+            {(selectedState || selectedCity !== "All India") && (
               <button
                 type="button"
-                onClick={handleResetToNational}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResetToNational();
+                }}
                 id="reset-to-india-btn"
-                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all whitespace-nowrap ${
-                  !selectedState && selectedCity === "All India"
-                    ? "border-slate-200 bg-slate-50 text-slate-400 cursor-default"
-                    : "border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 shadow-xs cursor-pointer"
-                }`}
+                className="absolute top-3.5 left-3.5 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white text-indigo-700 hover:text-indigo-950 border border-indigo-200/90 shadow-md text-xs font-bold transition-all cursor-pointer backdrop-blur-xs hover:scale-105 active:scale-95"
+                title="Reset view back to Full India Map"
               >
-                Reset to India
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Reset to India</span>
+                <span className="text-[10px] text-slate-500 font-semibold ml-0.5">
+                  • {selectedCity !== "All India" ? selectedCity : selectedState?.name}
+                </span>
               </button>
-            </div>
-          </div>
+            )}
 
-          {/* Map Visualization Canvas: Proportional Density Bubble Map */}
-          <div className="mt-3 flex-1 min-h-[460px] rounded-xl border border-slate-200 bg-[#FAFAFC] relative overflow-hidden select-none flex flex-col items-center justify-between p-3">
             <svg
               viewBox={INDIA_MAP_VIEWBOX}
-              className="w-full h-full max-h-[500px]"
+              className="w-full h-full min-h-[540px] max-h-[620px]"
               preserveAspectRatio="xMidYMid meet"
+              onClick={handleResetToNational}
             >
               <defs>
                 <filter id="city-badge-shadow" x="-10%" y="-20%" width="120%" height="140%">
@@ -2416,7 +2327,13 @@ export function TalentPulseDashboard({
               </defs>
 
               {/* Background Coordinate Grid */}
-              <rect width="100%" height="100%" fill="url(#india-dot-grid)" />
+              <rect
+                width="100%"
+                height="100%"
+                fill="url(#india-dot-grid)"
+                className="cursor-pointer"
+                onClick={handleResetToNational}
+              />
 
               {/* Fixed Compass Rose HUD */}
               <g transform="translate(560, 45)" opacity="0.85" pointerEvents="none">
@@ -2483,7 +2400,10 @@ export function TalentPulseDashboard({
                         style={{
                           transition: "opacity 350ms ease, fill 200ms ease, stroke 200ms ease",
                         }}
-                        onClick={() => handleStateClick(state)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStateClick(state);
+                        }}
                         onMouseEnter={() => setHoveredStateId(state.id)}
                         onMouseLeave={() => setHoveredStateId(null)}
                       >
@@ -2518,9 +2438,12 @@ export function TalentPulseDashboard({
                 {/* CONCEPT 2: Interactive City Hub Clusters & Proportional Density Bubbles */}
                 <g id="city-nodes">
                   {displayedCityNodes.map((city) => {
+                    const count = cityCounts[city.name] || 0;
+                    // Strictly hide any location that has 0 jobs
+                    if (count <= 0) return null;
+
                     const isSelected = selectedCity.toLowerCase() === city.name.toLowerCase();
                     const isHovered = hoveredCity === city.name;
-                    const count = cityCounts[city.name] || 0;
                     const formatted = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count;
 
                     // Proportional Density Bubble Radius Scaling
@@ -2734,45 +2657,6 @@ export function TalentPulseDashboard({
                 </g>
               </g>
             </svg>
-
-            {/* Bottom Map Legend with Proportional Density Scale */}
-            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 px-2 border-t border-slate-200 text-xs text-slate-700 font-semibold">
-              {/* Density Bubble Scale Guide */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scale:</span>
-                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
-                  &lt;10
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                  <span className="w-3.5 h-3.5 rounded-full bg-indigo-100 border border-indigo-600 flex items-center justify-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
-                  </span>
-                  10–50
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 border border-indigo-600 flex items-center justify-center">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                  </span>
-                  50+ Metros
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-[11px] text-indigo-700 font-bold">
-                  Bubble Size = Hiring Volume
-                </span>
-              </div>
-
-              {/* Counts & Coverage */}
-              <div className="flex items-center gap-2 text-[11px] text-slate-600 font-medium">
-                <span>
-                  Showing <strong className="text-slate-900 font-bold">{displayedCityNodes.length}</strong> of {citiesWithJobs.length} Active Hubs
-                </span>
-                <span>•</span>
-                <span>
-                  {selectedState ? `${selectedState.totalJobs.toLocaleString()} State Roles` : `${totalLiveJobs.toLocaleString()} Positions`}
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -2968,7 +2852,7 @@ export function TalentPulseDashboard({
       {/* ==================================================================== */}
       <div id="directory" className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4 hover:border-slate-300 transition-colors">
         {/* Table Title Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
           <div className="flex items-baseline gap-2">
             <h3 className="text-base font-black text-slate-900" id="table-title">
               {selectedCity !== "All India"
@@ -2980,42 +2864,363 @@ export function TalentPulseDashboard({
             <span className="text-xs font-semibold text-slate-600" id="table-count-label">
               (Showing {totalDisplayCount > 0 ? `${startIndex + 1}–${endIndex}` : "0"} of{" "}
               {totalDisplayCount.toLocaleString()} matching records
-              {timeWindow !== "all" && (
-                <span className="text-indigo-600 font-bold ml-1">
-                  • {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label}
-                </span>
-              )}{" "}
               • Page {safeCurrentPage} of {totalPages})
               {isServerLoading && <span className="ml-2 text-indigo-600 animate-pulse text-[11px] font-bold">Searching...</span>}
             </span>
           </div>
 
+          {/* Action Controls: Export CSV Button placed directly on the table header */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCityCsv}
+              id="export-csv-btn"
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-950 border border-slate-300 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Export current filtered jobs to CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ==================================================================== */}
+        {/* COLUMN FILTER TOOLBAR: LOCATION, EXPERIENCE, SOURCES, TIME WINDOW */}
+        {/* ==================================================================== */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 bg-slate-50/90 rounded-xl border border-slate-200">
           <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mr-1">
+              <Filter className="w-3.5 h-3.5 text-slate-400" /> Filter:
+            </span>
+
+            {/* 1. Location Filter Dropdown */}
+            <div className="relative" data-dropdown-id="location-filter">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocationDropdownOpen(!locationDropdownOpen);
+                  setExpDropdownOpen(false);
+                  setSourceDropdownOpen(false);
+                  setTimeWindowOpen(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                  selectedCity !== "All India" || selectedState
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                <span>
+                  {selectedCity !== "All India"
+                    ? selectedCity
+                    : selectedState
+                    ? selectedState.name
+                    : "Location: All India"}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${locationDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {locationDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 space-y-1.5">
+                  <div className="px-1 py-1">
+                    <input
+                      type="text"
+                      placeholder="Search city or hub..."
+                      value={locationSearchText}
+                      onChange={(e) => setLocationSearchText(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto space-y-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleResetToNational();
+                        setLocationDropdownOpen(false);
+                        setLocationSearchText("");
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                        selectedCity === "All India" && !selectedState
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "hover:bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      <span>All India (Pan-National)</span>
+                      <span className="text-[11px] font-semibold text-slate-400">11k+ Jobs</span>
+                    </button>
+                    {filteredLocationList.map((loc) => {
+                      const isSelected = selectedCity.toLowerCase() === loc.name.toLowerCase();
+                      return (
+                        <button
+                          key={loc.name}
+                          type="button"
+                          onClick={() => {
+                            handleCitySelect(loc.name);
+                            setLocationDropdownOpen(false);
+                            setLocationSearchText("");
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                            isSelected
+                              ? "bg-indigo-50 text-indigo-700"
+                              : "hover:bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          <span className="truncate">{loc.name}</span>
+                          <span className="text-[11px] font-semibold text-slate-400 ml-2">
+                            {loc.count > 0 ? `${loc.count.toLocaleString()}` : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Experience Filter Dropdown */}
+            <div className="relative" data-dropdown-id="exp-filter">
+              <button
+                type="button"
+                onClick={() => {
+                  setExpDropdownOpen(!expDropdownOpen);
+                  setLocationDropdownOpen(false);
+                  setSourceDropdownOpen(false);
+                  setTimeWindowOpen(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                  selectedExpFilter !== "all"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5 text-indigo-500" />
+                <span>
+                  {selectedExpFilter === "all"
+                    ? "Experience: All"
+                    : `Exp: ${EXPERIENCE_FILTER_OPTIONS.find((o) => o.key === selectedExpFilter)?.label}`}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${expDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {expDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 space-y-0.5 text-xs">
+                  {EXPERIENCE_FILTER_OPTIONS.map((opt) => {
+                    const isSelected = selectedExpFilter === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedExpFilter(opt.key);
+                          setExpDropdownOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg font-bold flex flex-col transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "hover:bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        <span className="font-bold">{opt.label}</span>
+                        <span className="text-[10px] font-normal text-slate-500">{opt.subtitle}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Source Filter Dropdown */}
+            <div className="relative" data-dropdown-id="source-filter">
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceDropdownOpen(!sourceDropdownOpen);
+                  setLocationDropdownOpen(false);
+                  setExpDropdownOpen(false);
+                  setTimeWindowOpen(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                  selectedSourceFilter !== "all"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                <span>
+                  {selectedSourceFilter === "all"
+                    ? "Source: All"
+                    : `Source: ${selectedSourceFilter}`}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${sourceDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {sourceDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 space-y-0.5 text-xs">
+                  {SOURCE_FILTER_OPTIONS.map((opt) => {
+                    const isSelected = selectedSourceFilter === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSourceFilter(opt.key);
+                          setSourceDropdownOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "hover:bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        <span className="text-[10px] font-semibold text-slate-400">{opt.countLabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Extraction Recency Time-Window (All Time / Calendar) Dropdown */}
+            <div className="relative" data-dropdown-id="time-window-filter">
+              <button
+                type="button"
+                id="time-window-dropdown-btn"
+                onClick={() => {
+                  setTimeWindowOpen(!timeWindowOpen);
+                  setLocationDropdownOpen(false);
+                  setExpDropdownOpen(false);
+                  setSourceDropdownOpen(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
+                  timeWindow !== "all"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+                title="Filter jobs by extraction recency"
+              >
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span>
+                  {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label || "All Time"}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${timeWindowOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {timeWindowOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-indigo-600" />
+                    <span>Extraction Recency</span>
+                  </div>
+                  {TIME_WINDOWS.map((w) => {
+                    const active = timeWindow === w.key;
+                    return (
+                      <button
+                        key={w.key}
+                        type="button"
+                        onClick={() => {
+                          setTimeWindow(w.key);
+                          setTimeWindowOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          active
+                            ? "bg-indigo-50 text-indigo-700 font-bold"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              active ? "bg-indigo-600" : "bg-slate-300"
+                            }`}
+                          />
+                          {w.label}
+                        </span>
+                        {active && (
+                          <span className="text-[10px] font-bold text-indigo-600">Active</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Active Filter Badges & Reset All */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectedCity !== "All India" && (
+              <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                <span>City: {selectedCity}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCity("All India")}
+                  className="hover:text-indigo-950 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedExpFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                <span>Exp: {EXPERIENCE_FILTER_OPTIONS.find((o) => o.key === selectedExpFilter)?.label}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExpFilter("all")}
+                  className="hover:text-indigo-950 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedSourceFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                <span>Source: {selectedSourceFilter}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSourceFilter("all")}
+                  className="hover:text-indigo-950 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
             {timeWindow !== "all" && (
-              <div className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-900 px-3 py-1 rounded-lg border border-indigo-200 font-bold shadow-2xs">
-                <Clock className="w-3 h-3 text-indigo-600" />
-                <span>Recency: <strong>{TIME_WINDOWS.find((w) => w.key === timeWindow)?.label}</strong></span>
+              <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                <span>Recency: {TIME_WINDOWS.find((w) => w.key === timeWindow)?.label}</span>
                 <button
                   type="button"
                   onClick={() => setTimeWindow("all")}
-                  className="hover:text-indigo-950 ml-1 cursor-pointer"
-                  title="Clear time window filter"
+                  className="hover:text-indigo-950 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </div>
+              </span>
             )}
             {selectedSkillFilter && (
-              <div className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-900 px-3 py-1 rounded-lg border border-indigo-200 font-bold shadow-2xs">
-                <span>Filter: <strong>{selectedSkillFilter}</strong></span>
+              <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                <span>Skill: {selectedSkillFilter}</span>
                 <button
                   type="button"
                   onClick={() => setSelectedSkillFilter(null)}
-                  className="hover:text-indigo-950 ml-1 cursor-pointer"
+                  className="hover:text-indigo-950 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              </div>
+              </span>
+            )}
+
+            {(selectedCity !== "All India" || selectedState || selectedExpFilter !== "all" || selectedSourceFilter !== "all" || selectedSkillFilter || timeWindow !== "all") && (
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-xs font-bold text-slate-500 hover:text-indigo-600 px-2 py-1 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                Clear All
+              </button>
             )}
           </div>
         </div>
@@ -3060,13 +3265,13 @@ export function TalentPulseDashboard({
                             Clear Search
                           </button>
                         )}
-                        {selectedCity !== "All India" && (
+                        {(selectedCity !== "All India" || selectedExpFilter !== "all" || selectedSourceFilter !== "all" || selectedSkillFilter || timeWindow !== "all") && (
                           <button
                             type="button"
-                            onClick={() => setSelectedCity("All India")}
-                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 transition-colors cursor-pointer"
+                            onClick={handleClearAllFilters}
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors cursor-pointer"
                           >
-                            View All India Jobs
+                            Reset All Filters
                           </button>
                         )}
                       </div>

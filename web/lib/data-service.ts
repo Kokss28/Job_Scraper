@@ -11,6 +11,7 @@ import {
   normalizeIndianHub,
   CITY_SEARCH_ALIASES,
   CITY_TO_STATE_FALLBACK,
+  EXPERIENCE_FILTER_OPTIONS,
 } from "./taxonomy";
 
 export * from "./taxonomy";
@@ -31,6 +32,8 @@ export interface JobFilterParams {
   state?: string;
   skill?: string;
   hours?: number;
+  experience?: string;
+  source?: string;
 }
 
 export interface PaginatedJobsResult {
@@ -48,6 +51,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes (aligns with scraper frequenc
 
 export function invalidateJobsCache(): void {
   cachedStats = null;
+  cachedCatalog = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +279,20 @@ export async function getPaginatedJobs(
         query = query.ilike("skills", `%${params.skill.trim()}%`);
       }
 
+      // Source filter (LinkedIn, Indeed, Naukri)
+      if (params.source && params.source.toLowerCase() !== "all") {
+        query = query.ilike("source", `%${params.source.trim()}%`);
+      }
+
+      // Experience filter (0-2, 3-5, 6-8, 8+)
+      if (params.experience && params.experience.toLowerCase() !== "all") {
+        const tier = params.experience.trim();
+        const expOpt = EXPERIENCE_FILTER_OPTIONS.find((o) => o.key === tier);
+        if (expOpt && expOpt.dbValues && expOpt.dbValues.length > 0) {
+          query = query.in("min_experience_years", [...expOpt.dbValues]);
+        }
+      }
+
       // Time window recency filter (hours)
       if (params.hours && params.hours > 0) {
         const cutoff = new Date(Date.now() - params.hours * 60 * 60 * 1000).toISOString();
@@ -346,6 +364,26 @@ export async function getPaginatedJobs(
     filtered = filtered.filter((j) => j.skills?.toLowerCase().includes(s));
   }
 
+  if (params.source && params.source.toLowerCase() !== "all") {
+    const s = params.source.toLowerCase().trim();
+    filtered = filtered.filter((j) => (j.source || "").toLowerCase().includes(s));
+  }
+
+  if (params.experience && params.experience.toLowerCase() !== "all") {
+    const expKey = params.experience.trim();
+    filtered = filtered.filter((j) => {
+      const minExp = parseExpNumber(j.min_experience_years);
+      const maxExp = parseExpNumber(j.max_experience_years);
+      const exp = minExp !== null ? minExp : maxExp;
+      if (exp === null) return false;
+      if (expKey === "0-2") return exp <= 2.0;
+      if (expKey === "3-5") return exp >= 3.0 && exp <= 5.0;
+      if (expKey === "6-8") return exp >= 6.0 && exp <= 8.0;
+      if (expKey === "8+") return exp >= 8.0;
+      return true;
+    });
+  }
+
   const totalCount = filtered.length;
   const pageSlice = filtered.slice(from, to + 1);
 
@@ -402,14 +440,72 @@ export async function getJobsCatalog(): Promise<{
     return { jobs: cachedCatalog.jobs, isCloudSupabase: cachedCatalog.isCloudSupabase };
   }
 
-  // Delegate to paginated fetch with 100 recent rows for ultra-fast response
-  const paginated = await getPaginatedJobs({ page: 1, pageSize: 100 });
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+      const countRes = await supabase.from("jobs").select("job_id", { count: "exact", head: true });
+      const total = countRes.count || 0;
+
+      if (total > 0) {
+        const CHUNK_SIZE = 1000;
+        const chunkPromises: PromiseLike<any>[] = [];
+        for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+          chunkPromises.push(
+            supabase
+              .from("jobs")
+              .select(
+                "job_id, source, title, company, city, state, country, min_experience_years, max_experience_years, skills, degree_required, collected_at, link"
+              )
+              .order("collected_at", { ascending: false, nullsFirst: false })
+              .range(offset, offset + CHUNK_SIZE - 1)
+          );
+        }
+
+        const chunkResults = await Promise.all(chunkPromises);
+        const allRows: any[] = [];
+        for (const res of chunkResults) {
+          if (res.data && Array.isArray(res.data)) {
+            allRows.push(...res.data);
+          }
+        }
+
+        const enriched: UnifiedJobRecord[] = allRows.map((j: any) => {
+          const minExp = parseExpNumber(j.min_experience_years);
+          const maxExp = parseExpNumber(j.max_experience_years);
+          const edu = classifyEducation(j.degree_required);
+          return {
+            ...j,
+            min_exp_num: minExp,
+            max_exp_num: maxExp,
+            career_tier: computeCareerTier(minExp, maxExp),
+            normalized_location: normalizeIndianHub(j.city, j.state, j.country),
+            edu_cluster: edu.edu_cluster,
+            edu_subcluster: edu.edu_subcluster,
+            edu_degrees: edu.edu_degrees,
+            exp_display: formatExpDisplay(minExp, maxExp),
+          };
+        });
+
+        cachedCatalog = {
+          jobs: enriched,
+          isCloudSupabase: true,
+          timestamp: Date.now(),
+        };
+        return { jobs: enriched, isCloudSupabase: true };
+      }
+    } catch (e) {
+      console.warn("Supabase full catalog query failed, falling back to local CSV:", e);
+    }
+  }
+
+  // Fallback to local CSV
+  const localJobs = loadJobsFromLocalCsv();
   cachedCatalog = {
-    jobs: paginated.jobs,
-    isCloudSupabase: paginated.isCloudSupabase,
+    jobs: localJobs,
+    isCloudSupabase: false,
     timestamp: Date.now(),
   };
-  return { jobs: paginated.jobs, isCloudSupabase: paginated.isCloudSupabase };
+  return { jobs: localJobs, isCloudSupabase: false };
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
-import { CITY_SEARCH_ALIASES } from "@/lib/taxonomy";
+import { CITY_SEARCH_ALIASES, EXPERIENCE_FILTER_OPTIONS } from "@/lib/taxonomy";
 
 // RFC 4180 compliant CSV parser supporting quoted newlines and escaped double quotes
 function parseCsvRecords(text: string): string[][] {
@@ -87,11 +87,12 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const batch = searchParams.get("batch"); // 'latest' or 'all'
-    const sourcesParam = searchParams.get("sources"); // comma-separated e.g. "LinkedIn,Naukri,Indeed"
+    const sourcesParam = searchParams.get("sources") || searchParams.get("source"); // comma-separated e.g. "LinkedIn,Naukri,Indeed"
     const freshnessParam = searchParams.get("freshness"); // hours e.g. "24" or "72"
     const hoursParam = searchParams.get("hours") || freshnessParam;
     const cityParam = searchParams.get("city");
     const stateParam = searchParams.get("state");
+    const expParam = searchParams.get("experience");
     const hours = hoursParam ? parseFloat(hoursParam) : 0;
     const recentOnly = searchParams.get("recent");
 
@@ -173,10 +174,17 @@ export async function GET(request: Request) {
             query = query.ilike("state", `%${stateParam.trim()}%`);
           }
 
-          if (sourcesParam) {
+          if (sourcesParam && sourcesParam.toLowerCase() !== "all") {
             const allowed = sourcesParam.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
             if (allowed.length === 1) {
               query = query.ilike("source", `%${allowed[0]}%`);
+            }
+          }
+
+          if (expParam && expParam.toLowerCase() !== "all") {
+            const expOpt = EXPERIENCE_FILTER_OPTIONS.find((o) => o.key === expParam.trim());
+            if (expOpt && expOpt.dbValues && expOpt.dbValues.length > 0) {
+              query = query.in("min_experience_years", [...expOpt.dbValues]);
             }
           }
 

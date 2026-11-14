@@ -1,7 +1,17 @@
-import { SignUpForm } from "@/components/sign-up-form";
+import { Suspense } from "react";
+import { PortalRegisterForm } from "@/components/portal-register-form";
+
+export const metadata = {
+  title: "Create Account | Job Portal",
+  description: "Register for your verified candidate account with an admin invitation code",
+};
 
 export default function Page() {
   return (
-    <main className="auth-page"><section className="auth-card"><div className="auth-brand"><span className="brand-mark">J</span>Job Intelligence</div><p className="eyebrow">Create account</p><h1>Set up your workspace</h1><p className="auth-subtitle">New accounts receive the standard user role.</p><SignUpForm /></section></main>
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-indigo-50/40 flex items-center justify-center p-4 sm:p-6">
+      <Suspense fallback={<div className="text-xs font-semibold text-slate-500">Loading registration...</div>}>
+        <PortalRegisterForm />
+      </Suspense>
+    </div>
   );
 }

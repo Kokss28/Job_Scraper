@@ -6,6 +6,8 @@ export interface DegreeReportQuery {
   experience?: string; // 'fresher' | 'junior' | 'all'
   search?: string;
   skill?: string;
+  date?: string; // 'YYYY-MM-DD' or comma-separated e.g. '2026-11-01,2026-11-02'
+  dates?: string[];
 }
 
 export interface SkillMetric {
@@ -53,6 +55,9 @@ export interface DegreeReportData {
   degree: string;
   degreeLabel: string;
   experienceFilter: string;
+  selectedDate?: string;
+  selectedDates?: string[];
+  availableDates?: Array<{ date: string; count: number }>;
   totalMarketJobs: number;
   eligibleJobsCount: number;
   eligibilityRate: number;
@@ -528,18 +533,50 @@ export function generateDegreeCareerReport(
   const degreeConfig = DEGREE_PATTERNS[degreeKey] || DEGREE_PATTERNS.bsc;
   const experienceFilter = query.experience || "fresher";
 
-  const totalMarketJobs = jobs.length;
+  // Support single or multiple extraction dates
+  let targetDates: string[] = [];
+  if (query.dates && Array.isArray(query.dates) && query.dates.length > 0) {
+    targetDates = query.dates.map((d) => d.trim()).filter(Boolean);
+  } else if (query.date && query.date.trim()) {
+    targetDates = query.date.split(",").map((d) => d.trim()).filter(Boolean);
+  }
+
+  // 0. Extract available extraction dates across the full database
+  const dateCounts: Record<string, number> = {};
+  for (const job of jobs) {
+    if (job.collected_at) {
+      const d = String(job.collected_at).slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        dateCounts[d] = (dateCounts[d] || 0) + 1;
+      }
+    }
+  }
+  const availableDates = Object.entries(dateCounts)
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  // If specific extraction date(s) are requested, filter the dataset to those days
+  let baseJobs = jobs;
+  if (targetDates.length > 0) {
+    const dateSet = new Set(targetDates);
+    baseJobs = jobs.filter((job) => {
+      const ca = String(job.collected_at || "").slice(0, 10);
+      return dateSet.has(ca);
+    });
+  }
+
+  const totalMarketJobs = baseJobs.length;
 
   // 1. Filter jobs by degree pattern
-  let filtered = jobs.filter((job) => {
+  let filtered = baseJobs.filter((job) => {
     if (degreeKey === "all") return true;
     const deg = String(job.degree_required || "");
     const desc = String(job.full_description || "");
     return degreeConfig.regex.test(deg) || degreeConfig.regex.test(desc);
   });
 
-  if (filtered.length < 15 && jobs.length > 0 && degreeKey !== "all") {
-    filtered = jobs.filter((job) => {
+  if (filtered.length === 0 && baseJobs.length > 0 && degreeKey !== "all") {
+    filtered = baseJobs.filter((job) => {
       const deg = String(job.degree_required || "").toLowerCase();
       return (
         deg.includes("any") ||
@@ -725,7 +762,7 @@ export function generateDegreeCareerReport(
     }));
 
   // 8. Extract Sample Jobs (expanded slice & category_code tagged for 100% accurate filtering)
-  const sampleJobs = filtered.slice(0, 80).map((j) => {
+  const sampleJobs = filtered.slice(0, 300).map((j) => {
     let skillList: string[] = [];
     if (j.skills && j.skills !== "Not Specified") {
       skillList = j.skills
@@ -776,5 +813,8 @@ export function generateDegreeCareerReport(
     topCities,
     courseCurriculums: TARGET_CURRICULUMS,
     sampleJobs,
+    selectedDate: targetDates[0] || "",
+    selectedDates: targetDates,
+    availableDates,
   };
 }

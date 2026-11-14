@@ -182,6 +182,41 @@ def main():
             except Exception as sb_err:
                 log(f"Supabase direct sync note: {sb_err}")
 
+        if total_jobs == 0:
+            try:
+                import sqlite3
+                if Path(DB_PATH).exists():
+                    with sqlite3.connect(DB_PATH) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM jobs")
+                        row = cursor.fetchone()
+                        if row:
+                            total_jobs = row[0]
+            except Exception:
+                pass
+        if total_jobs == 0:
+            total_jobs = len(extracted_batch)
+
+        new_count = synced if synced > 0 else (getattr(report, "new_jobs_written", 0) or len(extracted_batch))
+
+        # Safe local CSV backup and latest batch generation
+        batch_filename = ""
+        rel_batch_path = ""
+        try:
+            from pipeline.audit_logger import save_batch_extraction_csv
+            batch_file_path, batch_filename, _ = save_batch_extraction_csv(
+                jobs=extracted_batch,
+                domain=domain_name,
+                keywords=", ".join(keywords),
+                location=location,
+            )
+            try:
+                rel_batch_path = str(batch_file_path.relative_to(ROOT_DIR)).replace("\\", "/")
+            except Exception:
+                rel_batch_path = str(batch_file_path).replace("\\", "/")
+        except Exception as csv_err:
+            log(f"Notice: Local batch CSV export skipped: {csv_err}")
+
         def _get_val(obj, key, default=""):
             if isinstance(obj, dict):
                 return obj.get(key, default)
@@ -192,11 +227,32 @@ def main():
             src = _get_val(j, "source", "Unknown")
             by_source[src] = by_source.get(src, 0) + 1
 
+        # Safe extraction audit history logging
+        try:
+            from pipeline.audit_logger import record_extraction_run
+            record_extraction_run(
+                domain=domain_name,
+                slot=slot_num,
+                keywords=", ".join(keywords),
+                location=location,
+                sources=", ".join([s.capitalize() for s in sources]),
+                extracted_count=len(extracted_batch),
+                new_jobs_added=new_count,
+                total_db_jobs=total_jobs,
+                by_source=by_source,
+                duration_seconds=duration_seconds,
+                status="SUCCESS",
+                batch_filename=batch_filename,
+                batch_file_path=rel_batch_path,
+            )
+        except Exception as hist_err:
+            log(f"Notice: Extraction history logging skipped: {hist_err}")
+
         # Print executive summary card to terminal
         print_extraction_summary_card(
             domain=domain_name,
             extracted_count=len(extracted_batch),
-            new_jobs_added=synced,
+            new_jobs_added=new_count,
             total_db_jobs=total_jobs,
             duration_seconds=duration_seconds,
             by_source=by_source,
@@ -215,12 +271,6 @@ def main():
                 "link": _get_val(j, "link", ""),
             })
 
-        rel_batch_path = ""
-        try:
-            rel_batch_path = str(batch_file_path.relative_to(ROOT_DIR)).replace("\\", "/")
-        except Exception:
-            rel_batch_path = str(batch_file_path).replace("\\", "/")
-
         summary_json = {
             "status": "success",
             "domain": domain_name,
@@ -234,8 +284,8 @@ def main():
             "keywords": keywords,
             "location": location,
             "latest_csv": "latest_extracted_jobs.csv",
-            "batch_csv": batch_filename,
-            "batch_csv_path": rel_batch_path,
+            "batch_csv": batch_filename or "latest_extracted_jobs.csv",
+            "batch_csv_path": rel_batch_path or "Data/latest_extracted_jobs.csv",
             "sample_jobs": sample_jobs,
         }
         print(f"__RESULT_JSON__{json.dumps(summary_json)}", flush=True)
