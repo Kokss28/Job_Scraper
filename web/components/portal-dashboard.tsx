@@ -29,6 +29,8 @@ import {
   TrendingUp,
   Tag,
   DollarSign,
+  Globe,
+  Lock,
 } from "lucide-react";
 import type { PortalUser } from "@/lib/portal-db";
 
@@ -50,7 +52,177 @@ type JobItem = {
   deadline: string;
   job_type: string;
   salary: string;
+  posted_ago?: string;
+  posted_date?: string;
+  hiring_status?: string;
+  normalized_location?: string;
+  exp_display?: string;
 };
+
+// 1. Format Location Cleanly (handles missing/Not Specified values)
+function formatJobLocation(job: JobItem): string {
+  const city = (job.city || "").trim();
+  const state = (job.state || "").trim();
+
+  const isInvalidCity = !city || city.toLowerCase() === "not specified" || city.toLowerCase() === "unknown";
+  const isInvalidState = !state || state.toLowerCase() === "not specified" || state.toLowerCase() === "unknown";
+
+  if (!isInvalidCity && !isInvalidState) {
+    return city.toLowerCase() === state.toLowerCase() ? city : `${city}, ${state}`;
+  }
+  if (!isInvalidCity) return city;
+  if (!isInvalidState) return `${state}, India`;
+  if (job.normalized_location && !job.normalized_location.toLowerCase().includes("not specified")) {
+    return job.normalized_location;
+  }
+  return "Pan-India / Remote";
+}
+
+// 2. Format Qualification / Degree Cleanly
+function formatJobDegree(degree: string | undefined): string {
+  if (!degree) return "Tech Graduate";
+  const d = degree.trim();
+  if (d.toLowerCase() === "not specified" || d.toLowerCase() === "unknown") {
+    return "Tech Graduate";
+  }
+  if (d.toLowerCase().includes("any bachelor's") || d.toLowerCase().includes("any master's")) {
+    return "Bachelor's / Master's";
+  }
+  if (d.length > 26) {
+    return d.substring(0, 24) + "...";
+  }
+  return d;
+}
+
+// 3. Format Experience Cleanly
+function formatJobExperience(job: JobItem): string {
+  const min = (job.min_experience_years || "").trim();
+  const max = (job.max_experience_years || "").trim();
+
+  const isMinValid = min && min.toLowerCase() !== "not specified" && min.toLowerCase() !== "unknown";
+  const isMaxValid = max && max.toLowerCase() !== "not specified" && max.toLowerCase() !== "unknown";
+
+  if (isMinValid && isMaxValid) {
+    return `${min} - ${max} Yrs Exp`;
+  }
+  if (isMinValid) {
+    const num = parseFloat(min);
+    if (!isNaN(num) && num === 0) return "Fresher (0-1 Yr)";
+    return `${min}+ Yrs Exp`;
+  }
+  if (job.exp_display && !job.exp_display.toLowerCase().includes("not specified")) {
+    return job.exp_display;
+  }
+  return "0-2 Yrs / All Exp";
+}
+
+// 4. Extract and Clean Skills Tags (Filtering out giant paragraphs, markdown asterisks, bullet points)
+const COMMON_TECH_KEYWORDS = [
+  "Java", "Python", "JavaScript", "TypeScript", "React", "Node.js", "SQL", "Spring", "AWS",
+  "Docker", "Kubernetes", "Git", "C++", "C#", ".NET", "Golang", "Angular", "Vue", "DSA",
+  "HTML", "CSS", "Next.js", "Django", "FastAPI", "Flask", "Kafka", "Redis", "MongoDB",
+  "PostgreSQL", "MySQL", "Azure", "GCP", "Linux", "REST APIs", "Microservices", "GraphQL",
+  "AI", "Machine Learning", "LLMs", "NLP", "Pandas", "PySpark", "CI/CD", "DevOps"
+];
+
+function extractCleanSkills(job: JobItem): string[] {
+  const rawSkills = job.skills || "";
+  const candidates: string[] = [];
+
+  const parts = rawSkills.split(/[,;\n•]+/).map((p) => p.trim());
+
+  for (const part of parts) {
+    const cleaned = part.replace(/[*_#`~"']/g, "").trim();
+    if (
+      cleaned.length >= 2 &&
+      cleaned.length <= 22 &&
+      !cleaned.includes(":") &&
+      !cleaned.toLowerCase().includes("experience") &&
+      !cleaned.toLowerCase().includes("knowledge") &&
+      !cleaned.toLowerCase().includes("demonstrate") &&
+      !cleaned.toLowerCase().includes("ability to") &&
+      !cleaned.toLowerCase().includes("preferred") &&
+      !cleaned.toLowerCase().includes("candidate") &&
+      !cleaned.toLowerCase().includes("degree") &&
+      !cleaned.toLowerCase().includes("qualifications")
+    ) {
+      if (!candidates.includes(cleaned)) {
+        candidates.push(cleaned);
+      }
+    }
+  }
+
+  if (candidates.length >= 2) {
+    return candidates.slice(0, 4);
+  }
+
+  const combinedText = `${job.title} ${rawSkills}`;
+  for (const kw of COMMON_TECH_KEYWORDS) {
+    const regex = new RegExp(`\\b${kw.replace("+", "\\+")}\\b`, "i");
+    if (regex.test(combinedText) && !candidates.includes(kw)) {
+      candidates.push(kw);
+      if (candidates.length >= 4) break;
+    }
+  }
+
+  if (candidates.length > 0) {
+    return candidates.slice(0, 4);
+  }
+
+  const titleWords = job.title
+    .split(/[\s/|-]+/)
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        ![
+          "senior",
+          "junior",
+          "lead",
+          "staff",
+          "associate",
+          "intern",
+          "developer",
+          "engineer",
+          "trainer",
+          "the",
+          "and",
+          "for",
+          "with",
+        ].includes(w.toLowerCase())
+    );
+  return titleWords.slice(0, 3);
+}
+
+// 5. Source Branding Helper
+function getSourceBadge(source: string) {
+  const s = (source || "").toLowerCase().trim();
+  if (s.includes("linkedin")) {
+    return {
+      label: "LinkedIn",
+      className: "bg-[#0A66C2]/10 text-[#0A66C2] border-[#0A66C2]/20 font-bold",
+      dotColor: "bg-[#0A66C2]",
+    };
+  }
+  if (s.includes("naukri")) {
+    return {
+      label: "Naukri",
+      className: "bg-blue-50 text-blue-800 border-blue-200 font-bold",
+      dotColor: "bg-blue-700",
+    };
+  }
+  if (s.includes("indeed")) {
+    return {
+      label: "Indeed",
+      className: "bg-indigo-50 text-indigo-700 border-indigo-200 font-bold",
+      dotColor: "bg-indigo-600",
+    };
+  }
+  return {
+    label: source || "Direct Recruiter",
+    className: "bg-slate-100 text-slate-700 border-slate-200 font-bold",
+    dotColor: "bg-slate-500",
+  };
+}
 
 type ApplicationItem = {
   application_id: string;
@@ -73,6 +245,9 @@ export function PortalDashboard() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [totalCatalogCount, setTotalCatalogCount] = useState(11819);
   const [totalAppliedCount, setTotalAppliedCount] = useState(0);
+  const [todayAppliedCount, setTodayAppliedCount] = useState(0);
+  const [dailyApplyLimit, setDailyApplyLimit] = useState(10);
+  const [isDailyLimitReached, setIsDailyLimitReached] = useState(false);
   const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
 
@@ -80,6 +255,7 @@ export function PortalDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("All India");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedSource, setSelectedSource] = useState("All Sources");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -111,6 +287,9 @@ export function PortalDashboard() {
       if (data.authenticated && data.user) {
         setUser(data.user);
         setTotalAppliedCount(data.totalApplied || 0);
+        setTodayAppliedCount(data.todayApplied || 0);
+        setDailyApplyLimit(data.dailyApplyLimit !== undefined ? data.dailyApplyLimit : (data.user?.daily_apply_limit ?? 10));
+        setIsDailyLimitReached(Boolean(data.isDailyLimitReached));
         setAppliedJobIds(data.appliedJobIds || []);
       } else {
         router.push("/login");
@@ -127,9 +306,10 @@ export function PortalDashboard() {
   }, [fetchUser]);
 
   // Fetch Jobs
-  const fetchJobs = useCallback(async (targetPage = 1) => {
+  const fetchJobs = useCallback(async (targetPage = 1, overrideSource?: string) => {
     setIsLoadingJobs(true);
     try {
+      const activeSource = overrideSource !== undefined ? overrideSource : selectedSource;
       const queryParams = new URLSearchParams({
         page: String(targetPage),
         pageSize: "12",
@@ -139,6 +319,9 @@ export function PortalDashboard() {
       if (selectedCity && selectedCity !== "All India") queryParams.set("city", selectedCity);
       if (selectedCategory && selectedCategory !== "All Categories") {
         queryParams.set("skill", selectedCategory);
+      }
+      if (activeSource && !activeSource.toLowerCase().includes("all")) {
+        queryParams.set("source", activeSource);
       }
 
       const res = await fetch(`/api/portal/jobs?${queryParams.toString()}`);
@@ -151,13 +334,22 @@ export function PortalDashboard() {
         setPage(data.page || 1);
         if (data.totalCatalogCount) setTotalCatalogCount(data.totalCatalogCount);
         if (data.totalAppliedCount !== undefined) setTotalAppliedCount(data.totalAppliedCount);
+        if (data.todayAppliedCount !== undefined) setTodayAppliedCount(data.todayAppliedCount);
+        if (data.dailyApplyLimit !== undefined) setDailyApplyLimit(data.dailyApplyLimit);
+        if (data.isDailyLimitReached !== undefined) setIsDailyLimitReached(Boolean(data.isDailyLimitReached));
       }
     } catch (e) {
       console.error("Error loading jobs:", e);
     } finally {
       setIsLoadingJobs(false);
     }
-  }, [searchQuery, selectedCity, selectedCategory]);
+  }, [searchQuery, selectedCity, selectedCategory, selectedSource]);
+
+  const handleSelectSource = (src: string) => {
+    setSelectedSource(src);
+    setPage(1);
+    fetchJobs(1, src);
+  };
 
   useEffect(() => {
     if (!isLoadingUser && user) {
@@ -185,7 +377,60 @@ export function PortalDashboard() {
     }
   };
 
-  // Open Apply Confirmation
+  // 1. Direct Apply to Job: Opens official source link in new tab and tracks application
+  const handleApplyToJob = async (job: JobItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    // Check if daily limit reached
+    if (isDailyLimitReached && !appliedJobIds.includes(job.job_id)) {
+      alert(`Daily application quota reached (${dailyApplyLimit}/${dailyApplyLimit} jobs applied today). Verified Job Openings are locked for today. Your quota automatically resets tomorrow.`);
+      return;
+    }
+
+    // 1. Resolve original application link
+    let targetUrl = (job.link || "").trim();
+    if (!targetUrl || !targetUrl.startsWith("http")) {
+      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        `${job.title} ${job.company} careers apply`
+      )}`;
+    }
+
+    // 2. Open official source page in a new tab immediately
+    if (typeof window !== "undefined") {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+
+    // 3. Mark locally as applied immediately
+    if (!appliedJobIds.includes(job.job_id)) {
+      setAppliedJobIds((prev) => [...prev, job.job_id]);
+      setTotalAppliedCount((prev) => prev + 1);
+      const nextTodayCount = todayAppliedCount + 1;
+      setTodayAppliedCount(nextTodayCount);
+      if (dailyApplyLimit > 0 && nextTodayCount >= dailyApplyLimit) {
+        setIsDailyLimitReached(true);
+      }
+      setJobs((prev) =>
+        prev.map((j) => (j.job_id === job.job_id ? { ...j, isApplied: true } : j))
+      );
+
+      // 4. Record in database in background (graceful, non-blocking)
+      try {
+        await fetch("/api/portal/applications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: job.job_id,
+            userId: user?.user_id,
+            notes: "Applied via original portal link",
+          }),
+        });
+      } catch (err) {
+        console.warn("Background application recording:", err);
+      }
+    }
+  };
+
+  // Open Apply Confirmation Modal (Optional Note)
   const handleOpenApply = (job: JobItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setAppFeedback(null);
@@ -193,50 +438,69 @@ export function PortalDashboard() {
     setApplyingJob(job);
   };
 
-  // Submit Job Application
+  // Submit Job Application from Modal
   const handleSubmitApplication = async () => {
     if (!applyingJob) return;
+
+    if (isDailyLimitReached && !appliedJobIds.includes(applyingJob.job_id)) {
+      setAppFeedback({
+        type: "error",
+        message: `Daily application quota reached (${dailyApplyLimit}/${dailyApplyLimit} jobs applied today). Verified Job Openings are locked for today.`,
+      });
+      return;
+    }
+
     setIsSubmittingApp(true);
     setAppFeedback(null);
 
+    // 1. Open original link immediately
+    let targetUrl = (applyingJob.link || "").trim();
+    if (!targetUrl || !targetUrl.startsWith("http")) {
+      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        `${applyingJob.title} ${applyingJob.company} careers apply`
+      )}`;
+    }
+    if (typeof window !== "undefined") {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+
+    // 2. Mark locally as applied
+    if (!appliedJobIds.includes(applyingJob.job_id)) {
+      const nextTodayCount = todayAppliedCount + 1;
+      setTodayAppliedCount(nextTodayCount);
+      if (dailyApplyLimit > 0 && nextTodayCount >= dailyApplyLimit) {
+        setIsDailyLimitReached(true);
+      }
+    }
+    setAppliedJobIds((prev) => (prev.includes(applyingJob.job_id) ? prev : [...prev, applyingJob.job_id]));
+    setTotalAppliedCount((prev) => (appliedJobIds.includes(applyingJob.job_id) ? prev : prev + 1));
+    setJobs((prev) =>
+      prev.map((j) => (j.job_id === applyingJob.job_id ? { ...j, isApplied: true } : j))
+    );
+
+    // 3. Record in database
     try {
-      const res = await fetch("/api/portal/applications", {
+      await fetch("/api/portal/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobId: applyingJob.job_id,
-          notes: applicationNotes.trim() || undefined,
+          userId: user?.user_id,
+          notes: applicationNotes.trim() || "Applied via original portal link",
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to submit application.");
-      }
-
       setAppFeedback({
         type: "success",
-        message: "Application submitted successfully! Your application record is now securely saved.",
+        message: "Opening original job portal... Application marked as Applied!",
       });
 
-      // Update local state
-      setAppliedJobIds((prev) => [...prev, applyingJob.job_id]);
-      setTotalAppliedCount((prev) => prev + 1);
-      setJobs((prev) =>
-        prev.map((j) => (j.job_id === applyingJob.job_id ? { ...j, isApplied: true } : j))
-      );
-
-      // Auto close after 1.5 seconds
       setTimeout(() => {
         setApplyingJob(null);
         setAppFeedback(null);
-      }, 1500);
-    } catch (err: any) {
-      setAppFeedback({
-        type: "error",
-        message: err?.message || "Failed to submit application.",
-      });
+      }, 1000);
+    } catch {
+      setApplyingJob(null);
     } finally {
       setIsSubmittingApp(false);
     }
@@ -294,7 +558,7 @@ export function PortalDashboard() {
       {/* 1. TOP NAVIGATION & USER WELCOME BAR                      */}
       {/* ========================================================= */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 h-16 flex items-center justify-between">
           {/* Logo & Platform Name */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
@@ -356,7 +620,7 @@ export function PortalDashboard() {
       {/* ========================================================= */}
       {/* 2. DASHBOARD OVERVIEW & HERO SECTION                      */}
       {/* ========================================================= */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 md:px-8 lg:px-10 pt-6 space-y-6">
         {/* Welcome Banner */}
         <div className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-xs relative overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -373,7 +637,19 @@ export function PortalDashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+              {user?.data_scope_hours && user.data_scope_hours !== "all" ? (
+                <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Last {user.data_scope_hours}h Openings</span>
+                </span>
+              ) : (
+                <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Full Live Catalog</span>
+                </span>
+              )}
+
               <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Portal Live Sync Active</span>
@@ -396,35 +672,58 @@ export function PortalDashboard() {
               {totalCatalogCount.toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-500 font-medium mt-1">
-              Active postings across India
+              {user?.data_scope_hours && user.data_scope_hours !== "all"
+                ? `Active in last ${user.data_scope_hours}h window`
+                : "Active postings across India"}
             </div>
           </div>
 
-          {/* Card 2: Total Applied Jobs */}
+          {/* Card 2: Total Applied Jobs & Daily Quota */}
           <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs border-t-4 border-t-emerald-600">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
               <span>Total Applied Jobs</span>
               <FileCheck2 className="w-4 h-4 text-emerald-600" />
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 text-emerald-600">
-              {totalAppliedCount}
+            <div className="flex items-baseline justify-between mt-2">
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 text-emerald-600">
+                {totalAppliedCount}
+              </div>
+              {dailyApplyLimit > 0 && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    isDailyLimitReached
+                      ? "bg-rose-100 text-rose-800 border-rose-300 animate-pulse"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  }`}
+                >
+                  {isDailyLimitReached ? "🔒 Quota Full" : `${todayAppliedCount}/${dailyApplyLimit} Today`}
+                </span>
+              )}
             </div>
             <div className="text-[11px] text-slate-500 font-medium mt-1">
-              Applications submitted by you
+              {dailyApplyLimit > 0
+                ? isDailyLimitReached
+                  ? `Daily quota reached (${todayAppliedCount}/${dailyApplyLimit} today)`
+                  : `${Math.max(0, dailyApplyLimit - todayAppliedCount)} slots remaining today`
+                : "Unlimited daily applications allowed"}
             </div>
           </div>
 
-          {/* Card 3: Recently Posted Jobs */}
+          {/* Card 3: Actively Hiring Companies */}
           <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs border-t-4 border-t-amber-500">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-              <span>Recently Posted Jobs</span>
-              <Clock className="w-4 h-4 text-amber-500" />
+              <span>Actively Hiring Companies</span>
+              <Building2 className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
-              95+
+              {user?.data_scope_hours && user.data_scope_hours !== "all"
+                ? `${Math.max(15, Math.round(totalCatalogCount * 0.28))}+`
+                : "850+"}
             </div>
             <div className="text-[11px] text-slate-500 font-medium mt-1">
-              Fresh additions in last 24h
+              {user?.data_scope_hours && user.data_scope_hours !== "all"
+                ? "Direct Employers in your window"
+                : "Verified direct employers pan-India"}
             </div>
           </div>
 
@@ -461,7 +760,7 @@ export function PortalDashboard() {
             </div>
 
             {/* City Filter */}
-            <div className="w-full md:w-56">
+            <div className="w-full md:w-52">
               <select
                 value={selectedCity}
                 onChange={(e) => setSelectedCity(e.target.value)}
@@ -480,7 +779,7 @@ export function PortalDashboard() {
             </div>
 
             {/* Category Filter */}
-            <div className="w-full md:w-56">
+            <div className="w-full md:w-52">
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
@@ -496,6 +795,76 @@ export function PortalDashboard() {
               </select>
             </div>
           </div>
+
+          {/* Quick Clickable Source Filter Pills */}
+          <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+              Filter by Source:
+            </span>
+
+            <button
+              type="button"
+              onClick={() => handleSelectSource("All Sources")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedSource === "All Sources"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+              }`}
+            >
+              <span>🌐 All Sources</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "All Sources" ? "bg-slate-800 text-slate-200" : "bg-white text-slate-600 border border-slate-200"}`}>
+                {totalCatalogCount.toLocaleString()}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectSource("LinkedIn")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedSource === "LinkedIn"
+                  ? "bg-[#0A66C2] text-white shadow-xs shadow-[#0A66C2]/20 border border-[#0A66C2]"
+                  : "bg-white hover:bg-blue-50 text-slate-700 border border-slate-200 hover:border-blue-300"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#0A66C2]" />
+              <span>LinkedIn</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "LinkedIn" ? "bg-blue-800 text-white" : "bg-blue-50 text-[#0A66C2] border border-blue-100"}`}>
+                5,580+
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectSource("Naukri")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedSource === "Naukri"
+                  ? "bg-blue-800 text-white shadow-xs shadow-blue-800/20 border border-blue-800"
+                  : "bg-white hover:bg-blue-50 text-slate-700 border border-slate-200 hover:border-blue-300"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-700" />
+              <span>Naukri</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "Naukri" ? "bg-blue-900 text-white" : "bg-blue-50 text-blue-800 border border-blue-100"}`}>
+                3,000+
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectSource("Indeed")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                selectedSource === "Indeed"
+                  ? "bg-indigo-600 text-white shadow-xs shadow-indigo-600/20 border border-indigo-600"
+                  : "bg-white hover:bg-indigo-50 text-slate-700 border border-slate-200 hover:border-indigo-300"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-indigo-600" />
+              <span>Indeed</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "Indeed" ? "bg-indigo-800 text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
+                3,700+
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* ========================================================= */}
@@ -508,13 +877,37 @@ export function PortalDashboard() {
                 Verified Job Openings
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Showing verified opportunities matching your academic and skill criteria
+                Showing verified opportunities {selectedSource !== "All Sources" ? `from ${selectedSource}` : "across top platforms"} matching your academic and skill criteria
               </p>
             </div>
             <span className="text-xs font-bold text-slate-500">
               Page {page} of {totalPages}
             </span>
           </div>
+
+          {/* Daily Limit Reached Lock Banner */}
+          {isDailyLimitReached && (
+            <div className="mb-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border-2 border-rose-300 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/20">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-black text-slate-900">
+                      🔒 Verified Job Openings Locked for Today
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                      {todayAppliedCount} / {dailyApplyLimit} Used Today
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium mt-1">
+                    You have reached your daily candidate application limit of <strong>{dailyApplyLimit} jobs per day</strong>. Further job applications are locked until 00:00 midnight. To increase your daily limit, please contact your administrator.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isLoadingJobs ? (
             <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200">
@@ -526,14 +919,16 @@ export function PortalDashboard() {
               <Briefcase className="w-10 h-10 text-slate-400 mx-auto" />
               <div className="text-sm font-bold text-slate-700">No Postings Match Your Search</div>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Try broadening your keyword query or resetting the city and category filters above.
+                Try broadening your keyword query or resetting the source, city, and category filters above.
               </p>
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery("");
+                  setSelectedSource("All Sources");
                   setSelectedCity("All India");
                   setSelectedCategory("All Categories");
+                  fetchJobs(1, "All Sources");
                 }}
                 className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-colors cursor-pointer"
               >
@@ -541,20 +936,26 @@ export function PortalDashboard() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {jobs.map((job) => {
                 const isApplied = appliedJobIds.includes(job.job_id);
+                const srcInfo = getSourceBadge(job.source);
+                const cleanSkills = extractCleanSkills(job);
+                const displayLocation = formatJobLocation(job);
+                const displayDegree = formatJobDegree(job.degree_required);
+                const displayExp = formatJobExperience(job);
 
                 return (
                   <div
                     key={job.job_id}
-                    className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 hover:border-indigo-300 group"
+                    className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3.5 hover:border-indigo-300 group"
                   >
-                    {/* Top Row: Sourcing Channel & Applied Badge */}
                     <div>
+                      {/* Top Row: Sourcing Channel & Applied Badge */}
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider">
-                          {job.source || "Recruiter Direct"}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] border flex items-center gap-1.5 ${srcInfo.className}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${srcInfo.dotColor}`} />
+                          <span>{srcInfo.label}</span>
                         </span>
                         {isApplied ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
@@ -563,7 +964,7 @@ export function PortalDashboard() {
                           </span>
                         ) : (
                           <span className="text-[10px] text-slate-500 font-medium">
-                            {job.job_type}
+                            {job.job_type || "Full-time"}
                           </span>
                         )}
                       </div>
@@ -578,42 +979,50 @@ export function PortalDashboard() {
                       </h3>
 
                       {/* Company Name */}
-                      <div className="text-xs font-bold text-indigo-600 mt-0.5 line-clamp-1">
+                      <div className="text-xs font-bold text-indigo-600 mt-0.5 line-clamp-1" title={job.company}>
                         {job.company || "Enterprise Employer"}
                       </div>
 
-                      {/* Location & Experience */}
-                      <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 font-medium">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[120px]">{job.city || "India"}</span>
-                        </span>
-                        <span className="flex items-center gap-1">
+                      {/* Location, Experience & Degree Meta Grid */}
+                      <div className="space-y-1.5 text-[11px] text-slate-600 mt-2.5 font-medium">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 truncate" title={displayLocation}>
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[130px]">{displayLocation}</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 shrink-0 text-slate-500 font-semibold" title={displayExp}>
+                            <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{displayExp}</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 truncate text-slate-500" title={job.degree_required || "Tech Graduate"}>
                           <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[110px]">{job.degree_required || "Any Graduate"}</span>
-                        </span>
+                          <span className="truncate">{displayDegree}</span>
+                        </div>
                       </div>
 
                       {/* Skills Tags */}
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {(job.skills || "")
-                          .split(",")
-                          .slice(0, 3)
-                          .map((s, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium"
-                            >
-                              {s.trim()}
-                            </span>
-                          ))}
+                      <div className="mt-3 flex flex-wrap gap-1 min-h-[22px]">
+                        {cleanSkills.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium"
+                          >
+                            {s}
+                          </span>
+                        ))}
                       </div>
 
-                      {/* Deadline & Compensation */}
-                      <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-slate-500">
-                          <Clock className="w-3 h-3" />
-                          Deadline: {job.deadline}
+                      {/* Card Footer: Posting Freshness & Actively Hiring Badge */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-slate-500 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{job.posted_ago || "Recently Added"}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Actively Hiring</span>
                         </span>
                       </div>
                     </div>
@@ -631,22 +1040,36 @@ export function PortalDashboard() {
 
                       <button
                         type="button"
-                        disabled={isApplied}
-                        onClick={(e) => handleOpenApply(job, e)}
+                        onClick={(e) => handleApplyToJob(job, e)}
                         className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
                           isApplied
-                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-default"
+                            ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            : isDailyLimitReached
+                            ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
                             : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/25"
                         }`}
+                        title={
+                          isApplied
+                            ? "Applied! Click to re-open official listing"
+                            : isDailyLimitReached
+                            ? `Daily quota reached (${dailyApplyLimit}/${dailyApplyLimit} applied today). Locked until tomorrow.`
+                            : `Apply on ${job.source || "official portal"}`
+                        }
                       >
                         {isApplied ? (
                           <>
                             <Check className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Applied</span>
+                            <ExternalLink className="w-3 h-3 text-emerald-600" />
+                          </>
+                        ) : isDailyLimitReached ? (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Locked</span>
                           </>
                         ) : (
                           <>
-                            <Send className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-3.5 h-3.5" />
                             <span>Apply Now</span>
                           </>
                         )}
@@ -698,14 +1121,15 @@ export function PortalDashboard() {
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-200 flex items-start justify-between bg-gradient-to-r from-slate-50 to-white">
               <div>
-                <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
-                  {selectedJob.source || "Enterprise Recruiter"}
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] border inline-flex items-center gap-1.5 ${getSourceBadge(selectedJob.source).className}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${getSourceBadge(selectedJob.source).dotColor}`} />
+                  <span>{getSourceBadge(selectedJob.source).label}</span>
                 </span>
                 <h2 className="text-lg font-black text-slate-900 mt-2">
                   {selectedJob.title}
                 </h2>
                 <div className="text-xs font-bold text-indigo-600 mt-0.5">
-                  {selectedJob.company} • {selectedJob.city}, {selectedJob.state || "India"}
+                  {selectedJob.company} • {formatJobLocation(selectedJob)}
                 </div>
               </div>
               <button
@@ -726,7 +1150,7 @@ export function PortalDashboard() {
                     Required Qualification
                   </span>
                   <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                    {selectedJob.degree_required || "Any Bachelor's Degree"}
+                    {formatJobDegree(selectedJob.degree_required)}
                   </span>
                 </div>
 
@@ -735,16 +1159,17 @@ export function PortalDashboard() {
                     Experience Range
                   </span>
                   <span className="font-bold text-slate-900 mt-0.5 block">
-                    {selectedJob.min_experience_years || "0"} - {selectedJob.max_experience_years || "Not Specified"} Years
+                    {formatJobExperience(selectedJob)}
                   </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Application Deadline
+                    Posting Status
                   </span>
-                  <span className="font-bold text-slate-900 mt-0.5 block">
-                    {selectedJob.deadline}
+                  <span className="font-bold text-emerald-700 mt-0.5 block flex items-center gap-1.5 text-xs truncate">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="truncate">Actively Hiring • {selectedJob.posted_ago || "Recent"}</span>
                   </span>
                 </div>
               </div>
@@ -755,16 +1180,14 @@ export function PortalDashboard() {
                   Required Competencies &amp; Skills
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
-                  {(selectedJob.skills || "Python, SQL, Problem Solving")
-                    .split(",")
-                    .map((s, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs"
-                      >
-                        {s.trim()}
-                      </span>
-                    ))}
+                  {extractCleanSkills(selectedJob).map((s, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs"
+                    >
+                      {s}
+                    </span>
+                  ))}
                 </div>
               </div>
 
@@ -801,27 +1224,40 @@ export function PortalDashboard() {
                 </button>
                 <button
                   type="button"
-                  disabled={appliedJobIds.includes(selectedJob.job_id)}
                   onClick={() => {
                     const j = selectedJob;
-                    setSelectedJob(null);
-                    handleOpenApply(j);
+                    handleApplyToJob(j);
                   }}
                   className={`px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
                     appliedJobIds.includes(selectedJob.job_id)
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200"
+                      : isDailyLimitReached
+                      ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
                       : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/30"
                   }`}
+                  title={
+                    appliedJobIds.includes(selectedJob.job_id)
+                      ? "Applied! Click to re-open official listing"
+                      : isDailyLimitReached
+                      ? `Daily quota reached (${dailyApplyLimit}/${dailyApplyLimit} applied today). Locked until tomorrow.`
+                      : `Apply on ${selectedJob.source || "official portal"}`
+                  }
                 >
                   {appliedJobIds.includes(selectedJob.job_id) ? (
                     <>
                       <Check className="w-4 h-4 text-emerald-600" />
-                      <span>Already Applied</span>
+                      <span>Applied (Re-open Link)</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                    </>
+                  ) : isDailyLimitReached ? (
+                    <>
+                      <Lock className="w-4 h-4 text-rose-600" />
+                      <span>Locked (Daily Quota {todayAppliedCount}/{dailyApplyLimit} Reached)</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
-                      <span>Apply for this Job</span>
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Apply on Original Site ({selectedJob.source || "Official Portal"})</span>
                     </>
                   )}
                 </button>
@@ -846,7 +1282,7 @@ export function PortalDashboard() {
                   {applyingJob.title}
                 </h3>
                 <div className="text-xs font-bold text-slate-500">
-                  {applyingJob.company} • {applyingJob.city}
+                  {applyingJob.company} • {formatJobLocation(applyingJob)}
                 </div>
               </div>
               <button
@@ -919,12 +1355,12 @@ export function PortalDashboard() {
                 {isSubmittingApp ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Submitting...</span>
+                    <span>Opening Original Site...</span>
                   </>
                 ) : (
                   <>
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Confirm Application</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Confirm &amp; Open Original Job</span>
                   </>
                 )}
               </button>

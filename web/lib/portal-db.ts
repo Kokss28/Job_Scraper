@@ -42,9 +42,21 @@ function initDatabase(db: DatabaseSync) {
     );
   `);
 
-  // Migration for status column
+  // Migration for status & data_scope_hours columns
   try {
     db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'Active';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE admin_codes ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE admin_codes ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
   } catch {}
 
   // 2. Admin Codes Table
@@ -165,6 +177,8 @@ export type PortalUser = {
   date_of_birth: string | null;
   created_date: string;
   status: "Active" | "Stopped";
+  data_scope_hours: string;
+  daily_apply_limit: number;
 };
 
 // 1. Verify Admin Code
@@ -232,7 +246,7 @@ export function registerUser(params: {
 
     // Double check admin code inside transaction to prevent race conditions
     const codeRow = db
-      .prepare("SELECT code_id FROM admin_codes WHERE UPPER(unique_admin_code) = ? AND status = 'Unused'")
+      .prepare("SELECT code_id, COALESCE(data_scope_hours, 'all') as data_scope_hours, COALESCE(daily_apply_limit, 10) as daily_apply_limit FROM admin_codes WHERE UPPER(unique_admin_code) = ? AND status = 'Unused'")
       .get(params.adminCode.trim().toUpperCase()) as any;
 
     if (!codeRow) {
@@ -240,12 +254,15 @@ export function registerUser(params: {
       return { success: false, error: "Admin Code was just used by another session. Please request a new code." };
     }
 
+    const scopeHours = codeRow?.data_scope_hours || "all";
+    const applyLimit = Number(codeRow?.daily_apply_limit ?? 10);
+
     // Insert user
     db.prepare(`
       INSERT INTO users (
         user_id, full_name, email, mobile_number, username, password_hash,
-        address, qualification, date_of_birth, created_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)
     `).run(
       userId,
       params.fullName.trim(),
@@ -256,7 +273,9 @@ export function registerUser(params: {
       params.address?.trim() || null,
       params.qualification?.trim() || null,
       params.dateOfBirth?.trim() || null,
-      now
+      now,
+      scopeHours,
+      applyLimit
     );
 
     // Mark admin code as used
@@ -279,6 +298,8 @@ export function registerUser(params: {
       date_of_birth: params.dateOfBirth?.trim() || null,
       created_date: now,
       status: "Active",
+      data_scope_hours: scopeHours,
+      daily_apply_limit: applyLimit,
     };
 
     return { success: true, user: createdUser };
@@ -329,6 +350,8 @@ export function authenticateUser(identifier: string, password: string): { succes
     date_of_birth: userRow.date_of_birth,
     created_date: userRow.created_date,
     status: userRow.status || "Active",
+    data_scope_hours: userRow.data_scope_hours || "all",
+    daily_apply_limit: Number(userRow.daily_apply_limit ?? 10),
   };
 
   return { success: true, user };
@@ -380,6 +403,8 @@ export function getUserBySessionToken(token: string): PortalUser | null {
     date_of_birth: row.date_of_birth,
     created_date: row.created_date,
     status: row.status || "Active",
+    data_scope_hours: row.data_scope_hours || "all",
+    daily_apply_limit: Number(row.daily_apply_limit ?? 10),
   };
 }
 
@@ -395,6 +420,26 @@ export function applyToJob(userId: string, jobId: string, notes?: string): { suc
     return { success: false, error: "Invalid user or job identifier." };
   }
   const db = getPortalDb();
+
+  // Check user status and daily application limit
+  const userRow = db.prepare("SELECT daily_apply_limit, status FROM users WHERE user_id = ?").get(userId) as any;
+  if (!userRow) {
+    return { success: false, error: "Candidate user not found." };
+  }
+  if (userRow.status === "Stopped") {
+    return { success: false, error: "Your candidate account access has been stopped by the administrator." };
+  }
+
+  const limit = userRow.daily_apply_limit !== undefined && userRow.daily_apply_limit !== null ? Number(userRow.daily_apply_limit) : 10;
+  if (limit > 0) {
+    const todayCount = getUserTodayAppliedCount(userId);
+    if (todayCount >= limit) {
+      return {
+        success: false,
+        error: `Daily application limit reached (${limit}/${limit} jobs applied today). Verified Job Openings are locked until tomorrow.`,
+      };
+    }
+  }
 
   // Check duplicate
   const existing = db
@@ -460,12 +505,32 @@ export function getUserAppliedCount(userId: string): number {
   return row?.count || 0;
 }
 
+export function getUserTodayAppliedCount(userId: string): number {
+  if (!userId) return 0;
+  const db = getPortalDb();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const row = db
+    .prepare("SELECT COUNT(*) as count FROM job_applications WHERE user_id = ? AND application_date >= ?")
+    .get(userId, startOfDay) as any;
+  return row?.count || 0;
+}
+
 // 6. Admin Code Generation & Listing (for Admin/Recruiter visibility)
 export function listAdminCodes(): any[] {
   const db = getPortalDb();
   return db
     .prepare(`
-      SELECT c.*, u.full_name as used_by_name, u.username as used_by_username
+      SELECT 
+        c.code_id,
+        c.unique_admin_code,
+        c.status,
+        c.created_date,
+        c.used_by_user_id,
+        COALESCE(c.data_scope_hours, 'all') as data_scope_hours,
+        COALESCE(c.daily_apply_limit, 10) as daily_apply_limit,
+        u.full_name as used_by_name,
+        u.username as used_by_username
       FROM admin_codes c
       LEFT JOIN users u ON c.used_by_user_id = u.user_id
       ORDER BY c.created_date DESC
@@ -473,17 +538,19 @@ export function listAdminCodes(): any[] {
     .all() as any[];
 }
 
-export function generateAdminCode(customPrefix = "ADM-2026"): string {
+export function generateAdminCode(customPrefix = "ADM-2026", dataScopeHours = "all", dailyApplyLimit = 10): string {
   const db = getPortalDb();
   const randomSuffix = Math.floor(1000 + Math.random() * 9000);
   const code = `${customPrefix}-${randomSuffix}`;
   const id = `code_${crypto.randomBytes(6).toString("hex")}`;
   const now = new Date().toISOString();
+  const scope = (dataScopeHours || "all").trim();
+  const limit = Math.max(0, Number(dailyApplyLimit ?? 10));
 
   db.prepare(`
-    INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date)
-    VALUES (?, ?, 'Unused', ?)
-  `).run(id, code, now);
+    INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date, data_scope_hours, daily_apply_limit)
+    VALUES (?, ?, 'Unused', ?, ?, ?)
+  `).run(id, code, now, scope, limit);
 
   return code;
 }
@@ -546,6 +613,9 @@ export function getSystemMetrics(): {
 // 8. Registered Candidates Directory (Admin Live Visibility)
 export function listRegisteredUsers(): any[] {
   const db = getPortalDb();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
   return db
     .prepare(`
       SELECT 
@@ -559,13 +629,16 @@ export function listRegisteredUsers(): any[] {
         u.date_of_birth,
         u.created_date,
         COALESCE(u.status, 'Active') as status,
+        COALESCE(u.data_scope_hours, 'all') as data_scope_hours,
+        COALESCE(u.daily_apply_limit, 10) as daily_apply_limit,
         c.unique_admin_code as used_admin_code,
-        (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id) as total_applications
+        (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id) as total_applications,
+        (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id AND a.application_date >= ?) as today_applications
       FROM users u
       LEFT JOIN admin_codes c ON c.used_by_user_id = u.user_id
       ORDER BY u.created_date DESC
     `)
-    .all() as any[];
+    .all(startOfDay) as any[];
 }
 
 // 9. Candidate Access Governance: Stop & Edit
@@ -587,6 +660,8 @@ export function updateCandidateUser(
     qualification?: string;
     address?: string;
     status?: "Active" | "Stopped";
+    dataScopeHours?: string;
+    dailyApplyLimit?: number;
   }
 ): { success: boolean; error?: string } {
   const db = getPortalDb();
@@ -599,6 +674,9 @@ export function updateCandidateUser(
     return { success: false, error: "Email address is already in use by another account." };
   }
 
+  const scopeHours = data.dataScopeHours !== undefined ? (data.dataScopeHours || "all").trim() : null;
+  const applyLimit = data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null;
+
   db.prepare(`
     UPDATE users SET
       full_name = ?,
@@ -606,7 +684,9 @@ export function updateCandidateUser(
       mobile_number = ?,
       qualification = ?,
       address = ?,
-      status = COALESCE(?, status)
+      status = COALESCE(?, status),
+      data_scope_hours = COALESCE(?, data_scope_hours),
+      daily_apply_limit = COALESCE(?, daily_apply_limit)
     WHERE user_id = ?
   `).run(
     data.fullName.trim(),
@@ -615,6 +695,8 @@ export function updateCandidateUser(
     data.qualification?.trim() || null,
     data.address?.trim() || null,
     data.status || null,
+    scopeHours,
+    applyLimit,
     userId
   );
 

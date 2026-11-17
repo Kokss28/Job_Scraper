@@ -1,38 +1,25 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
-  Settings,
   ShieldCheck,
   Lock,
-  Unlock,
-  Globe,
   Sliders,
   Database,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   Users,
-  User,
   UserCheck,
   UserX,
   Edit3,
-  FileCheck,
   KeyRound,
-  Layers,
-  Save,
   Check,
   Sparkles,
-  Server,
-  Clock,
-  MapPin,
-  FileText,
   Share2,
   Copy,
   X,
-  ShieldAlert
+  Clock,
 } from "lucide-react";
 
 type CandidateUser = {
@@ -48,6 +35,9 @@ type CandidateUser = {
   status: "Active" | "Stopped";
   used_admin_code: string | null;
   total_applications: number;
+  today_applications?: number;
+  data_scope_hours?: string;
+  daily_apply_limit?: number;
 };
 
 interface AdminSettingsPanelProps {
@@ -71,11 +61,7 @@ export function AdminSettingsPanel({
   totalJobs,
   isCloudSupabase,
 }: AdminSettingsPanelProps) {
-  const [settings, setSettings] = useState<Record<string, string>>(initialSettings);
   const [metrics, setMetrics] = useState(initialMetrics);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Cache flush state
   const [isFlushing, setIsFlushing] = useState(false);
@@ -85,12 +71,18 @@ export function AdminSettingsPanel({
   const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [latestInviteCode, setLatestInviteCode] = useState<string | null>(null);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [inviteScopePreset, setInviteScopePreset] = useState<string>("all");
+  const [inviteCustomHours, setInviteCustomHours] = useState<string>("24");
+  const [inviteDailyLimit, setInviteDailyLimit] = useState<number>(10);
 
   // Candidate Users Management
   const [users, setUsers] = useState<CandidateUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userActionMsg, setUserActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [editingUser, setEditingUser] = useState<CandidateUser | null>(null);
+  const [editScopePreset, setEditScopePreset] = useState<string>("all");
+  const [editCustomHours, setEditCustomHours] = useState<string>("24");
+  const [editDailyLimit, setEditDailyLimit] = useState<number>(10);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -113,53 +105,18 @@ export function AdminSettingsPanel({
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleToggleSetting = (key: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: prev[key] === "true" ? "false" : "true",
-    }));
-  };
-
-  const handleChangeSetting = (key: string, value: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  const handleSaveSettings = async () => {
-    setIsSaving(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-
-    try {
-      const res = await fetch("/api/portal/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to save settings");
-      }
-      setSettings(data.settings);
-      if (data.metrics) setMetrics(data.metrics);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3500);
-    } catch (err: any) {
-      setSaveError(err.message || "An unexpected error occurred while saving.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleGenerateInvite = async () => {
     setIsGeneratingInvite(true);
     try {
+      const finalScope = inviteScopePreset === "custom" ? (inviteCustomHours.trim() || "24") : inviteScopePreset;
       const res = await fetch("/api/portal/admin-codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix: "ADM-2026" }),
+        body: JSON.stringify({
+          prefix: "ADM-2026",
+          dataScopeHours: finalScope,
+          dailyApplyLimit: inviteDailyLimit,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -215,12 +172,27 @@ export function AdminSettingsPanel({
     }
   };
 
+  const openEditModal = (cand: CandidateUser) => {
+    setEditingUser(cand);
+    const scope = (cand.data_scope_hours || "all").trim();
+    if (scope === "all" || scope === "24" || scope === "48" || scope === "72") {
+      setEditScopePreset(scope);
+      setEditCustomHours("24");
+    } else {
+      setEditScopePreset("custom");
+      setEditCustomHours(scope);
+    }
+    setEditDailyLimit(cand.daily_apply_limit !== undefined && cand.daily_apply_limit !== null ? cand.daily_apply_limit : 10);
+  };
+
   const handleSaveEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     setIsSavingEdit(true);
 
     try {
+      const finalScope = editScopePreset === "custom" ? (editCustomHours.trim() || "24") : editScopePreset;
+
       const res = await fetch("/api/portal/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -234,6 +206,8 @@ export function AdminSettingsPanel({
             qualification: editingUser.qualification,
             address: editingUser.address,
             status: editingUser.status,
+            dataScopeHours: finalScope,
+            dailyApplyLimit: editDailyLimit,
           },
         }),
       });
@@ -246,7 +220,7 @@ export function AdminSettingsPanel({
       setEditingUser(null);
       setUserActionMsg({
         type: "success",
-        text: `Candidate profile for ${editingUser.full_name} updated successfully.`,
+        text: `Candidate profile & quota (${editDailyLimit > 0 ? `${editDailyLimit} jobs/day` : "Unlimited"}) for ${editingUser.full_name} updated successfully.`,
       });
       setTimeout(() => setUserActionMsg(null), 3500);
     } catch (err: any) {
@@ -254,6 +228,79 @@ export function AdminSettingsPanel({
     } finally {
       setIsSavingEdit(false);
     }
+  };
+
+  const renderQuotaBadge = (cand: CandidateUser) => {
+    const limit = cand.daily_apply_limit !== undefined && cand.daily_apply_limit !== null ? cand.daily_apply_limit : 10;
+    const today = cand.today_applications || 0;
+    const isLocked = limit > 0 && today >= limit;
+
+    if (limit === 0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+          <span>Unlimited</span>
+        </span>
+      );
+    }
+
+    if (isLocked) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black border border-rose-200 animate-pulse"
+          title={`Daily limit reached (${today}/${limit} applied today). Job openings are locked for this candidate.`}
+        >
+          <Lock className="w-2.5 h-2.5 text-rose-600" />
+          <span>{today}/{limit} (Locked)</span>
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
+        <span>{today}/{limit} Today</span>
+      </span>
+    );
+  };
+
+  const renderScopeBadge = (scopeHours?: string) => {
+    const scope = (scopeHours || "all").trim();
+    if (scope === "all") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+          <span>🌐 All Data</span>
+        </span>
+      );
+    }
+    if (scope === "24") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold border border-sky-200">
+          <Clock className="w-2.5 h-2.5 text-sky-600" />
+          <span>Last 24h</span>
+        </span>
+      );
+    }
+    if (scope === "48") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
+          <Clock className="w-2.5 h-2.5 text-blue-600" />
+          <span>Last 48h</span>
+        </span>
+      );
+    }
+    if (scope === "72") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
+          <Clock className="w-2.5 h-2.5 text-indigo-600" />
+          <span>Last 72h</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[10px] font-bold border border-violet-200">
+        <Clock className="w-2.5 h-2.5 text-violet-600" />
+        <span>Last {scope}h</span>
+      </span>
+    );
   };
 
   const handleFlushCache = async () => {
@@ -291,115 +338,59 @@ export function AdminSettingsPanel({
             Candidate Access Policy &amp; Platform Controls
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Quickly toggle registration mode, generate share links, and manage candidate accounts live.
+            Generate candidate share links, monitor registered accounts, and manage user login access live.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {saveSuccess && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl animate-fade-in">
-              <Check className="w-3.5 h-3.5" />
-              Settings Saved
-            </span>
-          )}
-          {saveError && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {saveError}
-            </span>
-          )}
-          <button
-            onClick={handleSaveSettings}
-            disabled={isSaving}
-            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer"
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+              isCloudSupabase
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-indigo-50 text-indigo-700 border-indigo-200"
+            }`}
           >
-            {isSaving ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            <span>{isSaving ? "Saving..." : "Save Settings"}</span>
-          </button>
+            {isCloudSupabase ? "Supabase Cloud: Connected" : "Local SQLite Mode"}
+          </span>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 1: SIMPLIFIED CANDIDATE ACCESS POLICY & INVITE GENERATOR         */}
+      {/* SECTION 1: CANDIDATE ACCESS POLICY & INVITE GENERATOR                     */}
       {/* ========================================================================= */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
               <Lock className="w-4 h-4 text-indigo-600" />
-              Candidate Access Policy (Simplified)
+              Candidate Access Policy
             </h3>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Control how new users register and instantly generate one-click invitation links.
+              Registration is invite-only. Generate single-use invitation links for new candidates.
             </p>
           </div>
-          <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full">
-            {settings.require_admin_code === "true" ? "Invite-Only Active" : "Public Sign-Up Active"}
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Invite-Only Active
           </span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {/* Left: Simple 2-Option Registration Mode Toggle */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-800 block">
-              Registration Mode
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleChangeSetting("require_admin_code", "true")}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                  settings.require_admin_code === "true"
-                    ? "bg-indigo-50/80 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 shadow-xs"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <KeyRound className="w-4 h-4 text-indigo-600" />
-                  <span className="text-xs font-bold">Invite-Only Mode</span>
-                </div>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Requires admin code to create an account.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleChangeSetting("require_admin_code", "false")}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                  settings.require_admin_code === "false"
-                    ? "bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Globe className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-bold">Open Public Mode</span>
-                </div>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Anyone can sign up without an admin code.
-                </p>
-              </button>
+          {/* Left: Strictly Invite-Only Policy Card */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Registration Policy
+              </span>
             </div>
-
-            {/* Quick Session duration inline */}
-            <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
-              <span className="text-slate-600 font-medium">Session Duration:</span>
-              <select
-                value={settings.session_duration_days || "7"}
-                onChange={(e) => handleChangeSetting("session_duration_days", e.target.value)}
-                className="text-xs font-bold px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none"
-              >
-                <option value="3">3 Days Timeout</option>
-                <option value="7">7 Days (Standard)</option>
-                <option value="14">14 Days</option>
-                <option value="30">30 Days</option>
-              </select>
+            <div className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-indigo-600" />
+              <span>Strictly Invite-Only</span>
             </div>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              Every candidate requires a verified, single-use Admin Code to register. Generate a shareable link on the right to invite new candidates.
+            </p>
           </div>
 
           {/* Right: Instant Share Link Generator */}
@@ -418,7 +409,7 @@ export function AdminSettingsPanel({
                 type="button"
                 onClick={handleGenerateInvite}
                 disabled={isGeneratingInvite}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
               >
                 {isGeneratingInvite ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -429,12 +420,78 @@ export function AdminSettingsPanel({
               </button>
             </div>
 
+            {/* Scope selection for new invites */}
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  Default Data Scope:
+                </span>
+                <select
+                  value={inviteScopePreset}
+                  onChange={(e) => setInviteScopePreset(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value="all">All Live Data (Full Catalog)</option>
+                  <option value="24">Last 24 Hours (1 Day)</option>
+                  <option value="48">Last 48 Hours (2 Days)</option>
+                  <option value="72">Last 72 Hours (3 Days)</option>
+                  <option value="custom">Custom Hours...</option>
+                </select>
+              </div>
+
+              {inviteScopePreset === "custom" && (
+                <div className="flex items-center gap-2 pt-1.5 border-t border-slate-100 animate-in fade-in">
+                  <span className="text-[11px] font-medium text-slate-600">Hours allotted:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8760"
+                    value={inviteCustomHours}
+                    onChange={(e) => setInviteCustomHours(e.target.value)}
+                    placeholder="e.g. 24, 48, 72"
+                    className="w-24 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                  />
+                  <span className="text-[11px] text-slate-400">hours from posting</span>
+                </div>
+              )}
+
+              {/* Daily Application Limit for Invite */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs pt-1.5 border-t border-slate-100">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                  Daily Apply Limit:
+                </span>
+                <select
+                  value={inviteDailyLimit}
+                  onChange={(e) => setInviteDailyLimit(Number(e.target.value))}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value={5}>5 Jobs / Day</option>
+                  <option value={10}>10 Jobs / Day (Default)</option>
+                  <option value={15}>15 Jobs / Day</option>
+                  <option value={20}>20 Jobs / Day</option>
+                  <option value={25}>25 Jobs / Day</option>
+                  <option value={50}>50 Jobs / Day</option>
+                  <option value={0}>Unlimited</option>
+                </select>
+              </div>
+            </div>
+
             {latestInviteCode ? (
               <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 space-y-2 animate-in fade-in">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-xs text-indigo-950">
-                    Code: {latestInviteCode}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono font-bold text-xs text-indigo-950">
+                      Code: {latestInviteCode}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-white text-indigo-700 font-bold border border-indigo-200">
+                      {inviteScopePreset === "custom" ? `${inviteCustomHours || 24}h Scope` : inviteScopePreset === "all" ? "All Data" : `${inviteScopePreset}h Scope`}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-white text-amber-800 font-bold border border-amber-200">
+                      {inviteDailyLimit > 0 ? `${inviteDailyLimit}/day limit` : "Unlimited"}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleCopyInviteLink(latestInviteCode)}
@@ -527,6 +584,8 @@ export function AdminSettingsPanel({
                 <th className="py-3 px-4">Candidate Profile</th>
                 <th className="py-3 px-4">Contact Info</th>
                 <th className="py-3 px-4">Qualification</th>
+                <th className="py-3 px-4">Data Scope</th>
+                <th className="py-3 px-4 text-center">Daily Quota</th>
                 <th className="py-3 px-4">Access Status</th>
                 <th className="py-3 px-4 text-center">Applications</th>
                 <th className="py-3 px-4 text-right">Access Controls</th>
@@ -535,14 +594,14 @@ export function AdminSettingsPanel({
             <tbody className="divide-y divide-slate-100 font-medium">
               {isLoadingUsers && users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600" />
                     <span>Loading candidate accounts...</span>
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
                     No candidates registered yet. Share an invite link to onboard users.
                   </td>
                 </tr>
@@ -589,6 +648,16 @@ export function AdminSettingsPanel({
                         <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
                           {cand.qualification || "Unspecified"}
                         </span>
+                      </td>
+
+                      {/* Data Scope Window */}
+                      <td className="py-3 px-4">
+                        {renderScopeBadge(cand.data_scope_hours)}
+                      </td>
+
+                      {/* Daily Quota / Limit Badge */}
+                      <td className="py-3 px-4 text-center">
+                        {renderQuotaBadge(cand)}
                       </td>
 
                       {/* Access Status Badge */}
@@ -643,7 +712,7 @@ export function AdminSettingsPanel({
                           {/* EDIT USER BUTTON */}
                           <button
                             type="button"
-                            onClick={() => setEditingUser(cand)}
+                            onClick={() => openEditModal(cand)}
                             className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
                             title="Edit user details"
                           >
@@ -662,95 +731,50 @@ export function AdminSettingsPanel({
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 3: SCRAPER DEFAULTS & STORAGE MAINTENANCE                         */}
+      {/* SECTION 3: STORAGE & LIVE CACHE MAINTENANCE                               */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Scraper Defaults */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-              <Server className="w-4 h-4 text-indigo-600" />
-              Scraper Execution Defaults
-            </h3>
-            <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-              JobSpy Core
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="font-bold text-slate-800 block mb-1">Target Location</label>
-              <select
-                value={settings.default_location || "India"}
-                onChange={(e) => handleChangeSetting("default_location", e.target.value)}
-                className="w-full font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
-              >
-                <option value="India">Pan-India</option>
-                <option value="Bengaluru">Bengaluru</option>
-                <option value="Hyderabad">Hyderabad</option>
-                <option value="Pune">Pune</option>
-                <option value="Mumbai">Mumbai</option>
-                <option value="Chennai">Chennai</option>
-                <option value="Delhi NCR">Delhi NCR</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-800 block mb-1">Freshness Window</label>
-              <select
-                value={settings.default_freshness_hours || "72"}
-                onChange={(e) => handleChangeSetting("default_freshness_hours", e.target.value)}
-                className="w-full font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
-              >
-                <option value="24">24 Hours</option>
-                <option value="72">3 Days (72h)</option>
-                <option value="168">7 Days</option>
-                <option value="336">14 Days</option>
-              </select>
-            </div>
-          </div>
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <Database className="w-4 h-4 text-indigo-600" />
+            Storage &amp; Live Catalog Cache
+          </h3>
+          <span
+            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              isCloudSupabase
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-indigo-50 text-indigo-700 border-indigo-200"
+            }`}
+          >
+            {isCloudSupabase ? "Supabase Cloud" : "Local SQLite"}
+          </span>
         </div>
 
-        {/* Storage & Cache */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-              <Database className="w-4 h-4 text-indigo-600" />
-              Storage &amp; Live Cache
-            </h3>
-            <span
-              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                isCloudSupabase
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-indigo-50 text-indigo-700 border-indigo-200"
-              }`}
-            >
-              {isCloudSupabase ? "Supabase Cloud" : "Local SQLite"}
-            </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+          <div>
+            <span className="text-xs font-bold text-slate-900 block">Current Catalog Volume</span>
+            <span className="text-indigo-600 font-black text-lg">{totalJobs.toLocaleString()} Open Roles</span>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Purge in-memory cached listings to force re-indexing from storage.
+            </p>
           </div>
 
-          <div className="flex items-center justify-between text-xs p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <div>
-              <span className="font-bold text-slate-900 block">Catalog Volume</span>
-              <span className="text-indigo-600 font-black text-sm">{totalJobs.toLocaleString()} Open Roles</span>
-            </div>
-            <button
-              onClick={handleFlushCache}
-              disabled={isFlushing}
-              className="py-1.5 px-3 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isFlushing ? "animate-spin" : ""}`} />
-              <span>{isFlushing ? "Flushing..." : "Flush Cache"}</span>
-            </button>
-          </div>
-
-          {flushMessage && (
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{flushMessage}</span>
-            </div>
-          )}
+          <button
+            onClick={handleFlushCache}
+            disabled={isFlushing}
+            className="py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-2xs self-start sm:self-auto shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isFlushing ? "animate-spin" : ""}`} />
+            <span>{isFlushing ? "Flushing..." : "Purge & Reload Cache"}</span>
+          </button>
         </div>
+
+        {flushMessage && (
+          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{flushMessage}</span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -808,6 +832,114 @@ export function AdminSettingsPanel({
                   <option value="Active">Active (Allowed)</option>
                   <option value="Stopped">Stopped (Blocked)</option>
                 </select>
+              </div>
+
+              {/* Candidate Data Visibility Window (Hours) */}
+              <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div>
+                      <label className="font-bold text-slate-900 block text-xs">
+                        Data Visibility Window (Hours)
+                      </label>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Controls how far back in hours this candidate can view job openings.
+                      </p>
+                    </div>
+                  </div>
+
+                  <select
+                    value={editScopePreset}
+                    onChange={(e) => setEditScopePreset(e.target.value)}
+                    className="bg-white border border-indigo-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 shadow-2xs focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  >
+                    <option value="all">All Live Data (Full Catalog)</option>
+                    <option value="24">Last 24 Hours (1 Day)</option>
+                    <option value="48">Last 48 Hours (2 Days)</option>
+                    <option value="72">Last 72 Hours (3 Days)</option>
+                    <option value="custom">Custom Hours...</option>
+                  </select>
+                </div>
+
+                {editScopePreset === "custom" && (
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-indigo-200 animate-in fade-in">
+                    <span className="text-[11px] font-bold text-slate-700">Enter Hours:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8760"
+                      value={editCustomHours}
+                      onChange={(e) => setEditCustomHours(e.target.value)}
+                      placeholder="e.g. 24, 48, 72"
+                      className="w-28 px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                    />
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      hours (e.g. 24 = 1 day, 48 = 2 days, 72 = 3 days)
+                    </span>
+                  </div>
+                )}
+
+                <div className="text-[11px] text-indigo-900/90 bg-white/80 p-2 rounded-lg border border-indigo-100 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>
+                    Effective Scope: <strong>{editScopePreset === "custom" ? `${editCustomHours || 24} Hours Window` : editScopePreset === "all" ? "All Jobs (Full Catalog)" : `Last ${editScopePreset} Hours Window`}</strong>. Updating takes effect immediately on candidate&apos;s next search.
+                  </span>
+                </div>
+              </div>
+
+              {/* Candidate Daily Application Quota */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Lock className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div>
+                      <label className="font-bold text-slate-900 block text-xs">
+                        Daily Application Limit (Quota)
+                      </label>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Lock verified jobs if candidate exceeds this number of applications per day.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="500"
+                      value={editDailyLimit}
+                      onChange={(e) => setEditDailyLimit(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 text-center"
+                    />
+                    <span className="text-xs font-bold text-slate-600">jobs/day</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Presets:</span>
+                  {[5, 10, 15, 20, 25, 50, 0].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setEditDailyLimit(preset)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors cursor-pointer border ${
+                        editDailyLimit === preset
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset === 0 ? "Unlimited" : `${preset}/day`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>
+                    When set to <strong>{editDailyLimit > 0 ? `${editDailyLimit} jobs/day` : "Unlimited"}</strong>, candidate will be locked on their {editDailyLimit > 0 ? `${editDailyLimit + 1}th` : "N/A"} application attempt that day until midnight.
+                  </span>
+                </div>
               </div>
 
               {/* Full Name & Email */}

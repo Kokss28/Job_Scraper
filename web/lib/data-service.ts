@@ -280,7 +280,7 @@ export async function getPaginatedJobs(
       }
 
       // Source filter (LinkedIn, Indeed, Naukri)
-      if (params.source && params.source.toLowerCase() !== "all") {
+      if (params.source && !params.source.toLowerCase().includes("all")) {
         query = query.ilike("source", `%${params.source.trim()}%`);
       }
 
@@ -364,7 +364,7 @@ export async function getPaginatedJobs(
     filtered = filtered.filter((j) => j.skills?.toLowerCase().includes(s));
   }
 
-  if (params.source && params.source.toLowerCase() !== "all") {
+  if (params.source && !params.source.toLowerCase().includes("all")) {
     const s = params.source.toLowerCase().trim();
     filtered = filtered.filter((j) => (j.source || "").toLowerCase().includes(s));
   }
@@ -381,6 +381,15 @@ export async function getPaginatedJobs(
       if (expKey === "6-8") return exp >= 6.0 && exp <= 8.0;
       if (expKey === "8+") return exp >= 8.0;
       return true;
+    });
+  }
+
+  if (params.hours && params.hours > 0) {
+    const cutoff = Date.now() - params.hours * 60 * 60 * 1000;
+    filtered = filtered.filter((j) => {
+      if (!j.collected_at) return true;
+      const t = new Date(j.collected_at).getTime();
+      return !isNaN(t) ? t >= cutoff : true;
     });
   }
 
