@@ -2,23 +2,63 @@ import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 
-const DATA_DIR = path.resolve(process.cwd(), "..", "Data");
-const LOCAL_DATA_DIR = path.resolve(process.cwd(), "Data");
+function resolvePortalDbPath(): string {
+  // Check if running on Vercel or AWS Lambda Serverless
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-// Ensure Data directory exists
-const activeDataDir = fs.existsSync(DATA_DIR) ? DATA_DIR : LOCAL_DATA_DIR;
-if (!fs.existsSync(activeDataDir)) {
-  fs.mkdirSync(activeDataDir, { recursive: true });
+  if (isServerless) {
+    const tmpDataDir = path.join(os.tmpdir(), "job_scraper_portal");
+    try {
+      if (!fs.existsSync(tmpDataDir)) {
+        fs.mkdirSync(tmpDataDir, { recursive: true });
+      }
+    } catch {}
+
+    const tmpDbPath = path.join(tmpDataDir, "portal.db");
+
+    // Copy bundled portal.db into /tmp if available
+    if (!fs.existsSync(tmpDbPath)) {
+      const candidates = [
+        path.resolve(process.cwd(), "..", "Data", "portal.db"),
+        path.resolve(process.cwd(), "Data", "portal.db"),
+        path.resolve(process.cwd(), "portal.db"),
+      ];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+          try {
+            fs.copyFileSync(cand, tmpDbPath);
+            break;
+          } catch {}
+        }
+      }
+    }
+    return tmpDbPath;
+  }
+
+  // Local development
+  const DATA_DIR = path.resolve(process.cwd(), "..", "Data");
+  const LOCAL_DATA_DIR = path.resolve(process.cwd(), "Data");
+
+  let activeDir = fs.existsSync(DATA_DIR) ? DATA_DIR : LOCAL_DATA_DIR;
+  try {
+    if (!fs.existsSync(activeDir)) {
+      fs.mkdirSync(activeDir, { recursive: true });
+    }
+  } catch {
+    activeDir = os.tmpdir();
+  }
+
+  return path.join(activeDir, "portal.db");
 }
-
-const DB_PATH = path.join(activeDataDir, "portal.db");
 
 let dbInstance: DatabaseSync | null = null;
 
 export function getPortalDb(): DatabaseSync {
   if (!dbInstance) {
-    dbInstance = new DatabaseSync(DB_PATH);
+    const dbPath = resolvePortalDbPath();
+    dbInstance = new DatabaseSync(dbPath);
     initDatabase(dbInstance);
   }
   return dbInstance;

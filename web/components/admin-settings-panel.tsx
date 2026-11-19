@@ -20,6 +20,8 @@ import {
   Copy,
   X,
   Clock,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 
 type CandidateUser = {
@@ -70,10 +72,48 @@ export function AdminSettingsPanel({
   // Invite code & share link generator
   const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [latestInviteCode, setLatestInviteCode] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [copiedLocalhostLink, setCopiedLocalhostLink] = useState(false);
   const [inviteScopePreset, setInviteScopePreset] = useState<string>("all");
   const [inviteCustomHours, setInviteCustomHours] = useState<string>("24");
   const [inviteDailyLimit, setInviteDailyLimit] = useState<number>(10);
+  const [publicDomain, setPublicDomain] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("portal_public_domain");
+      if (saved) {
+        setPublicDomain(saved);
+      } else {
+        const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
+        if (vercelEnv) {
+          setPublicDomain(`https://${vercelEnv}`);
+        }
+      }
+    }
+  }, []);
+
+  const getActiveBaseUrl = useCallback(() => {
+    if (publicDomain.trim()) {
+      let d = publicDomain.trim().replace(/\/+$/, "");
+      if (!d.startsWith("http://") && !d.startsWith("https://")) {
+        d = `https://${d}`;
+      }
+      return d;
+    }
+    if (typeof window !== "undefined") {
+      return window.location.origin;
+    }
+    return "";
+  }, [publicDomain]);
+
+  const handlePublicDomainChange = (val: string) => {
+    setPublicDomain(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("portal_public_domain", val.trim());
+    }
+  };
 
   // Candidate Users Management
   const [users, setUsers] = useState<CandidateUser[]>([]);
@@ -107,6 +147,7 @@ export function AdminSettingsPanel({
 
   const handleGenerateInvite = async () => {
     setIsGeneratingInvite(true);
+    setInviteError(null);
     try {
       const finalScope = inviteScopePreset === "custom" ? (inviteCustomHours.trim() || "24") : inviteScopePreset;
       const res = await fetch("/api/portal/admin-codes", {
@@ -121,25 +162,37 @@ export function AdminSettingsPanel({
       const data = await res.json();
       if (data.success) {
         setLatestInviteCode(data.code);
+        setInviteError(null);
         setMetrics((prev) => ({
           ...prev,
           totalCodes: prev.totalCodes + 1,
           unusedCodes: prev.unusedCodes + 1,
         }));
+      } else {
+        setInviteError(data.error || "Failed to generate invite code.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setInviteError(err?.message || "Failed to connect to portal server. Ensure dev server is running.");
     } finally {
       setIsGeneratingInvite(false);
     }
   };
 
-  const handleCopyInviteLink = (code: string) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/register?code=${code}`;
+  const handleCopyInviteLink = (code: string, forceLocal = false) => {
+    let base = getActiveBaseUrl();
+    if (forceLocal && typeof window !== "undefined") {
+      base = window.location.origin;
+    }
+    const url = `${base}/register?code=${code}`;
     navigator.clipboard.writeText(url);
-    setCopiedInviteLink(true);
-    setTimeout(() => setCopiedInviteLink(false), 2500);
+    if (forceLocal) {
+      setCopiedLocalhostLink(true);
+      setTimeout(() => setCopiedLocalhostLink(false), 2500);
+    } else {
+      setCopiedInviteLink(true);
+      setTimeout(() => setCopiedInviteLink(false), 2500);
+    }
   };
 
   const handleToggleUserAccess = async (user: CandidateUser) => {
@@ -476,13 +529,66 @@ export function AdminSettingsPanel({
                   <option value={0}>Unlimited</option>
                 </select>
               </div>
+              {/* Candidate Share Domain (Vercel / Production Domain) */}
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                    Share Domain (Vercel / Public URL):
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Used for copied candidate links
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={publicDomain}
+                    onChange={(e) => handlePublicDomainChange(e.target.value)}
+                    placeholder={
+                      typeof window !== "undefined" && window.location.origin.includes("localhost")
+                        ? "e.g. https://job-scraper-kokss28.vercel.app"
+                        : "Current site origin"
+                    }
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  />
+                  {publicDomain && (
+                    <button
+                      type="button"
+                      onClick={() => handlePublicDomainChange("")}
+                      className="text-[11px] font-bold text-slate-400 hover:text-slate-600 px-1 cursor-pointer"
+                      title="Reset to browser default"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                {typeof window !== "undefined" && window.location.origin.includes("localhost") && !publicDomain && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200/80 rounded-md p-1.5 leading-snug">
+                    ⚠️ <strong>Notice:</strong> You are viewing on <code>localhost:3000</code>. Candidates cannot open localhost links on their own devices. Enter your <strong>live Vercel URL</strong> above so copied links work everywhere.
+                  </p>
+                )}
+              </div>
             </div>
 
+            {inviteError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
+                <span>⚠️ {inviteError}</span>
+                <button
+                  type="button"
+                  onClick={() => setInviteError(null)}
+                  className="text-rose-500 hover:text-rose-800 text-[11px] font-bold cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             {latestInviteCode ? (
-              <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 space-y-2 animate-in fade-in">
-                <div className="flex items-center justify-between">
+              <div className="p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 space-y-2.5 animate-in fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-xs text-indigo-950">
+                    <span className="font-mono font-bold text-xs text-indigo-950 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
                       Code: {latestInviteCode}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-md bg-white text-indigo-700 font-bold border border-indigo-200">
@@ -492,19 +598,50 @@ export function AdminSettingsPanel({
                       {inviteDailyLimit > 0 ? `${inviteDailyLimit}/day limit` : "Unlimited"}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyInviteLink(latestInviteCode)}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    {copiedInviteLink ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedInviteLink ? "Copied!" : "Copy Share Link"}</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyInviteLink(latestInviteCode, false)}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                    >
+                      {copiedInviteLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedInviteLink ? "Copied Share Link!" : "Copy Share Link"}</span>
+                    </button>
+                    {typeof window !== "undefined" && window.location.origin.includes("localhost") && publicDomain && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyInviteLink(latestInviteCode, true)}
+                        className="px-2 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Copy as http://localhost:3000 link for local testing"
+                      >
+                        {copiedLocalhostLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedLocalhostLink ? "Copied Local!" : "Localhost URL"}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="font-mono text-[10px] text-indigo-800 bg-white p-2 rounded-lg border border-indigo-200/80 truncate select-all">
-                  {typeof window !== "undefined"
-                    ? `${window.location.origin}/register?code=${latestInviteCode}`
-                    : `/register?code=${latestInviteCode}`}
+
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold text-indigo-900/70 uppercase tracking-wider flex items-center justify-between">
+                    <span>Generated Invitation Link (Send to Candidate):</span>
+                    {getActiveBaseUrl().includes("localhost") && (
+                      <span className="text-amber-700 font-semibold lowercase">
+                        (warning: localhost link)
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono text-[11px] text-indigo-900 bg-white p-2.5 rounded-lg border border-indigo-200 truncate select-all flex items-center justify-between gap-2">
+                    <span className="truncate">{`${getActiveBaseUrl()}/register?code=${latestInviteCode}`}</span>
+                    <a
+                      href={`${getActiveBaseUrl()}/register?code=${latestInviteCode}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:text-indigo-800 shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold"
+                    >
+                      <span>Open</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               </div>
             ) : (
