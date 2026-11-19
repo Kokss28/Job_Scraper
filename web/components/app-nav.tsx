@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, ShieldCheck } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type AppNavProps = {
   userEmail?: string | null;
@@ -15,6 +17,16 @@ export function AppNav({
   isCloudSupabase = false,
 }: AppNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleAdminSignOut = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {}
+    router.push("/login?role=admin");
+    router.refresh();
+  };
 
   const navItems = [
     {
@@ -88,6 +100,35 @@ export function AppNav({
             </Link>
           );
         })}
+      </div>
+
+      {/* Admin Profile & Sign Out Footer */}
+      <div className="p-3.5 border-t border-slate-800/80 mt-auto bg-slate-900/60">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-400 font-black text-xs flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-slate-200 truncate" title={userEmail || "Administrator"}>
+                {userEmail || "Admin Console"}
+              </div>
+              <div className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>Supabase Live</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAdminSignOut}
+            className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+            title="Sign Out from Admin Console"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </aside>
   );

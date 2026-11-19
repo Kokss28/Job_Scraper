@@ -80,7 +80,8 @@ function initDatabase(db: DatabaseSync) {
       created_date TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'Active',
       data_scope_hours TEXT NOT NULL DEFAULT 'all',
-      daily_apply_limit INTEGER NOT NULL DEFAULT 10
+      daily_apply_limit INTEGER NOT NULL DEFAULT 10,
+      college_name TEXT
     );
   `);
 
@@ -107,6 +108,9 @@ function initDatabase(db: DatabaseSync) {
   } catch {}
   try {
     db.exec("ALTER TABLE users ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN college_name TEXT;");
   } catch {}
   try {
     db.exec("ALTER TABLE admin_codes ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
@@ -223,6 +227,7 @@ export type PortalUser = {
   status: "Active" | "Stopped";
   data_scope_hours: string;
   daily_apply_limit: number;
+  college_name?: string | null;
 };
 
 // 1. Verify Admin Code
@@ -257,6 +262,7 @@ export function registerUser(params: {
   address?: string;
   qualification?: string;
   dateOfBirth?: string;
+  collegeName?: string;
 }): { success: boolean; user?: PortalUser; error?: string } {
   const db = getPortalDb();
 
@@ -305,8 +311,8 @@ export function registerUser(params: {
     db.prepare(`
       INSERT INTO users (
         user_id, full_name, email, mobile_number, username, password_hash,
-        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?)
     `).run(
       userId,
       params.fullName.trim(),
@@ -319,7 +325,8 @@ export function registerUser(params: {
       params.dateOfBirth?.trim() || null,
       now,
       scopeHours,
-      applyLimit
+      applyLimit,
+      params.collegeName?.trim() || null
     );
 
     // Mark admin code as used
@@ -344,6 +351,7 @@ export function registerUser(params: {
       status: "Active",
       data_scope_hours: scopeHours,
       daily_apply_limit: applyLimit,
+      college_name: params.collegeName?.trim() || null,
     };
 
     return { success: true, user: createdUser };
@@ -670,6 +678,7 @@ export function listRegisteredUsers(): any[] {
         u.username,
         u.address,
         u.qualification,
+        u.college_name,
         u.date_of_birth,
         u.created_date,
         COALESCE(u.status, 'Active') as status,
@@ -702,6 +711,7 @@ export function updateCandidateUser(
     email: string;
     mobileNumber?: string;
     qualification?: string;
+    collegeName?: string;
     address?: string;
     status?: "Active" | "Stopped";
     dataScopeHours?: string;
@@ -727,6 +737,7 @@ export function updateCandidateUser(
       email = ?,
       mobile_number = ?,
       qualification = ?,
+      college_name = COALESCE(?, college_name),
       address = ?,
       status = COALESCE(?, status),
       data_scope_hours = COALESCE(?, data_scope_hours),
@@ -737,6 +748,7 @@ export function updateCandidateUser(
     cleanEmail,
     data.mobileNumber?.trim() || null,
     data.qualification?.trim() || null,
+    data.collegeName !== undefined ? (data.collegeName.trim() || null) : null,
     data.address?.trim() || null,
     data.status || null,
     scopeHours,

@@ -20,6 +20,7 @@ import {
   Briefcase,
   ShieldCheck,
   Check,
+  Building,
 } from "lucide-react";
 
 export function PortalRegisterForm() {
@@ -77,12 +78,20 @@ export function PortalRegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [address, setAddress] = useState("");
-  const [qualification, setQualification] = useState("B.Tech / B.E. Computer Science");
+  const [qualification, setQualification] = useState("");
+  const [collegeName, setCollegeName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [registeredUser, setRegisteredUser] = useState<{
+    fullName: string;
+    username: string;
+    email: string;
+    qualification: string;
+    collegeName: string;
+  } | null>(null);
 
   // Step 1 Handler: Verify Admin Code
   const handleVerifyCode = async (e: React.FormEvent) => {
@@ -151,7 +160,11 @@ export function PortalRegisterForm() {
       return;
     }
     if (!qualification.trim()) {
-      setError("Educational qualification is required.");
+      setError("Educational Qualification is required. Please type your degree.");
+      return;
+    }
+    if (!collegeName.trim()) {
+      setError("College / Institution Name is required.");
       return;
     }
 
@@ -171,6 +184,7 @@ export function PortalRegisterForm() {
           confirmPassword,
           address: address.trim(),
           qualification: qualification.trim(),
+          collegeName: collegeName.trim(),
           dateOfBirth,
         }),
       });
@@ -181,10 +195,14 @@ export function PortalRegisterForm() {
         throw new Error(data.error || "Registration failed. Please check form details.");
       }
 
-      setSuccess("Account Created Successfully! Welcome to your User Dashboard...");
-      setTimeout(() => {
-        router.push(data.redirectUrl || "/portal");
-      }, 1200);
+      setRegisteredUser({
+        fullName: fullName.trim(),
+        username: username.trim(),
+        email: email.trim(),
+        qualification: qualification.trim(),
+        collegeName: collegeName.trim(),
+      });
+      setSuccess("Account Created Successfully! Please sign in with your credentials.");
     } catch (err: any) {
       setError(err?.message || "Registration failed. Please try again.");
     } finally {
@@ -347,7 +365,7 @@ export function PortalRegisterForm() {
         {/* ========================================================= */}
         {/* STEP 2: USER REGISTRATION FORM                           */}
         {/* ========================================================= */}
-        {step === 2 && !success && (
+        {step === 2 && !registeredUser && (
           <form onSubmit={handleRegister} className="space-y-4">
             {/* Verified Code Pill */}
             <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
@@ -492,7 +510,7 @@ export function PortalRegisterForm() {
               </div>
             </div>
 
-            {/* Row 4: Educational Qualification & Date of Birth */}
+            {/* Row 4: Educational Qualification & College Name */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
@@ -500,54 +518,81 @@ export function PortalRegisterForm() {
                 </label>
                 <div className="relative">
                   <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                  <select
+                  <input
+                    type="text"
+                    required
+                    list="qualification-suggestions"
                     value={qualification}
                     onChange={(e) => setQualification(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all cursor-pointer"
-                  >
-                    <option value="B.Tech / B.E. Computer Science">B.Tech / B.E. Computer Science</option>
-                    <option value="B.Tech / B.E. Information Technology">B.Tech / B.E. Information Technology</option>
-                    <option value="B.Tech / B.E. (Any Stream)">B.Tech / B.E. (Any Stream)</option>
-                    <option value="BCA (Bachelor of Computer Applications)">BCA (Bachelor of Computer Applications)</option>
-                    <option value="B.Sc. Computer Science / IT">B.Sc. Computer Science / IT</option>
-                    <option value="MCA (Master of Computer Applications)">MCA (Master of Computer Applications)</option>
-                    <option value="M.Sc. Computer Science / IT / Data">M.Sc. Computer Science / IT / Data</option>
-                    <option value="M.Tech / M.E.">M.Tech / M.E.</option>
-                    <option value="Any Graduate / Diploma">Any Graduate / Diploma</option>
-                  </select>
+                    placeholder="Type your degree (e.g. B.Tech CS, MCA)"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
+                  />
+                  <datalist id="qualification-suggestions">
+                    <option value="B.Tech / B.E. Computer Science" />
+                    <option value="B.Tech / B.E. Information Technology" />
+                    <option value="B.Tech / B.E. (Any Stream)" />
+                    <option value="BCA (Bachelor of Computer Applications)" />
+                    <option value="B.Sc. Computer Science / IT" />
+                    <option value="MCA (Master of Computer Applications)" />
+                    <option value="M.Sc. Computer Science / Data Science" />
+                    <option value="M.Tech / M.E." />
+                    <option value="Diploma in Computer Science / Engineering" />
+                    <option value="Any Graduate / Post Graduate" />
+                  </datalist>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Date of Birth
+                  College / Institution Name *
                 </label>
                 <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                   <input
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
+                    type="text"
+                    required
+                    value={collegeName}
+                    onChange={(e) => setCollegeName(e.target.value)}
+                    placeholder="e.g. Anna University, IIT Madras"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Address */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Current Location / Address
-              </label>
-              <div className="relative">
-                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="e.g. Chennai, Tamil Nadu, India"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
-                />
+            {/* Row 5: Date of Birth & Address */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Date of Birth (Calendar) *
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="date"
+                    required
+                    value={dateOfBirth}
+                    max={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Current Location / Address
+                </label>
+                <div className="relative">
+                  <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="e.g. Chennai, Tamil Nadu"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
+                  />
+                </div>
               </div>
             </div>
 
@@ -569,6 +614,65 @@ export function PortalRegisterForm() {
               )}
             </button>
           </form>
+        )}
+
+        {/* ========================================================= */}
+        {/* REGISTRATION SUCCESS CARD (NO AUTO-LOGIN, PROCEED TO SIGN IN) */}
+        {/* ========================================================= */}
+        {step === 2 && registeredUser && (
+          <div className="py-6 px-4 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-slate-900">
+                Registration Complete!
+              </h3>
+              <p className="text-xs text-slate-600 max-w-sm mx-auto font-medium">
+                Your verified candidate account for <strong className="text-slate-900">{registeredUser.fullName}</strong> has been created.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 max-w-sm mx-auto text-left text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Username:</span>
+                <span className="font-mono font-bold text-slate-800">@{registeredUser.username}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Email:</span>
+                <span className="font-medium text-slate-800">{registeredUser.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Qualification:</span>
+                <span className="font-medium text-slate-800">{registeredUser.qualification}</span>
+              </div>
+              {registeredUser.collegeName && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">College:</span>
+                  <span className="font-medium text-slate-800">{registeredUser.collegeName}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Status:</span>
+                <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-bold">
+                  Active &amp; Ready
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 font-medium">
+              Please sign in with your credentials to access your candidate workspace.
+            </p>
+
+            <Link
+              href={`/login?registered=true&username=${encodeURIComponent(registeredUser.username)}`}
+              className="inline-flex items-center justify-center gap-2 w-full max-w-sm py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            >
+              <span>Proceed to Sign In</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         )}
       </div>
     </div>

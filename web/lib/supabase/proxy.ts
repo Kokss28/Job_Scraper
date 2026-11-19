@@ -47,14 +47,31 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  // Only protect explicit private paths like /protected
-  // Public visitors can view the dashboard, scraper studio, market insights, admin console, and saved jobs freely
+  // Protect Admin Console Paths (requires Supabase authenticated admin user)
   const pathname = request.nextUrl.pathname;
-  const isProtectedPath = pathname.startsWith("/protected");
+  const isProtectedAdminPath =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/setup") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/saved-jobs") ||
+    pathname.startsWith("/protected");
 
-  if (isProtectedPath && !user) {
+  if (isProtectedAdminPath && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    url.pathname = "/login";
+    url.searchParams.set("role", "admin");
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Protect Candidate Portal (requires portal_session cookie)
+  const isCandidatePath = pathname.startsWith("/portal");
+  const hasCandidateSession = request.cookies.has("portal_session");
+
+  if (isCandidatePath && !hasCandidateSession) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("role", "candidate");
     return NextResponse.redirect(url);
   }
 

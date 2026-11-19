@@ -255,6 +255,7 @@ export function PortalDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("All India");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedExperience, setSelectedExperience] = useState("all");
   const [selectedSource, setSelectedSource] = useState("All Sources");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -320,6 +321,9 @@ export function PortalDashboard() {
       if (selectedCategory && selectedCategory !== "All Categories") {
         queryParams.set("skill", selectedCategory);
       }
+      if (selectedExperience && selectedExperience !== "all") {
+        queryParams.set("experience", selectedExperience);
+      }
       if (activeSource && !activeSource.toLowerCase().includes("all")) {
         queryParams.set("source", activeSource);
       }
@@ -343,7 +347,7 @@ export function PortalDashboard() {
     } finally {
       setIsLoadingJobs(false);
     }
-  }, [searchQuery, selectedCity, selectedCategory, selectedSource]);
+  }, [searchQuery, selectedCity, selectedCategory, selectedExperience, selectedSource]);
 
   const handleSelectSource = (src: string) => {
     setSelectedSource(src);
@@ -794,6 +798,21 @@ export function PortalDashboard() {
                 <option value="SQL">Database Engineering</option>
               </select>
             </div>
+
+            {/* Experience Filter */}
+            <div className="w-full md:w-52">
+              <select
+                value={selectedExperience}
+                onChange={(e) => setSelectedExperience(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-semibold text-slate-700 outline-hidden transition-all cursor-pointer"
+              >
+                <option value="all">⏳ All Experience</option>
+                <option value="0-2">0 - 2 Yrs (Fresher &amp; Entry)</option>
+                <option value="3-5">3 - 5 Yrs (Mid-Level)</option>
+                <option value="6-8">6 - 8 Yrs (Senior)</option>
+                <option value="8+">8+ Yrs (Lead / Staff)</option>
+              </select>
+            </div>
           </div>
 
           {/* Quick Clickable Source Filter Pills */}
@@ -928,6 +947,7 @@ export function PortalDashboard() {
                   setSelectedSource("All Sources");
                   setSelectedCity("All India");
                   setSelectedCategory("All Categories");
+                  setSelectedExperience("all");
                   fetchJobs(1, "All Sources");
                 }}
                 className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-colors cursor-pointer"
@@ -1301,6 +1321,9 @@ export function PortalDashboard() {
               </div>
               <div>
                 <strong className="text-slate-900 font-bold">Qualification:</strong> {user?.qualification}
+                {user?.college_name && (
+                  <span className="text-slate-500 ml-1.5">• {user.college_name}</span>
+                )}
               </div>
             </div>
 
