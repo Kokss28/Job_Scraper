@@ -78,26 +78,11 @@ function initDatabase(db: DatabaseSync) {
       qualification TEXT,
       date_of_birth TEXT,
       created_date TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Active'
+      status TEXT NOT NULL DEFAULT 'Active',
+      data_scope_hours TEXT NOT NULL DEFAULT 'all',
+      daily_apply_limit INTEGER NOT NULL DEFAULT 10
     );
   `);
-
-  // Migration for status & data_scope_hours columns
-  try {
-    db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'Active';");
-  } catch {}
-  try {
-    db.exec("ALTER TABLE users ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
-  } catch {}
-  try {
-    db.exec("ALTER TABLE admin_codes ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
-  } catch {}
-  try {
-    db.exec("ALTER TABLE users ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
-  } catch {}
-  try {
-    db.exec("ALTER TABLE admin_codes ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
-  } catch {}
 
   // 2. Admin Codes Table
   db.exec(`
@@ -107,9 +92,28 @@ function initDatabase(db: DatabaseSync) {
       status TEXT NOT NULL DEFAULT 'Unused', -- 'Unused', 'Used', 'Expired'
       created_date TEXT NOT NULL,
       used_by_user_id TEXT,
+      data_scope_hours TEXT NOT NULL DEFAULT 'all',
+      daily_apply_limit INTEGER NOT NULL DEFAULT 10,
       FOREIGN KEY(used_by_user_id) REFERENCES users(user_id)
     );
   `);
+
+  // Safe migrations for pre-existing databases
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'Active';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE admin_codes ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE admin_codes ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
+  } catch {}
 
   // 3. Job Applications Table
   db.exec(`
@@ -181,8 +185,8 @@ function initDatabase(db: DatabaseSync) {
       "PLACEMENT-2026",
     ];
     const insertCode = db.prepare(`
-      INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date)
-      VALUES (?, ?, 'Unused', ?)
+      INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date, data_scope_hours, daily_apply_limit)
+      VALUES (?, ?, 'Unused', ?, 'all', 10)
     `);
     const now = new Date().toISOString();
     for (const code of defaultCodes) {
