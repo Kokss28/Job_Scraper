@@ -236,7 +236,8 @@ export function AdminSettingsPanel({
       setEditScopePreset("custom");
       setEditCustomHours(scope);
     }
-    setEditDailyLimit(cand.daily_apply_limit !== undefined && cand.daily_apply_limit !== null ? cand.daily_apply_limit : 10);
+    const rawLimit = cand.daily_apply_limit !== undefined && cand.daily_apply_limit !== null ? cand.daily_apply_limit : 10;
+    setEditDailyLimit(rawLimit >= 999 ? 0 : rawLimit);
   };
 
   const handleSaveEditUser = async (e: React.FormEvent) => {
@@ -288,11 +289,13 @@ export function AdminSettingsPanel({
   const renderQuotaBadge = (cand: CandidateUser) => {
     const limit = cand.daily_apply_limit !== undefined && cand.daily_apply_limit !== null ? cand.daily_apply_limit : 10;
     const today = cand.today_applications || 0;
-    const isLocked = limit > 0 && today >= limit;
+    const isUnlimited = limit === 0 || limit >= 999;
+    const isLocked = !isUnlimited && limit > 0 && today >= limit;
 
-    if (limit === 0) {
+    if (isUnlimited) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold border border-slate-200 whitespace-nowrap shadow-2xs">
+          <Sparkles className="w-3 h-3 text-indigo-500" />
           <span>Unlimited</span>
         </span>
       );
@@ -301,18 +304,18 @@ export function AdminSettingsPanel({
     if (isLocked) {
       return (
         <span
-          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black border border-rose-200 animate-pulse"
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-[11px] font-black border border-rose-200 whitespace-nowrap animate-pulse"
           title={`Daily limit reached (${today}/${limit} applied today). Job openings are locked for this candidate.`}
         >
-          <Lock className="w-2.5 h-2.5 text-rose-600" />
-          <span>{today}/{limit} (Locked)</span>
+          <Lock className="w-3 h-3 text-rose-600" />
+          <span>{today} / {limit} Locked</span>
         </span>
       );
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
-        <span>{today}/{limit} Today</span>
+      <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-200 whitespace-nowrap shadow-2xs">
+        <span>{today} / {limit} Today</span>
       </span>
     );
   };
@@ -321,38 +324,39 @@ export function AdminSettingsPanel({
     const scope = (scopeHours || "all").trim();
     if (scope === "all") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-          <span>🌐 All Data</span>
+        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200 whitespace-nowrap shadow-2xs">
+          <Globe className="w-3 h-3 text-emerald-600" />
+          <span>All Data</span>
         </span>
       );
     }
     if (scope === "24") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[10px] font-bold border border-sky-200">
-          <Clock className="w-2.5 h-2.5 text-sky-600" />
+        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 text-[11px] font-bold border border-sky-200 whitespace-nowrap shadow-2xs">
+          <Clock className="w-3 h-3 text-sky-600" />
           <span>Last 24h</span>
         </span>
       );
     }
     if (scope === "48") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
-          <Clock className="w-2.5 h-2.5 text-blue-600" />
+        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-200 whitespace-nowrap shadow-2xs">
+          <Clock className="w-3 h-3 text-blue-600" />
           <span>Last 48h</span>
         </span>
       );
     }
     if (scope === "72") {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
-          <Clock className="w-2.5 h-2.5 text-indigo-600" />
+        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-200 whitespace-nowrap shadow-2xs">
+          <Clock className="w-3 h-3 text-indigo-600" />
           <span>Last 72h</span>
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[10px] font-bold border border-violet-200">
-        <Clock className="w-2.5 h-2.5 text-violet-600" />
+      <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 text-violet-700 text-[11px] font-bold border border-violet-200 whitespace-nowrap shadow-2xs">
+        <Clock className="w-3 h-3 text-violet-600" />
         <span>Last {scope}h</span>
       </span>
     );
@@ -716,21 +720,21 @@ export function AdminSettingsPanel({
         )}
 
         {/* Users Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-left text-xs text-slate-800 min-w-[1000px] border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                <th className="py-3 px-4">Candidate Profile</th>
-                <th className="py-3 px-4">Contact Info</th>
-                <th className="py-3 px-4">Qualification</th>
-                <th className="py-3 px-4">Data Scope</th>
-                <th className="py-3 px-4 text-center">Daily Quota</th>
-                <th className="py-3 px-4">Access Status</th>
-                <th className="py-3 px-4 text-center">Applications</th>
-                <th className="py-3 px-4 text-right">Access Controls</th>
+              <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                <th className="py-3 px-4 whitespace-nowrap">Candidate Profile</th>
+                <th className="py-3 px-4 whitespace-nowrap">Contact Info</th>
+                <th className="py-3 px-4 whitespace-nowrap">Qualification</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Data Scope</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Daily Quota</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Access Status</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Applications</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Access Controls</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-slate-100 font-medium bg-white">
               {isLoadingUsers && users.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
@@ -747,49 +751,63 @@ export function AdminSettingsPanel({
               ) : (
                 users.map((cand) => {
                   const isStopped = cand.status === "Stopped";
+                  const isAdminUser =
+                    String(cand.user_id || "").startsWith("usr_admin") ||
+                    cand.email === "admin@talentpulse.com" ||
+                    cand.username === "admin" ||
+                    cand.email === "kokilam653@gmail.com";
 
                   return (
                     <tr
                       key={cand.user_id}
                       className={`transition-colors ${
-                        isStopped ? "bg-rose-50/30 hover:bg-rose-50/50" : "hover:bg-slate-50/60"
+                        isStopped ? "bg-rose-50/30 hover:bg-rose-50/50" : "hover:bg-slate-50/70"
                       }`}
                     >
                       {/* Name & Username */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
                           <div
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                               isStopped
                                 ? "bg-rose-100 text-rose-700"
+                                : isAdminUser
+                                ? "bg-amber-100 text-amber-800"
                                 : "bg-indigo-100 text-indigo-700"
                             }`}
                           >
                             {cand.full_name?.charAt(0) || "U"}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900 text-xs">{cand.full_name}</div>
+                            <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                              <span>{cand.full_name}</span>
+                              {isAdminUser && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-slate-500 font-mono">@{cand.username}</div>
                           </div>
                         </div>
                       </td>
 
                       {/* Contact Info */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="text-[11px] space-y-0.5">
-                          <div className="text-slate-700">{cand.email}</div>
-                          <div className="text-slate-500">{cand.mobile_number || "No phone"}</div>
+                          <div className="text-slate-800 font-medium">{cand.email}</div>
+                          <div className="text-slate-500 font-mono">{cand.mobile_number || "No phone"}</div>
                         </div>
                       </td>
 
                       {/* Qualification */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="space-y-1">
-                          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 inline-block">
+                          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 inline-block whitespace-nowrap">
                             {cand.qualification || "Unspecified"}
                           </span>
                           {cand.college_name && (
-                            <div className="text-[10px] text-slate-500 font-medium truncate max-w-[180px]" title={cand.college_name}>
+                            <div className="text-[10px] text-slate-500 font-medium truncate max-w-[200px]" title={cand.college_name}>
                               🎓 {cand.college_name}
                             </div>
                           )}
@@ -797,55 +815,64 @@ export function AdminSettingsPanel({
                       </td>
 
                       {/* Data Scope Window */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {renderScopeBadge(cand.data_scope_hours)}
                       </td>
 
                       {/* Daily Quota / Limit Badge */}
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {renderQuotaBadge(cand)}
                       </td>
 
                       {/* Access Status Badge */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {isStopped ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black border border-rose-200">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200 whitespace-nowrap shadow-2xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                            <span>ACCESS STOPPED</span>
+                            <span>Stopped</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200 whitespace-nowrap shadow-2xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span>Active Access</span>
+                            <span>Active</span>
                           </span>
                         )}
                       </td>
 
                       {/* Applications */}
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <span className="font-bold text-slate-700 text-xs">
                           {cand.total_applications} Applied
                         </span>
                       </td>
 
                       {/* Action Buttons: Stop Access & Edit User */}
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5 justify-end">
                           {/* STOP / RESUME ACCESS BUTTON */}
                           <button
                             type="button"
+                            disabled={isAdminUser}
                             onClick={() => handleToggleUserAccess(cand)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all inline-flex items-center gap-1 cursor-pointer border ${
-                              isStopped
-                                ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800 shadow-2xs"
-                                : "bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-800 shadow-2xs"
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all inline-flex items-center gap-1 border whitespace-nowrap ${
+                              isAdminUser
+                                ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                : isStopped
+                                ? "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800 shadow-2xs cursor-pointer"
+                                : "bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-800 shadow-2xs cursor-pointer"
                             }`}
-                            title={isStopped ? "Resume user login access" : "Stop user access immediately"}
+                            title={
+                              isAdminUser
+                                ? "Administrator access cannot be stopped"
+                                : isStopped
+                                ? "Resume user login access"
+                                : "Stop user access immediately"
+                            }
                           >
                             {isStopped ? (
                               <>
                                 <UserCheck className="w-3 h-3 text-emerald-600" />
-                                <span>Resume Access</span>
+                                <span>Resume</span>
                               </>
                             ) : (
                               <>
@@ -859,8 +886,8 @@ export function AdminSettingsPanel({
                           <button
                             type="button"
                             onClick={() => openEditModal(cand)}
-                            className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Edit user details"
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-2xs cursor-pointer whitespace-nowrap"
+                            title="Edit candidate profile & access limits"
                           >
                             <Edit3 className="w-3 h-3 text-slate-500" />
                             <span>Edit</span>
@@ -928,7 +955,7 @@ export function AdminSettingsPanel({
       {/* ========================================================================= */}
       {editingUser && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 animate-in zoom-in-95 overflow-hidden">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 animate-in zoom-in-95 overflow-hidden min-h-0">
             {/* Header - Fixed at Top */}
             <div className="flex items-center justify-between p-5 pb-3 border-b border-slate-100 bg-white shrink-0">
               <div className="flex items-center gap-2.5">
@@ -955,8 +982,8 @@ export function AdminSettingsPanel({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSaveEditUser} className="flex-1 flex flex-col overflow-hidden text-xs">
-              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+            <form onSubmit={handleSaveEditUser} className="flex-1 min-h-0 flex flex-col overflow-hidden text-xs">
+              <div className="p-5 overflow-y-auto space-y-4 flex-1 min-h-0">
               {/* Access Status Switch */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                 <div>
