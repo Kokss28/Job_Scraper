@@ -246,7 +246,7 @@ export function AdminSettingsPanel({
     setIsSavingEdit(true);
 
     try {
-      const finalScope = editScopePreset === "custom" ? (editCustomHours.trim() || "24") : editScopePreset;
+      const finalScope = editScopePreset === "custom" ? ((editCustomHours || "").trim() || "24") : editScopePreset;
 
       const res = await fetch("/api/portal/users", {
         method: "PATCH",
@@ -255,12 +255,12 @@ export function AdminSettingsPanel({
           action: "update",
           userId: editingUser.user_id,
           data: {
-            fullName: editingUser.full_name,
-            email: editingUser.email,
-            mobileNumber: editingUser.mobile_number,
-            qualification: editingUser.qualification,
-            collegeName: editingUser.college_name,
-            address: editingUser.address,
+            fullName: (editingUser.full_name || "").trim(),
+            email: (editingUser.email || "").trim(),
+            mobileNumber: (editingUser.mobile_number || "").trim(),
+            qualification: (editingUser.qualification || "").trim(),
+            collegeName: (editingUser.college_name || "").trim(),
+            address: (editingUser.address || "").trim(),
             status: editingUser.status,
             dataScopeHours: finalScope,
             dailyApplyLimit: editDailyLimit,

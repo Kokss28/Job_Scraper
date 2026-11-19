@@ -762,17 +762,17 @@ export function updateCandidateUser(
   data: {
     fullName: string;
     email: string;
-    mobileNumber?: string;
-    qualification?: string;
-    collegeName?: string;
-    address?: string;
+    mobileNumber?: string | null;
+    qualification?: string | null;
+    collegeName?: string | null;
+    address?: string | null;
     status?: "Active" | "Stopped";
-    dataScopeHours?: string;
-    dailyApplyLimit?: number;
+    dataScopeHours?: string | null;
+    dailyApplyLimit?: number | null;
   }
 ): { success: boolean; error?: string } {
   const db = getPortalDb();
-  const cleanEmail = data.email.trim().toLowerCase();
+  const cleanEmail = (data.email || "").trim().toLowerCase();
   const existing = db
     .prepare("SELECT user_id FROM users WHERE LOWER(email) = ? AND user_id != ?")
     .get(cleanEmail, userId);
@@ -781,7 +781,7 @@ export function updateCandidateUser(
     return { success: false, error: "Email address is already in use by another account." };
   }
 
-  const scopeHours = data.dataScopeHours !== undefined ? (data.dataScopeHours || "all").trim() : null;
+  const scopeHours = data.dataScopeHours ? String(data.dataScopeHours).trim() : null;
   const applyLimit = data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null;
 
   db.prepare(`
@@ -797,12 +797,12 @@ export function updateCandidateUser(
       daily_apply_limit = COALESCE(?, daily_apply_limit)
     WHERE user_id = ?
   `).run(
-    data.fullName.trim(),
+    (data.fullName || "").trim(),
     cleanEmail,
-    data.mobileNumber?.trim() || null,
-    data.qualification?.trim() || null,
-    data.collegeName !== undefined ? (data.collegeName.trim() || null) : null,
-    data.address?.trim() || null,
+    data.mobileNumber ? String(data.mobileNumber).trim() : null,
+    data.qualification ? String(data.qualification).trim() : null,
+    data.collegeName ? String(data.collegeName).trim() : null,
+    data.address ? String(data.address).trim() : null,
     data.status || null,
     scopeHours,
     applyLimit,
