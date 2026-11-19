@@ -55,31 +55,18 @@ export function PortalLoginForm() {
     setIsLoading(true);
 
     try {
-      // 1. If identifier contains '@', try Supabase Admin Authentication first
+      // 1. If identifier contains '@', also authenticate with browser Supabase client
       if (cleanId.includes("@")) {
         try {
           const supabase = createClient();
-          const { data: adminData, error: adminError } =
-            await supabase.auth.signInWithPassword({
-              email: cleanId,
-              password,
-            });
-
-          if (!adminError && adminData?.user) {
-            setSuccess(`Administrator authenticated! Redirecting to console...`);
-            const target = nextParam || "/dashboard";
-            setTimeout(() => {
-              router.push(target);
-              router.refresh();
-            }, 600);
-            return;
-          }
-        } catch {
-          // If Supabase throws or fails, continue to check Candidate portal
-        }
+          await supabase.auth.signInWithPassword({
+            email: cleanId,
+            password,
+          });
+        } catch {}
       }
 
-      // 2. Authenticate as Candidate via Candidate Auth API
+      // 2. Authenticate via Unified Auth API (handles both Admin & Candidate)
       const res = await fetch("/api/portal/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -89,16 +76,17 @@ export function PortalLoginForm() {
       const data = await res.json();
 
       if (res.ok && data.success && data.user) {
-        setSuccess(`Welcome back, ${data.user.full_name}! Redirecting to workspace...`);
+        const dest = data.redirectUrl || (data.user.role === "admin" ? "/dashboard" : "/portal");
+        setSuccess(`Welcome back, ${data.user.full_name}! Redirecting...`);
         setTimeout(() => {
-          router.push("/portal");
+          router.push(nextParam || dest);
           router.refresh();
         }, 600);
         return;
       }
 
       // 3. Fallback error message if authentication failed
-      throw new Error(data.error || "Invalid username/email or password. Please try again.");
+      throw new Error(data.error || "Invalid username or password.");
     } catch (err: any) {
       setError(err?.message || "Sign in failed. Please check your credentials.");
     } finally {

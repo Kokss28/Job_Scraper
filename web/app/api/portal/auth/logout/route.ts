@@ -12,6 +12,7 @@ export async function POST() {
 
     const res = NextResponse.json({ success: true, message: "Logged out successfully" });
     res.cookies.delete("portal_session");
+    res.cookies.delete("admin_session");
     return res;
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err?.message || "Logout failed" }, { status: 500 });

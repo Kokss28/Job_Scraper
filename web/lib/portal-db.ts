@@ -64,6 +64,20 @@ export function getPortalDb(): DatabaseSync {
   return dbInstance;
 }
 
+// Password utilities
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, combinedHash: string): boolean {
+  if (!combinedHash || !combinedHash.includes(":")) return false;
+  const [salt, originalHash] = combinedHash.split(":");
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  return hash === originalHash;
+}
+
 function initDatabase(db: DatabaseSync) {
   // 1. Users Table
   db.exec(`
@@ -197,20 +211,42 @@ function initDatabase(db: DatabaseSync) {
       insertCode.run(`code_${crypto.randomBytes(6).toString("hex")}`, code, now);
     }
   }
-}
 
-// Password utilities
-export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return `${salt}:${hash}`;
-}
+  // Seed master administrators
+  try {
+    const adminHash = hashPassword("Admin@2026Secure!");
+    const seedAdmin = db.prepare(`
+      INSERT INTO users (
+        user_id, full_name, email, mobile_number, username, password_hash,
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'Active', 'all', 9999)
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, status = 'Active';
+    `);
 
-export function verifyPassword(password: string, combinedHash: string): boolean {
-  if (!combinedHash || !combinedHash.includes(":")) return false;
-  const [salt, originalHash] = combinedHash.split(":");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return hash === originalHash;
+    seedAdmin.run(
+      "usr_admin_master",
+      "System Administrator",
+      "admin@talentpulse.com",
+      "9876543210",
+      "admin",
+      adminHash,
+      "Headquarters",
+      "Master Administrator",
+      "1990-01-01"
+    );
+
+    seedAdmin.run(
+      "usr_admin_kokila",
+      "Kokila",
+      "kokilam653@gmail.com",
+      "9876543210",
+      "kokila_admin",
+      adminHash,
+      "Headquarters",
+      "System Administrator",
+      "1995-01-01"
+    );
+  } catch {}
 }
 
 // User types
@@ -228,6 +264,7 @@ export type PortalUser = {
   data_scope_hours: string;
   daily_apply_limit: number;
   college_name?: string | null;
+  role?: string;
 };
 
 // 1. Verify Admin Code
@@ -391,6 +428,12 @@ export function authenticateUser(identifier: string, password: string): { succes
     };
   }
 
+  const isAdmin =
+    userRow.email === "admin@talentpulse.com" ||
+    userRow.username === "admin" ||
+    userRow.email === "kokilam653@gmail.com" ||
+    String(userRow.user_id || "").startsWith("usr_admin");
+
   const user: PortalUser = {
     user_id: userRow.user_id,
     full_name: userRow.full_name,
@@ -404,6 +447,8 @@ export function authenticateUser(identifier: string, password: string): { succes
     status: userRow.status || "Active",
     data_scope_hours: userRow.data_scope_hours || "all",
     daily_apply_limit: Number(userRow.daily_apply_limit ?? 10),
+    college_name: userRow.college_name,
+    role: isAdmin ? "admin" : "candidate",
   };
 
   return { success: true, user };
@@ -444,6 +489,12 @@ export function getUserBySessionToken(token: string): PortalUser | null {
     return null;
   }
 
+  const isAdmin =
+    row.email === "admin@talentpulse.com" ||
+    row.username === "admin" ||
+    row.email === "kokilam653@gmail.com" ||
+    String(row.user_id || "").startsWith("usr_admin");
+
   return {
     user_id: row.user_id,
     full_name: row.full_name,
@@ -457,6 +508,8 @@ export function getUserBySessionToken(token: string): PortalUser | null {
     status: row.status || "Active",
     data_scope_hours: row.data_scope_hours || "all",
     daily_apply_limit: Number(row.daily_apply_limit ?? 10),
+    college_name: row.college_name,
+    role: isAdmin ? "admin" : "candidate",
   };
 }
 

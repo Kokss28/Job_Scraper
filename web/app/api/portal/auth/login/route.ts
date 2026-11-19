@@ -17,14 +17,17 @@ export async function POST(req: Request) {
 
     // Create session token
     const token = createPortalSession(authResult.user.user_id);
+    const isAdmin = authResult.user.role === "admin";
+    const redirectUrl = isAdmin ? "/dashboard" : "/portal";
 
     const res = NextResponse.json({
       success: true,
-      message: "Login successful!",
+      message: isAdmin ? "Administrator authenticated successfully!" : "Login successful!",
       user: authResult.user,
+      redirectUrl,
     });
 
-    // Set secure HTTP-only cookie
+    // Set secure HTTP-only candidate session cookie
     res.cookies.set("portal_session", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -32,6 +35,17 @@ export async function POST(req: Request) {
       path: "/",
       maxAge: 7 * 24 * 60 * 60, // 7 days
     });
+
+    // If admin, also set the admin_session cookie
+    if (isAdmin) {
+      res.cookies.set("admin_session", "active", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60,
+      });
+    }
 
     return res;
   } catch (err: any) {

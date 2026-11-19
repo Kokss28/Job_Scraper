@@ -56,7 +56,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/saved-jobs") ||
     pathname.startsWith("/protected");
 
-  if (isProtectedAdminPath && !user) {
+  const hasAdminAccess = Boolean(user || request.cookies.get("admin_session")?.value === "active");
+
+  if (isProtectedAdminPath && !hasAdminAccess) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.delete("role");
