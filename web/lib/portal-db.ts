@@ -127,10 +127,22 @@ function initDatabase(db: DatabaseSync) {
     db.exec("ALTER TABLE users ADD COLUMN college_name TEXT;");
   } catch {}
   try {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'candidate';");
+  } catch {}
+  try {
     db.exec("ALTER TABLE admin_codes ADD COLUMN data_scope_hours TEXT NOT NULL DEFAULT 'all';");
   } catch {}
   try {
     db.exec("ALTER TABLE admin_codes ADD COLUMN daily_apply_limit INTEGER NOT NULL DEFAULT 10;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE admin_codes ADD COLUMN role TEXT NOT NULL DEFAULT 'candidate';");
+  } catch {}
+  try {
+    db.exec(`
+      UPDATE users SET role = 'master_admin' WHERE email = 'admin@talentpulse.com' OR qualification = 'Master Administrator';
+      UPDATE users SET role = 'system_admin' WHERE email = 'kokilam653@gmail.com' OR qualification = 'System Administrator';
+    `);
   } catch {}
 
   // 3. Job Applications Table
@@ -218,9 +230,9 @@ function initDatabase(db: DatabaseSync) {
     const seedAdmin = db.prepare(`
       INSERT INTO users (
         user_id, full_name, email, mobile_number, username, password_hash,
-        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'Active', 'all', 9999)
-      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, status = 'Active';
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, role
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'Active', 'all', 9999, ?)
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, status = 'Active', role = excluded.role;
     `);
 
     seedAdmin.run(
@@ -232,7 +244,8 @@ function initDatabase(db: DatabaseSync) {
       adminHash,
       "Headquarters",
       "Master Administrator",
-      "1990-01-01"
+      "1990-01-01",
+      "master_admin"
     );
 
     seedAdmin.run(
@@ -244,7 +257,8 @@ function initDatabase(db: DatabaseSync) {
       adminHash,
       "Headquarters",
       "System Administrator",
-      "1995-01-01"
+      "1995-01-01",
+      "system_admin"
     );
   } catch {}
 }
@@ -333,7 +347,7 @@ export function registerUser(params: {
 
     // Double check admin code inside transaction to prevent race conditions
     const codeRow = db
-      .prepare("SELECT code_id, COALESCE(data_scope_hours, 'all') as data_scope_hours, COALESCE(daily_apply_limit, 10) as daily_apply_limit FROM admin_codes WHERE UPPER(unique_admin_code) = ? AND status = 'Unused'")
+      .prepare("SELECT code_id, COALESCE(data_scope_hours, 'all') as data_scope_hours, COALESCE(daily_apply_limit, 10) as daily_apply_limit, COALESCE(role, 'candidate') as role FROM admin_codes WHERE UPPER(unique_admin_code) = ? AND status = 'Unused'")
       .get(params.adminCode.trim().toUpperCase()) as any;
 
     if (!codeRow) {
@@ -341,15 +355,20 @@ export function registerUser(params: {
       return { success: false, error: "Admin Code was just used by another session. Please request a new code." };
     }
 
-    const scopeHours = codeRow?.data_scope_hours || "all";
-    const applyLimit = Number(codeRow?.daily_apply_limit ?? 10);
+    const assignedRole = codeRow?.role || "candidate";
+    const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
+    const scopeHours = isAdmin ? "all" : (codeRow?.data_scope_hours || "all");
+    const applyLimit = isAdmin ? 9999 : Number(codeRow?.daily_apply_limit ?? 10);
+    const qualification = isAdmin
+      ? (assignedRole === "master_admin" ? "Master Administrator" : "System Administrator")
+      : (params.qualification?.trim() || null);
 
     // Insert user
     db.prepare(`
       INSERT INTO users (
         user_id, full_name, email, mobile_number, username, password_hash,
-        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?)
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name, role
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?)
     `).run(
       userId,
       params.fullName.trim(),
@@ -358,12 +377,13 @@ export function registerUser(params: {
       cleanUsername,
       passwordHash,
       params.address?.trim() || null,
-      params.qualification?.trim() || null,
+      qualification,
       params.dateOfBirth?.trim() || null,
       now,
       scopeHours,
       applyLimit,
-      params.collegeName?.trim() || null
+      params.collegeName?.trim() || null,
+      assignedRole
     );
 
     // Mark admin code as used
@@ -421,18 +441,27 @@ export function authenticateUser(identifier: string, password: string): { succes
     return { success: false, error: "Invalid username or password." };
   }
 
-  if (userRow.status === "Stopped") {
-    return {
-      success: false,
-      error: "Your candidate account access has been stopped by the administrator. Please contact support.",
-    };
-  }
-
   const isAdmin =
+    userRow.role === "master_admin" ||
+    userRow.role === "system_admin" ||
+    userRow.role === "admin" ||
     userRow.email === "admin@talentpulse.com" ||
     userRow.username === "admin" ||
     userRow.email === "kokilam653@gmail.com" ||
     String(userRow.user_id || "").startsWith("usr_admin");
+
+  if (userRow.status === "Stopped") {
+    return {
+      success: false,
+      error: isAdmin
+        ? "Your administrator account access has been revoked. Please contact the Master Administrator."
+        : "Your candidate account access has been stopped by the administrator. Please contact support.",
+    };
+  }
+
+  const effectiveRole =
+    userRow.role ||
+    (userRow.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
 
   const user: PortalUser = {
     user_id: userRow.user_id,
@@ -448,7 +477,7 @@ export function authenticateUser(identifier: string, password: string): { succes
     data_scope_hours: userRow.data_scope_hours || "all",
     daily_apply_limit: Number(userRow.daily_apply_limit ?? 10),
     college_name: userRow.college_name,
-    role: isAdmin ? "admin" : "candidate",
+    role: effectiveRole,
   };
 
   return { success: true, user };
@@ -490,10 +519,17 @@ export function getUserBySessionToken(token: string): PortalUser | null {
   }
 
   const isAdmin =
+    row.role === "master_admin" ||
+    row.role === "system_admin" ||
+    row.role === "admin" ||
     row.email === "admin@talentpulse.com" ||
     row.username === "admin" ||
     row.email === "kokilam653@gmail.com" ||
     String(row.user_id || "").startsWith("usr_admin");
+
+  const effectiveRole =
+    row.role ||
+    (row.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
 
   return {
     user_id: row.user_id,
@@ -509,7 +545,7 @@ export function getUserBySessionToken(token: string): PortalUser | null {
     data_scope_hours: row.data_scope_hours || "all",
     daily_apply_limit: Number(row.daily_apply_limit ?? 10),
     college_name: row.college_name,
-    role: isAdmin ? "admin" : "candidate",
+    role: effectiveRole,
   };
 }
 
@@ -643,19 +679,19 @@ export function listAdminCodes(): any[] {
     .all() as any[];
 }
 
-export function generateAdminCode(customPrefix = "ADM-2026", dataScopeHours = "all", dailyApplyLimit = 10): string {
+export function generateAdminCode(customPrefix = "ADM-2026", dataScopeHours = "all", dailyApplyLimit = 10, role = "candidate"): string {
   const db = getPortalDb();
   const randomSuffix = Math.floor(1000 + Math.random() * 9000);
   const code = `${customPrefix}-${randomSuffix}`;
   const id = `code_${crypto.randomBytes(6).toString("hex")}`;
   const now = new Date().toISOString();
-  const scope = (dataScopeHours || "all").trim();
-  const limit = Math.max(0, Number(dailyApplyLimit ?? 10));
+  const scope = role === "candidate" ? (dataScopeHours || "all").trim() : "all";
+  const limit = role === "candidate" ? Math.max(0, Number(dailyApplyLimit ?? 10)) : 9999;
 
   db.prepare(`
-    INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date, data_scope_hours, daily_apply_limit)
-    VALUES (?, ?, 'Unused', ?, ?, ?)
-  `).run(id, code, now, scope, limit);
+    INSERT INTO admin_codes (code_id, unique_admin_code, status, created_date, data_scope_hours, daily_apply_limit, role)
+    VALUES (?, ?, 'Unused', ?, ?, ?, ?)
+  `).run(id, code, now, scope, limit, role);
 
   return code;
 }
@@ -737,6 +773,7 @@ export function listRegisteredUsers(): any[] {
         COALESCE(u.status, 'Active') as status,
         COALESCE(u.data_scope_hours, 'all') as data_scope_hours,
         COALESCE(u.daily_apply_limit, 10) as daily_apply_limit,
+        COALESCE(u.role, CASE WHEN u.email = 'admin@talentpulse.com' THEN 'master_admin' WHEN u.email = 'kokilam653@gmail.com' THEN 'system_admin' ELSE 'candidate' END) as role,
         c.unique_admin_code as used_admin_code,
         (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id) as total_applications,
         (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id AND a.application_date >= ?) as today_applications
@@ -750,6 +787,10 @@ export function listRegisteredUsers(): any[] {
 // 9. Candidate Access Governance: Stop & Edit
 export function toggleUserAccess(userId: string, newStatus: "Active" | "Stopped"): { success: boolean; error?: string } {
   const db = getPortalDb();
+  const user = db.prepare("SELECT user_id, email, role FROM users WHERE user_id = ?").get(userId) as any;
+  if (user && (user.email === "admin@talentpulse.com" || user.role === "master_admin") && newStatus === "Stopped") {
+    return { success: false, error: "Master Root Administrator cannot be stopped." };
+  }
   db.prepare("UPDATE users SET status = ? WHERE user_id = ?").run(newStatus, userId);
   if (newStatus === "Stopped") {
     db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").run(userId);
@@ -769,6 +810,7 @@ export function updateCandidateUser(
     status?: "Active" | "Stopped";
     dataScopeHours?: string | null;
     dailyApplyLimit?: number | null;
+    role?: string | null;
   }
 ): { success: boolean; error?: string } {
   const db = getPortalDb();
@@ -781,8 +823,10 @@ export function updateCandidateUser(
     return { success: false, error: "Email address is already in use by another account." };
   }
 
-  const scopeHours = data.dataScopeHours ? String(data.dataScopeHours).trim() : null;
-  const applyLimit = data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null;
+  const assignedRole = data.role ? String(data.role).trim() : null;
+  const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
+  const scopeHours = isAdmin ? "all" : (data.dataScopeHours ? String(data.dataScopeHours).trim() : null);
+  const applyLimit = isAdmin ? 9999 : (data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null);
 
   db.prepare(`
     UPDATE users SET
@@ -794,7 +838,8 @@ export function updateCandidateUser(
       address = ?,
       status = COALESCE(?, status),
       data_scope_hours = COALESCE(?, data_scope_hours),
-      daily_apply_limit = COALESCE(?, daily_apply_limit)
+      daily_apply_limit = COALESCE(?, daily_apply_limit),
+      role = COALESCE(?, role)
     WHERE user_id = ?
   `).run(
     (data.fullName || "").trim(),
@@ -806,6 +851,7 @@ export function updateCandidateUser(
     data.status || null,
     scopeHours,
     applyLimit,
+    assignedRole,
     userId
   );
 
