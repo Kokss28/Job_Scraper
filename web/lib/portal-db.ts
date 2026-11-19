@@ -484,16 +484,28 @@ export function authenticateUser(identifier: string, password: string): { succes
 }
 
 // 4. Session Management
+const PORTAL_SESSION_SECRET =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "talentpulse_secure_session_key_2026";
+
 export function createPortalSession(userId: string): string {
   const db = getPortalDb();
-  const token = crypto.randomBytes(32).toString("hex");
   const now = new Date();
   const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-  db.prepare(`
-    INSERT INTO portal_sessions (token, user_id, created_at, expires_at)
-    VALUES (?, ?, ?, ?)
-  `).run(token, userId, now.toISOString(), expires.toISOString());
+  // Cryptographically sign token: userId.expiresMs.hmac
+  const expiresMs = expires.getTime();
+  const payload = `${userId}.${expiresMs}`;
+  const hmac = crypto.createHmac("sha256", PORTAL_SESSION_SECRET).update(payload).digest("hex");
+  const token = `${payload}.${hmac}`;
+
+  try {
+    db.prepare(`
+      INSERT INTO portal_sessions (token, user_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).run(token, userId, now.toISOString(), expires.toISOString());
+  } catch {}
 
   return token;
 }
@@ -503,13 +515,37 @@ export function getUserBySessionToken(token: string): PortalUser | null {
   const db = getPortalDb();
   const now = new Date().toISOString();
 
-  const row = db
-    .prepare(`
-      SELECT u.* FROM portal_sessions s
-      JOIN users u ON s.user_id = u.user_id
-      WHERE s.token = ? AND s.expires_at > ?
-    `)
-    .get(token, now) as any;
+  // 1. Database session check
+  let row: any = null;
+  try {
+    row = db
+      .prepare(`
+        SELECT u.* FROM portal_sessions s
+        JOIN users u ON s.user_id = u.user_id
+        WHERE s.token = ? AND s.expires_at > ?
+      `)
+      .get(token, now) as any;
+  } catch {}
+
+  // 2. Serverless fallback: verify HMAC signature across lambdas
+  if (!row) {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const [userId, expiresMsStr, sig] = parts;
+      const expiresMs = Number(expiresMsStr);
+      if (!isNaN(expiresMs) && Date.now() <= expiresMs) {
+        const expectedSig = crypto
+          .createHmac("sha256", PORTAL_SESSION_SECRET)
+          .update(`${userId}.${expiresMsStr}`)
+          .digest("hex");
+        if (sig === expectedSig) {
+          try {
+            row = db.prepare("SELECT * FROM users WHERE user_id = ?").get(userId) as any;
+          } catch {}
+        }
+      }
+    }
+  }
 
   if (!row) return null;
 

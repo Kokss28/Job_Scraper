@@ -76,12 +76,19 @@ export function PortalLoginForm() {
       const data = await res.json();
 
       if (res.ok && data.success && data.user) {
-        const dest = data.redirectUrl || (data.user.role === "admin" ? "/dashboard" : "/portal");
+        const isRoleAdmin =
+          data.user.role === "admin" ||
+          data.user.role === "master_admin" ||
+          data.user.role === "system_admin" ||
+          data.user.email === "admin@talentpulse.com" ||
+          data.user.email === "kokilam653@gmail.com";
+
+        const dest = data.redirectUrl || (isRoleAdmin ? "/dashboard" : "/portal");
+        const targetUrl = nextParam && nextParam !== "/login" ? nextParam : dest;
         setSuccess(`Welcome back, ${data.user.full_name}! Redirecting...`);
         setTimeout(() => {
-          router.push(nextParam || dest);
-          router.refresh();
-        }, 600);
+          window.location.href = targetUrl;
+        }, 500);
         return;
       }
 

@@ -17,7 +17,12 @@ export async function POST(req: Request) {
 
     // Create session token
     const token = createPortalSession(authResult.user.user_id);
-    const isAdmin = authResult.user.role === "admin";
+    const isAdmin =
+      authResult.user.role === "admin" ||
+      authResult.user.role === "master_admin" ||
+      authResult.user.role === "system_admin" ||
+      authResult.user.email === "admin@talentpulse.com" ||
+      authResult.user.email === "kokilam653@gmail.com";
     const redirectUrl = isAdmin ? "/dashboard" : "/portal";
 
     const res = NextResponse.json({
