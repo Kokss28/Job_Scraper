@@ -15,7 +15,7 @@ export default async function PortalPage() {
   const token = cookieStore.get("portal_session")?.value;
 
   if (!token || !getUserBySessionToken(token)) {
-    redirect("/login?role=candidate");
+    redirect("/login");
   }
 
   return <PortalDashboard />;

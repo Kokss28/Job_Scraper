@@ -59,7 +59,7 @@ export async function updateSession(request: NextRequest) {
   if (isProtectedAdminPath && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("role", "admin");
+    url.searchParams.delete("role");
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
@@ -71,7 +71,7 @@ export async function updateSession(request: NextRequest) {
   if (isCandidatePath && !hasCandidateSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("role", "candidate");
+    url.searchParams.delete("role");
     return NextResponse.redirect(url);
   }
 

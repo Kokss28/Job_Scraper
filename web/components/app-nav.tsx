@@ -24,7 +24,7 @@ export function AppNav({
       const supabase = createClient();
       await supabase.auth.signOut();
     } catch {}
-    router.push("/login?role=admin");
+    router.push("/login");
     router.refresh();
   };
 
