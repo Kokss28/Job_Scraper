@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Educational qualification is required." }, { status: 400 });
     }
 
-    const regResult = registerUser({
+    const regResult = await registerUser({
       adminCode,
       fullName,
       email,

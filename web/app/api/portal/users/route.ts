@@ -3,8 +3,8 @@ import { listRegisteredUsers, toggleUserAccess, updateCandidateUser, hideUserFro
 
 export async function GET() {
   try {
-    const users = listRegisteredUsers();
-    const metrics = getSystemMetrics();
+    const users = await listRegisteredUsers();
+    const metrics = await getSystemMetrics();
     return NextResponse.json({
       success: true,
       users,
@@ -41,13 +41,13 @@ export async function PATCH(req: Request) {
           { status: 400 }
         );
       }
-      const res = toggleUserAccess(userId, status);
+      const res = await toggleUserAccess(userId, status);
       if (!res.success) {
         return NextResponse.json({ success: false, error: res.error }, { status: 400 });
       }
 
-      const users = listRegisteredUsers();
-      const metrics = getSystemMetrics();
+      const users = await listRegisteredUsers();
+      const metrics = await getSystemMetrics();
       return NextResponse.json({
         success: true,
         message: status === "Stopped" ? "User access stopped successfully." : "User access restored to active.",
@@ -65,13 +65,13 @@ export async function PATCH(req: Request) {
         );
       }
 
-      const res = updateCandidateUser(userId, data);
+      const res = await updateCandidateUser(userId, data);
       if (!res.success) {
         return NextResponse.json({ success: false, error: res.error }, { status: 400 });
       }
 
-      const users = listRegisteredUsers();
-      const metrics = getSystemMetrics();
+      const users = await listRegisteredUsers();
+      const metrics = await getSystemMetrics();
       return NextResponse.json({
         success: true,
         message: "Candidate profile and access updated successfully.",
@@ -81,13 +81,13 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "hide_from_dashboard") {
-      const res = hideUserFromDashboard(userId);
+      const res = await hideUserFromDashboard(userId);
       if (!res.success) {
         return NextResponse.json({ success: false, error: res.error }, { status: 400 });
       }
 
-      const users = listRegisteredUsers();
-      const metrics = getSystemMetrics();
+      const users = await listRegisteredUsers();
+      const metrics = await getSystemMetrics();
       return NextResponse.json({
         success: true,
         message: "Candidate removed from dashboard view. Database record remains safely preserved.",

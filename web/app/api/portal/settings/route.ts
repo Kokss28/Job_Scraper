@@ -4,7 +4,7 @@ import { getSystemSettings, updateSystemSettings, getSystemMetrics } from "@/lib
 export async function GET() {
   try {
     const settings = getSystemSettings();
-    const metrics = getSystemMetrics();
+    const metrics = await getSystemMetrics();
     return NextResponse.json({
       success: true,
       settings,
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     updateSystemSettings(body.settings);
     const updatedSettings = getSystemSettings();
-    const metrics = getSystemMetrics();
+    const metrics = await getSystemMetrics();
 
     return NextResponse.json({
       success: true,

@@ -11,7 +11,7 @@ export default async function SetupPage() {
   let userRole = "recruiter";
   const { isCloudSupabase, jobs } = await getJobsCatalog();
   const systemSettings = getSystemSettings();
-  const systemMetrics = getSystemMetrics();
+  const systemMetrics = await getSystemMetrics();
 
   if (hasEnvVars) {
     try {

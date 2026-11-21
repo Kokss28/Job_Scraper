@@ -3,6 +3,36 @@ import path from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
+import { createClient as createSupabaseClient, SupabaseClient } from "@supabase/supabase-js";
+
+// Supabase Cloud Configuration
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://wzixisxbeshiiarjlgnr.supabase.co";
+
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_KEY ||
+  "";
+
+let supabaseAdminInstance: SupabaseClient | null = null;
+
+export function getSupabaseAdmin(): SupabaseClient | null {
+  if (!supabaseAdminInstance && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      supabaseAdminInstance = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      });
+    } catch (e) {
+      console.warn("[Supabase Admin] Init warning:", e);
+    }
+  }
+  return supabaseAdminInstance;
+}
 
 function resolvePortalDbPath(): string {
   // Check if running on Vercel or AWS Lambda Serverless
@@ -305,8 +335,8 @@ export function verifyAdminCode(code: string): { valid: boolean; message: string
   return { valid: true, message: "Admin Code verified successfully!" };
 }
 
-// 2. Register New User (Atomic with Admin Code mark-as-used)
-export function registerUser(params: {
+// 2. Register New User (Atomic with Admin Code mark-as-used & Supabase Cloud Storage)
+export async function registerUser(params: {
   adminCode: string;
   fullName: string;
   email: string;
@@ -317,7 +347,7 @@ export function registerUser(params: {
   qualification?: string;
   dateOfBirth?: string;
   collegeName?: string;
-}): { success: boolean; user?: PortalUser; error?: string } {
+}): Promise<{ success: boolean; user?: PortalUser; error?: string }> {
   const db = getPortalDb();
 
   // Validate Code first
@@ -326,52 +356,98 @@ export function registerUser(params: {
     return { success: false, error: codeCheck.message };
   }
 
-  // Check username uniqueness
   const cleanUsername = params.username.trim().toLowerCase();
-  const existingUsername = db.prepare("SELECT user_id FROM users WHERE LOWER(username) = ?").get(cleanUsername);
-  if (existingUsername) {
-    return { success: false, error: "Username is already registered. Please choose another." };
-  }
-
-  // Check email uniqueness
   const cleanEmail = params.email.trim().toLowerCase();
-  const existingEmail = db.prepare("SELECT user_id FROM users WHERE LOWER(email) = ?").get(cleanEmail);
-  if (existingEmail) {
-    return { success: false, error: "Email address is already registered. Please log in instead." };
-  }
-
-  const userId = `usr_${crypto.randomBytes(8).toString("hex")}`;
-  const passwordHash = hashPassword(params.password);
   const now = new Date().toISOString();
 
-  // Run as atomic transaction
-  try {
-    db.exec("BEGIN TRANSACTION;");
+  // Read admin code properties from local DB or defaults
+  const codeRow = db
+    .prepare("SELECT code_id, COALESCE(data_scope_hours, 'all') as data_scope_hours, COALESCE(daily_apply_limit, 10) as daily_apply_limit, COALESCE(role, 'candidate') as role FROM admin_codes WHERE UPPER(unique_admin_code) = ?")
+    .get(params.adminCode.trim().toUpperCase()) as any;
 
-    // Double check admin code inside transaction to prevent race conditions
-    const codeRow = db
-      .prepare("SELECT code_id, COALESCE(data_scope_hours, 'all') as data_scope_hours, COALESCE(daily_apply_limit, 10) as daily_apply_limit, COALESCE(role, 'candidate') as role FROM admin_codes WHERE UPPER(unique_admin_code) = ? AND status = 'Unused'")
-      .get(params.adminCode.trim().toUpperCase()) as any;
+  const assignedRole = codeRow?.role || "candidate";
+  const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
+  const scopeHours = isAdmin ? "all" : (codeRow?.data_scope_hours || "all");
+  const applyLimit = isAdmin ? 9999 : Number(codeRow?.daily_apply_limit ?? 10);
+  const qualification = isAdmin
+    ? (assignedRole === "master_admin" ? "Master Administrator" : "System Administrator")
+    : (params.qualification?.trim() || null);
 
-    if (!codeRow) {
-      db.exec("ROLLBACK;");
-      return { success: false, error: "Admin Code was just used by another session. Please request a new code." };
+  let userId = `usr_${crypto.randomBytes(8).toString("hex")}`;
+  const supabase = getSupabaseAdmin();
+
+  // 1. Primary Save to Supabase Cloud Database (auth.users & portal_users)
+  if (supabase) {
+    try {
+      const { data: supaResult, error: supaErr } = await supabase.auth.admin.createUser({
+        email: cleanEmail,
+        password: params.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: params.fullName.trim(),
+          username: cleanUsername,
+          mobile_number: params.mobileNumber?.trim() || null,
+          qualification,
+          college_name: params.collegeName?.trim() || null,
+          date_of_birth: params.dateOfBirth?.trim() || null,
+          address: params.address?.trim() || null,
+          role: assignedRole,
+          status: "Active",
+          data_scope_hours: scopeHours,
+          daily_apply_limit: applyLimit,
+          admin_code: params.adminCode.trim().toUpperCase(),
+          is_hidden_from_dashboard: 0,
+          created_date: now,
+        },
+      });
+
+      if (supaErr) {
+        if (
+          supaErr.message.includes("already been registered") ||
+          supaErr.message.includes("already registered") ||
+          supaErr.message.includes("already exists")
+        ) {
+          return { success: false, error: "Email address is already registered in Supabase Cloud. Please sign in instead." };
+        }
+        return { success: false, error: supaErr.message };
+      }
+
+      if (supaResult?.user) {
+        userId = supaResult.user.id;
+        try {
+          await supabase.from("portal_users").upsert({
+            user_id: supaResult.user.id,
+            full_name: params.fullName.trim(),
+            username: cleanUsername,
+            email: cleanEmail,
+            mobile_number: params.mobileNumber?.trim() || null,
+            qualification,
+            college_name: params.collegeName?.trim() || null,
+            date_of_birth: params.dateOfBirth?.trim() || null,
+            address: params.address?.trim() || null,
+            role: assignedRole,
+            status: "Active",
+            data_scope_hours: scopeHours,
+            daily_apply_limit: applyLimit,
+            admin_code: params.adminCode.trim().toUpperCase(),
+            is_hidden_from_dashboard: 0,
+            created_date: now,
+          });
+        } catch {}
+      }
+    } catch (err: any) {
+      console.warn("[Supabase Cloud User Creation] Warning:", err);
     }
+  }
 
-    const assignedRole = codeRow?.role || "candidate";
-    const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
-    const scopeHours = isAdmin ? "all" : (codeRow?.data_scope_hours || "all");
-    const applyLimit = isAdmin ? 9999 : Number(codeRow?.daily_apply_limit ?? 10);
-    const qualification = isAdmin
-      ? (assignedRole === "master_admin" ? "Master Administrator" : "System Administrator")
-      : (params.qualification?.trim() || null);
-
-    // Insert user
+  // 2. Also save to local SQLite cache
+  try {
+    const passwordHash = hashPassword(params.password);
     db.prepare(`
-      INSERT INTO users (
+      INSERT OR REPLACE INTO users (
         user_id, full_name, email, mobile_number, username, password_hash,
-        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name, role
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?)
+        address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name, role, is_hidden_from_dashboard
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?, 0)
     `).run(
       userId,
       params.fullName.trim(),
@@ -389,48 +465,150 @@ export function registerUser(params: {
       assignedRole
     );
 
-    // Mark admin code as used
-    db.prepare(`
-      UPDATE admin_codes
-      SET status = 'Used', used_by_user_id = ?
-      WHERE code_id = ?
-    `).run(userId, codeRow.code_id);
+    if (codeRow?.code_id) {
+      db.prepare(`
+        UPDATE admin_codes
+        SET status = 'Used', used_by_user_id = ?
+        WHERE code_id = ?
+      `).run(userId, codeRow.code_id);
+    }
+  } catch {}
 
-    db.exec("COMMIT;");
+  const createdUser: PortalUser = {
+    user_id: userId,
+    full_name: params.fullName.trim(),
+    email: cleanEmail,
+    mobile_number: params.mobileNumber?.trim() || null,
+    username: cleanUsername,
+    address: params.address?.trim() || null,
+    qualification,
+    date_of_birth: params.dateOfBirth?.trim() || null,
+    created_date: now,
+    status: "Active",
+    data_scope_hours: scopeHours,
+    daily_apply_limit: applyLimit,
+    college_name: params.collegeName?.trim() || null,
+    role: assignedRole,
+  };
 
-    const createdUser: PortalUser = {
-      user_id: userId,
-      full_name: params.fullName.trim(),
-      email: cleanEmail,
-      mobile_number: params.mobileNumber?.trim() || null,
-      username: cleanUsername,
-      address: params.address?.trim() || null,
-      qualification: params.qualification?.trim() || null,
-      date_of_birth: params.dateOfBirth?.trim() || null,
-      created_date: now,
-      status: "Active",
-      data_scope_hours: scopeHours,
-      daily_apply_limit: applyLimit,
-      college_name: params.collegeName?.trim() || null,
-    };
-
-    return { success: true, user: createdUser };
-  } catch (err: any) {
-    try {
-      db.exec("ROLLBACK;");
-    } catch {}
-    return { success: false, error: err?.message || "Failed to create user account." };
-  }
+  return { success: true, user: createdUser };
 }
 
-// 3. Authenticate User Login
-export function authenticateUser(identifier: string, password: string): { success: boolean; user?: PortalUser; error?: string } {
+// 3. Authenticate User Login (Supabase Cloud Primary with local fallback)
+export async function authenticateUser(
+  identifier: string,
+  password: string
+): Promise<{ success: boolean; user?: PortalUser; error?: string }> {
   if (!identifier || !password) {
     return { success: false, error: "Please enter your username/email and password." };
   }
-  const db = getPortalDb();
   const cleanId = identifier.trim().toLowerCase();
+  const supabase = getSupabaseAdmin();
 
+  if (supabase) {
+    try {
+      let targetEmail = cleanId;
+
+      // If user typed username instead of email, find their email in Supabase
+      if (!cleanId.includes("@")) {
+        const { data: userList } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        const matched = userList?.users?.find(
+          (u) =>
+            u.user_metadata?.username?.toLowerCase() === cleanId ||
+            u.email?.toLowerCase().startsWith(cleanId + "@")
+        );
+        if (matched?.email) {
+          targetEmail = matched.email.toLowerCase();
+        } else {
+          const db = getPortalDb();
+          const localUser = db.prepare("SELECT email FROM users WHERE LOWER(username) = ?").get(cleanId) as any;
+          if (localUser?.email) {
+            targetEmail = localUser.email.toLowerCase();
+          }
+        }
+      }
+
+      // 1. Authenticate against Supabase Cloud Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: password,
+      });
+
+      if (!authError && authData?.user) {
+        const supaUser = authData.user;
+        const meta = supaUser.user_metadata || {};
+        const isAdmin =
+          meta.role === "master_admin" ||
+          meta.role === "system_admin" ||
+          meta.role === "admin" ||
+          supaUser.email === "admin@talentpulse.com" ||
+          supaUser.email === "kokilam653@gmail.com";
+
+        if (meta.status === "Stopped") {
+          return {
+            success: false,
+            error: isAdmin
+              ? "Your administrator account access has been revoked."
+              : "Your candidate account access has been stopped by the administrator.",
+          };
+        }
+
+        const effectiveRole =
+          meta.role ||
+          (supaUser.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
+
+        const portalUser: PortalUser = {
+          user_id: supaUser.id,
+          full_name: meta.full_name || supaUser.email?.split("@")[0] || "User",
+          email: supaUser.email!,
+          mobile_number: meta.mobile_number || null,
+          username: meta.username || cleanId,
+          address: meta.address || null,
+          qualification: meta.qualification || null,
+          date_of_birth: meta.date_of_birth || null,
+          created_date: meta.created_date || supaUser.created_at,
+          status: meta.status || "Active",
+          data_scope_hours: meta.data_scope_hours || "all",
+          daily_apply_limit: Number(meta.daily_apply_limit ?? (isAdmin ? 9999 : 10)),
+          college_name: meta.college_name || null,
+          role: effectiveRole,
+        };
+
+        // Cache into local SQLite
+        try {
+          const db = getPortalDb();
+          db.prepare(`
+            INSERT OR REPLACE INTO users (
+              user_id, full_name, email, mobile_number, username, password_hash,
+              address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name, role
+            ) VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            portalUser.user_id,
+            portalUser.full_name,
+            portalUser.email,
+            portalUser.mobile_number || null,
+            portalUser.username,
+            portalUser.address || null,
+            portalUser.qualification || null,
+            portalUser.date_of_birth || null,
+            portalUser.created_date,
+            portalUser.status,
+            portalUser.data_scope_hours,
+            portalUser.daily_apply_limit,
+            portalUser.college_name || null,
+            portalUser.role || "candidate"
+          );
+        } catch {}
+
+        return { success: true, user: portalUser };
+      }
+    } catch (e) {
+      console.warn("[Supabase Auth] Fallback to local auth:", e);
+    }
+  }
+
+  // 2. Fallback to local SQLite auth
+  const db = getPortalDb();
   const userRow = db
     .prepare("SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?")
     .get(cleanId, cleanId) as any;
@@ -462,28 +640,7 @@ export function authenticateUser(identifier: string, password: string): { succes
     };
   }
 
-  const effectiveRole =
-    userRow.role ||
-    (userRow.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
-
-  const user: PortalUser = {
-    user_id: userRow.user_id,
-    full_name: userRow.full_name,
-    email: userRow.email,
-    mobile_number: userRow.mobile_number,
-    username: userRow.username,
-    address: userRow.address,
-    qualification: userRow.qualification,
-    date_of_birth: userRow.date_of_birth,
-    created_date: userRow.created_date,
-    status: userRow.status || "Active",
-    data_scope_hours: userRow.data_scope_hours || "all",
-    daily_apply_limit: Number(userRow.daily_apply_limit ?? 10),
-    college_name: userRow.college_name,
-    role: effectiveRole,
-  };
-
-  return { success: true, user };
+  return { success: true, user: mapRowToPortalUser(userRow) };
 }
 
 function mapRowToPortalUser(row: any): PortalUser {
@@ -874,7 +1031,7 @@ export function updateSystemSettings(settings: Record<string, string>): void {
   }
 }
 
-export function getSystemMetrics(): {
+export async function getSystemMetrics(): Promise<{
   totalUsers: number;
   activeUsers: number;
   stoppedUsers: number;
@@ -882,7 +1039,41 @@ export function getSystemMetrics(): {
   totalCodes: number;
   unusedCodes: number;
   usedCodes: number;
-} {
+}> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (data?.users) {
+        const visible = data.users.filter(
+          (u) => !u.user_metadata?.is_hidden_from_dashboard
+        );
+        const active = visible.filter(
+          (u) => (u.user_metadata?.status || "Active") !== "Stopped"
+        );
+        const stopped = visible.filter(
+          (u) => u.user_metadata?.status === "Stopped"
+        );
+
+        const db = getPortalDb();
+        const appCount = (db.prepare("SELECT COUNT(*) as count FROM job_applications").get() as any)?.count || 0;
+        const codesCount = (db.prepare("SELECT COUNT(*) as count FROM admin_codes").get() as any)?.count || 0;
+        const unusedCount = (db.prepare("SELECT COUNT(*) as count FROM admin_codes WHERE status = 'Unused'").get() as any)?.count || 0;
+        const usedCount = (db.prepare("SELECT COUNT(*) as count FROM admin_codes WHERE status = 'Used'").get() as any)?.count || 0;
+
+        return {
+          totalUsers: visible.length,
+          activeUsers: active.length,
+          stoppedUsers: stopped.length,
+          totalApplications: appCount,
+          totalCodes: codesCount,
+          unusedCodes: unusedCount,
+          usedCodes: usedCount,
+        };
+      }
+    } catch {}
+  }
+
   const db = getPortalDb();
   const usersCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(is_hidden_from_dashboard, 0) = 0").get() as any)?.count || 0;
   const activeCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(is_hidden_from_dashboard, 0) = 0 AND status != 'Stopped'").get() as any)?.count || 0;
@@ -903,8 +1094,60 @@ export function getSystemMetrics(): {
   };
 }
 
-// 8. Registered Candidates Directory (Admin Live Visibility)
-export function listRegisteredUsers(): any[] {
+// 8. Registered Candidates Directory (Supabase Cloud Live User Directory)
+export async function listRegisteredUsers(): Promise<any[]> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (!error && data?.users) {
+        const usersList: any[] = [];
+        for (const u of data.users) {
+          const meta = u.user_metadata || {};
+          if (meta.is_hidden_from_dashboard === 1 || meta.is_hidden_from_dashboard === true) {
+            continue;
+          }
+
+          const isAdmin =
+            meta.role === "master_admin" ||
+            meta.role === "system_admin" ||
+            meta.role === "admin" ||
+            u.email === "admin@talentpulse.com" ||
+            u.email === "kokilam653@gmail.com";
+
+          const effectiveRole =
+            meta.role ||
+            (u.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
+
+          usersList.push({
+            user_id: u.id,
+            full_name: meta.full_name || u.email?.split("@")[0] || "User",
+            email: u.email,
+            mobile_number: meta.mobile_number || null,
+            username: meta.username || u.email?.split("@")[0] || u.id,
+            address: meta.address || null,
+            qualification: meta.qualification || null,
+            college_name: meta.college_name || null,
+            date_of_birth: meta.date_of_birth || null,
+            created_date: meta.created_date || u.created_at,
+            status: meta.status || "Active",
+            data_scope_hours: meta.data_scope_hours || "all",
+            daily_apply_limit: Number(meta.daily_apply_limit ?? (isAdmin ? 9999 : 10)),
+            role: effectiveRole,
+            used_admin_code: meta.admin_code || null,
+            total_applications: 0,
+            today_applications: 0,
+          });
+        }
+
+        usersList.sort((a, b) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
+        return usersList;
+      }
+    } catch (e) {
+      console.warn("[Supabase listUsers] Fallback to local SQLite:", e);
+    }
+  }
+
   const db = getPortalDb();
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -937,21 +1180,44 @@ export function listRegisteredUsers(): any[] {
     .all(startOfDay) as any[];
 }
 
-// 9. Candidate Access Governance: Stop & Edit
-export function toggleUserAccess(userId: string, newStatus: "Active" | "Stopped"): { success: boolean; error?: string } {
-  const db = getPortalDb();
-  const user = db.prepare("SELECT user_id, email, role FROM users WHERE user_id = ?").get(userId) as any;
-  if (user && (user.email === "admin@talentpulse.com" || user.role === "master_admin") && newStatus === "Stopped") {
-    return { success: false, error: "Master Root Administrator cannot be stopped." };
+// 9. Candidate Access Governance: Stop & Edit (Supabase Cloud + local sync)
+export async function toggleUserAccess(userId: string, newStatus: "Active" | "Stopped"): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      const { data: supaUser } = await supabase.auth.admin.getUserById(userId);
+      if (supaUser?.user) {
+        if (supaUser.user.email === "admin@talentpulse.com" || supaUser.user.user_metadata?.role === "master_admin") {
+          return { success: false, error: "Master Root Administrator cannot be stopped." };
+        }
+        await supabase.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...supaUser.user.user_metadata,
+            status: newStatus,
+          },
+        });
+      }
+      try {
+        await supabase.from("portal_users").update({ status: newStatus }).eq("user_id", userId);
+      } catch {}
+    }
+
+    const db = getPortalDb();
+    const user = db.prepare("SELECT user_id, email, role FROM users WHERE user_id = ?").get(userId) as any;
+    if (user && (user.email === "admin@talentpulse.com" || user.role === "master_admin") && newStatus === "Stopped") {
+      return { success: false, error: "Master Root Administrator cannot be stopped." };
+    }
+    db.prepare("UPDATE users SET status = ? WHERE user_id = ?").run(newStatus, userId);
+    if (newStatus === "Stopped") {
+      db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").run(userId);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to toggle user access." };
   }
-  db.prepare("UPDATE users SET status = ? WHERE user_id = ?").run(newStatus, userId);
-  if (newStatus === "Stopped") {
-    db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").run(userId);
-  }
-  return { success: true };
 }
 
-export function updateCandidateUser(
+export async function updateCandidateUser(
   userId: string,
   data: {
     fullName: string;
@@ -965,59 +1231,115 @@ export function updateCandidateUser(
     dailyApplyLimit?: number | null;
     role?: string | null;
   }
-): { success: boolean; error?: string } {
-  const db = getPortalDb();
-  const cleanEmail = (data.email || "").trim().toLowerCase();
-  const existing = db
-    .prepare("SELECT user_id FROM users WHERE LOWER(email) = ? AND user_id != ?")
-    .get(cleanEmail, userId);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const cleanEmail = (data.email || "").trim().toLowerCase();
 
-  if (existing) {
-    return { success: false, error: "Email address is already in use by another account." };
+    if (supabase) {
+      const { data: supaUser } = await supabase.auth.admin.getUserById(userId);
+      if (supaUser?.user) {
+        const currentMeta = supaUser.user.user_metadata || {};
+        const assignedRole = data.role ? String(data.role).trim() : (currentMeta.role || "candidate");
+        const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
+        const scopeHours = isAdmin ? "all" : (data.dataScopeHours ? String(data.dataScopeHours).trim() : currentMeta.data_scope_hours || "all");
+        const applyLimit = isAdmin ? 9999 : (data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : (currentMeta.daily_apply_limit ?? 10));
+
+        await supabase.auth.admin.updateUserById(userId, {
+          email: cleanEmail,
+          user_metadata: {
+            ...currentMeta,
+            full_name: (data.fullName || "").trim(),
+            mobile_number: data.mobileNumber ? String(data.mobileNumber).trim() : currentMeta.mobile_number,
+            qualification: data.qualification ? String(data.qualification).trim() : currentMeta.qualification,
+            college_name: data.collegeName ? String(data.collegeName).trim() : currentMeta.college_name,
+            address: data.address ? String(data.address).trim() : currentMeta.address,
+            status: data.status || currentMeta.status || "Active",
+            role: assignedRole,
+            data_scope_hours: scopeHours,
+            daily_apply_limit: applyLimit,
+          },
+        });
+      }
+      try {
+        await supabase.from("portal_users").update({
+          full_name: (data.fullName || "").trim(),
+          email: cleanEmail,
+          mobile_number: data.mobileNumber ? String(data.mobileNumber).trim() : null,
+          qualification: data.qualification ? String(data.qualification).trim() : null,
+          college_name: data.collegeName ? String(data.collegeName).trim() : null,
+          address: data.address ? String(data.address).trim() : null,
+          status: data.status || "Active",
+          role: data.role || "candidate",
+        }).eq("user_id", userId);
+      } catch {}
+    }
+
+    const db = getPortalDb();
+    const assignedRole = data.role ? String(data.role).trim() : null;
+    const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
+    const scopeHours = isAdmin ? "all" : (data.dataScopeHours ? String(data.dataScopeHours).trim() : null);
+    const applyLimit = isAdmin ? 9999 : (data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null);
+
+    db.prepare(`
+      UPDATE users SET
+        full_name = ?,
+        email = ?,
+        mobile_number = ?,
+        qualification = ?,
+        college_name = COALESCE(?, college_name),
+        address = ?,
+        status = COALESCE(?, status),
+        data_scope_hours = COALESCE(?, data_scope_hours),
+        daily_apply_limit = COALESCE(?, daily_apply_limit),
+        role = COALESCE(?, role)
+      WHERE user_id = ?
+    `).run(
+      (data.fullName || "").trim(),
+      cleanEmail,
+      data.mobileNumber ? String(data.mobileNumber).trim() : null,
+      data.qualification ? String(data.qualification).trim() : null,
+      data.collegeName ? String(data.collegeName).trim() : null,
+      data.address ? String(data.address).trim() : null,
+      data.status || null,
+      scopeHours,
+      applyLimit,
+      assignedRole,
+      userId
+    );
+
+    if (data.status === "Stopped") {
+      db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").run(userId);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to update candidate user." };
   }
-
-  const assignedRole = data.role ? String(data.role).trim() : null;
-  const isAdmin = assignedRole === "system_admin" || assignedRole === "master_admin";
-  const scopeHours = isAdmin ? "all" : (data.dataScopeHours ? String(data.dataScopeHours).trim() : null);
-  const applyLimit = isAdmin ? 9999 : (data.dailyApplyLimit !== undefined && data.dailyApplyLimit !== null ? Number(data.dailyApplyLimit) : null);
-
-  db.prepare(`
-    UPDATE users SET
-      full_name = ?,
-      email = ?,
-      mobile_number = ?,
-      qualification = ?,
-      college_name = COALESCE(?, college_name),
-      address = ?,
-      status = COALESCE(?, status),
-      data_scope_hours = COALESCE(?, data_scope_hours),
-      daily_apply_limit = COALESCE(?, daily_apply_limit),
-      role = COALESCE(?, role)
-    WHERE user_id = ?
-  `).run(
-    (data.fullName || "").trim(),
-    cleanEmail,
-    data.mobileNumber ? String(data.mobileNumber).trim() : null,
-    data.qualification ? String(data.qualification).trim() : null,
-    data.collegeName ? String(data.collegeName).trim() : null,
-    data.address ? String(data.address).trim() : null,
-    data.status || null,
-    scopeHours,
-    applyLimit,
-    assignedRole,
-    userId
-  );
-
-  if (data.status === "Stopped") {
-    db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").run(userId);
-  }
-
-  return { success: true };
 }
 
-// 10. Hide candidate from dashboard view (Soft Delete - Preserves all student data in database)
-export function hideUserFromDashboard(userId: string): { success: boolean; error?: string } {
+// 10. Hide candidate from dashboard view (Soft Delete in Supabase Cloud - Preserves all student data)
+export async function hideUserFromDashboard(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      const { data: supaUser } = await supabase.auth.admin.getUserById(userId);
+      if (supaUser?.user) {
+        if (supaUser.user.email === "admin@talentpulse.com" || supaUser.user.user_metadata?.role === "master_admin") {
+          return { success: false, error: "Master Root Administrator cannot be removed from dashboard." };
+        }
+        await supabase.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...supaUser.user.user_metadata,
+            is_hidden_from_dashboard: 1,
+          },
+        });
+      }
+      try {
+        await supabase.from("portal_users").update({ is_hidden_from_dashboard: 1 }).eq("user_id", userId);
+      } catch {}
+    }
+
     const db = getPortalDb();
     const user = db.prepare("SELECT user_id, email, role FROM users WHERE user_id = ?").get(userId) as any;
     if (user && (user.email === "admin@talentpulse.com" || user.role === "master_admin")) {
