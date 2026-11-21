@@ -87,8 +87,8 @@ export function PortalLoginForm() {
         const targetUrl = nextParam && nextParam !== "/login" ? nextParam : dest;
         setSuccess(`Welcome back, ${data.user.full_name}! Redirecting...`);
         setTimeout(() => {
-          window.location.href = targetUrl;
-        }, 500);
+          window.location.replace(targetUrl);
+        }, 400);
         return;
       }
 

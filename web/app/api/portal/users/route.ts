@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listRegisteredUsers, toggleUserAccess, updateCandidateUser, getSystemMetrics } from "@/lib/portal-db";
+import { listRegisteredUsers, toggleUserAccess, updateCandidateUser, hideUserFromDashboard, getSystemMetrics } from "@/lib/portal-db";
 
 export async function GET() {
   try {
@@ -80,8 +80,24 @@ export async function PATCH(req: Request) {
       });
     }
 
+    if (action === "hide_from_dashboard") {
+      const res = hideUserFromDashboard(userId);
+      if (!res.success) {
+        return NextResponse.json({ success: false, error: res.error }, { status: 400 });
+      }
+
+      const users = listRegisteredUsers();
+      const metrics = getSystemMetrics();
+      return NextResponse.json({
+        success: true,
+        message: "Candidate removed from dashboard view. Database record remains safely preserved.",
+        users,
+        metrics,
+      });
+    }
+
     return NextResponse.json(
-      { success: false, error: "Invalid action. Supported: 'toggle_status', 'update'." },
+      { success: false, error: "Invalid action. Supported: 'toggle_status', 'update', 'hide_from_dashboard'." },
       { status: 400 }
     );
   } catch (error: any) {

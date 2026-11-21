@@ -139,6 +139,9 @@ function initDatabase(db: DatabaseSync) {
     db.exec("ALTER TABLE admin_codes ADD COLUMN role TEXT NOT NULL DEFAULT 'candidate';");
   } catch {}
   try {
+    db.exec("ALTER TABLE users ADD COLUMN is_hidden_from_dashboard INTEGER NOT NULL DEFAULT 0;");
+  } catch {}
+  try {
     db.exec(`
       UPDATE users SET role = 'master_admin' WHERE email = 'admin@talentpulse.com' OR qualification = 'Master Administrator';
       UPDATE users SET role = 'system_admin' WHERE email = 'kokilam653@gmail.com' OR qualification = 'System Administrator';
@@ -483,26 +486,88 @@ export function authenticateUser(identifier: string, password: string): { succes
   return { success: true, user };
 }
 
+function mapRowToPortalUser(row: any): PortalUser {
+  const isAdmin =
+    row.role === "master_admin" ||
+    row.role === "system_admin" ||
+    row.role === "admin" ||
+    row.email === "admin@talentpulse.com" ||
+    row.username === "admin" ||
+    row.email === "kokilam653@gmail.com" ||
+    String(row.user_id || "").startsWith("usr_admin");
+
+  const effectiveRole =
+    row.role ||
+    (row.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
+
+  return {
+    user_id: row.user_id,
+    full_name: row.full_name,
+    email: row.email,
+    mobile_number: row.mobile_number || null,
+    username: row.username,
+    address: row.address || null,
+    qualification: row.qualification || null,
+    date_of_birth: row.date_of_birth || null,
+    created_date: row.created_date || new Date().toISOString(),
+    status: row.status || "Active",
+    data_scope_hours: row.data_scope_hours || "all",
+    daily_apply_limit: Number(row.daily_apply_limit ?? 10),
+    college_name: row.college_name || null,
+    role: effectiveRole,
+  };
+}
+
 // 4. Session Management
 const PORTAL_SESSION_SECRET =
+  process.env.PORTAL_SESSION_SECRET ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "talentpulse_secure_session_key_2026";
+  "talentpulse_secure_session_key_2026_fixed";
 
-export function createPortalSession(userId: string): string {
+export function createPortalSession(input: PortalUser | string): string {
   const db = getPortalDb();
   const now = new Date();
   const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-  // Cryptographically sign token: userId.expiresMs.hmac
   const expiresMs = expires.getTime();
-  const payload = `${userId}.${expiresMs}`;
-  const hmac = crypto.createHmac("sha256", PORTAL_SESSION_SECRET).update(payload).digest("hex");
-  const token = `${payload}.${hmac}`;
+
+  let user: PortalUser | null = null;
+  if (typeof input === "string") {
+    try {
+      const row = db.prepare("SELECT * FROM users WHERE user_id = ?").get(input) as any;
+      if (row) {
+        user = mapRowToPortalUser(row);
+      }
+    } catch {}
+  } else {
+    user = input;
+  }
+
+  const userId = user?.user_id || (typeof input === "string" ? input : "usr_unknown");
+
+  // Create signed token with self-contained identity
+  const claims = {
+    uid: userId,
+    name: user?.full_name || "",
+    email: user?.email || "",
+    user: user?.username || "",
+    role: user?.role || "candidate",
+    st: user?.status || "Active",
+    sc: user?.data_scope_hours || "all",
+    lim: user?.daily_apply_limit ?? 10,
+    q: user?.qualification || "",
+    col: user?.college_name || "",
+    exp: expiresMs,
+  };
+
+  const payloadStr = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const hmac = crypto.createHmac("sha256", PORTAL_SESSION_SECRET).update(payloadStr).digest("hex");
+  const token = `tp_${payloadStr}.${hmac}`;
 
   try {
     db.prepare(`
-      INSERT INTO portal_sessions (token, user_id, created_at, expires_at)
+      INSERT OR REPLACE INTO portal_sessions (token, user_id, created_at, expires_at)
       VALUES (?, ?, ?, ?)
     `).run(token, userId, now.toISOString(), expires.toISOString());
   } catch {}
@@ -515,7 +580,87 @@ export function getUserBySessionToken(token: string): PortalUser | null {
   const db = getPortalDb();
   const now = new Date().toISOString();
 
-  // 1. Database session check
+  // 1. Check self-contained signed token (tp_<payload>.<hmac>)
+  if (token.startsWith("tp_")) {
+    const raw = token.slice(3);
+    const dotIndex = raw.indexOf(".");
+    if (dotIndex > 0) {
+      const payloadStr = raw.slice(0, dotIndex);
+      const sig = raw.slice(dotIndex + 1);
+      const expectedSig = crypto
+        .createHmac("sha256", PORTAL_SESSION_SECRET)
+        .update(payloadStr)
+        .digest("hex");
+
+      if (sig === expectedSig) {
+        try {
+          const claims = JSON.parse(Buffer.from(payloadStr, "base64url").toString("utf-8"));
+          if (claims.exp && Date.now() <= claims.exp) {
+            // Check local DB if user was modified or stopped
+            let row: any = null;
+            try {
+              row = db.prepare("SELECT * FROM users WHERE user_id = ?").get(claims.uid) as any;
+            } catch {}
+
+            if (row) {
+              if (row.status === "Stopped") return null;
+              return mapRowToPortalUser(row);
+            }
+
+            // User not in this lambda's local SQLite yet; check claims status
+            if (claims.st === "Stopped") return null;
+
+            // Cache/insert into this lambda's SQLite so subsequent queries/FKs succeed
+            try {
+              db.prepare(`
+                INSERT OR IGNORE INTO users (
+                  user_id, full_name, email, mobile_number, username, password_hash,
+                  address, qualification, date_of_birth, created_date, status, data_scope_hours, daily_apply_limit, college_name, role
+                ) VALUES (?, ?, ?, null, ?, '', null, ?, null, datetime('now'), ?, ?, ?, ?, ?)
+              `).run(
+                claims.uid,
+                claims.name || claims.user || "User",
+                claims.email || `${claims.user}@candidate.portal`,
+                claims.user || claims.uid,
+                claims.q || null,
+                claims.st || "Active",
+                claims.sc || "all",
+                Number(claims.lim ?? 10),
+                claims.col || null,
+                claims.role || "candidate"
+              );
+            } catch {}
+
+            const isAdmin =
+              claims.role === "master_admin" ||
+              claims.role === "system_admin" ||
+              claims.role === "admin" ||
+              claims.email === "admin@talentpulse.com" ||
+              claims.email === "kokilam653@gmail.com";
+
+            return {
+              user_id: claims.uid,
+              full_name: claims.name || claims.user,
+              email: claims.email,
+              mobile_number: null,
+              username: claims.user,
+              address: null,
+              qualification: claims.q || null,
+              date_of_birth: null,
+              created_date: new Date().toISOString(),
+              status: (claims.st as any) || "Active",
+              data_scope_hours: claims.sc || "all",
+              daily_apply_limit: Number(claims.lim ?? 10),
+              college_name: claims.col || null,
+              role: claims.role || (isAdmin ? "system_admin" : "candidate"),
+            };
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Database session lookup fallback
   let row: any = null;
   try {
     row = db
@@ -527,7 +672,7 @@ export function getUserBySessionToken(token: string): PortalUser | null {
       .get(token, now) as any;
   } catch {}
 
-  // 2. Serverless fallback: verify HMAC signature across lambdas
+  // 3. Fallback for legacy format (userId.expiresMs.hmac)
   if (!row) {
     const parts = token.split(".");
     if (parts.length === 3) {
@@ -548,41 +693,12 @@ export function getUserBySessionToken(token: string): PortalUser | null {
   }
 
   if (!row) return null;
-
   if (row.status === "Stopped") {
     destroySession(token);
     return null;
   }
 
-  const isAdmin =
-    row.role === "master_admin" ||
-    row.role === "system_admin" ||
-    row.role === "admin" ||
-    row.email === "admin@talentpulse.com" ||
-    row.username === "admin" ||
-    row.email === "kokilam653@gmail.com" ||
-    String(row.user_id || "").startsWith("usr_admin");
-
-  const effectiveRole =
-    row.role ||
-    (row.email === "admin@talentpulse.com" ? "master_admin" : isAdmin ? "system_admin" : "candidate");
-
-  return {
-    user_id: row.user_id,
-    full_name: row.full_name,
-    email: row.email,
-    mobile_number: row.mobile_number,
-    username: row.username,
-    address: row.address,
-    qualification: row.qualification,
-    date_of_birth: row.date_of_birth,
-    created_date: row.created_date,
-    status: row.status || "Active",
-    data_scope_hours: row.data_scope_hours || "all",
-    daily_apply_limit: Number(row.daily_apply_limit ?? 10),
-    college_name: row.college_name,
-    role: effectiveRole,
-  };
+  return mapRowToPortalUser(row);
 }
 
 export function destroySession(token: string): void {
@@ -768,9 +884,9 @@ export function getSystemMetrics(): {
   usedCodes: number;
 } {
   const db = getPortalDb();
-  const usersCount = (db.prepare("SELECT COUNT(*) as count FROM users").get() as any)?.count || 0;
-  const activeCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE status != 'Stopped'").get() as any)?.count || 0;
-  const stoppedCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE status = 'Stopped'").get() as any)?.count || 0;
+  const usersCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(is_hidden_from_dashboard, 0) = 0").get() as any)?.count || 0;
+  const activeCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(is_hidden_from_dashboard, 0) = 0 AND status != 'Stopped'").get() as any)?.count || 0;
+  const stoppedCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(is_hidden_from_dashboard, 0) = 0 AND status = 'Stopped'").get() as any)?.count || 0;
   const appCount = (db.prepare("SELECT COUNT(*) as count FROM job_applications").get() as any)?.count || 0;
   const codesCount = (db.prepare("SELECT COUNT(*) as count FROM admin_codes").get() as any)?.count || 0;
   const unusedCount = (db.prepare("SELECT COUNT(*) as count FROM admin_codes WHERE status = 'Unused'").get() as any)?.count || 0;
@@ -815,6 +931,7 @@ export function listRegisteredUsers(): any[] {
         (SELECT COUNT(*) FROM job_applications a WHERE a.user_id = u.user_id AND a.application_date >= ?) as today_applications
       FROM users u
       LEFT JOIN admin_codes c ON c.used_by_user_id = u.user_id
+      WHERE COALESCE(u.is_hidden_from_dashboard, 0) = 0
       ORDER BY u.created_date DESC
     `)
     .all(startOfDay) as any[];
@@ -896,4 +1013,19 @@ export function updateCandidateUser(
   }
 
   return { success: true };
+}
+
+// 10. Hide candidate from dashboard view (Soft Delete - Preserves all student data in database)
+export function hideUserFromDashboard(userId: string): { success: boolean; error?: string } {
+  try {
+    const db = getPortalDb();
+    const user = db.prepare("SELECT user_id, email, role FROM users WHERE user_id = ?").get(userId) as any;
+    if (user && (user.email === "admin@talentpulse.com" || user.role === "master_admin")) {
+      return { success: false, error: "Master Root Administrator cannot be removed from dashboard." };
+    }
+    db.prepare("UPDATE users SET is_hidden_from_dashboard = 1 WHERE user_id = ?").run(userId);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to remove user from dashboard view." };
+  }
 }

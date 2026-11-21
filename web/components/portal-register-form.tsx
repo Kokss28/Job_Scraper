@@ -269,13 +269,6 @@ export function PortalRegisterForm() {
           </div>
         )}
 
-        {codeSuccessMsg && (
-          <div className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2.5 animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <div>{codeSuccessMsg}</div>
-          </div>
-        )}
-
         {success && (
           <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-3 animate-in fade-in shadow-xs">
             <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
@@ -367,21 +360,6 @@ export function PortalRegisterForm() {
         {/* ========================================================= */}
         {step === 2 && !registeredUser && (
           <form onSubmit={handleRegister} className="space-y-4">
-            {/* Verified Code Pill */}
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-              <span className="text-emerald-800 font-bold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Verified Admin Code: <span className="font-mono">{adminCode}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="text-[11px] text-emerald-700 underline font-semibold hover:text-emerald-900"
-              >
-                Change Code
-              </button>
-            </div>
-
             {/* Row 1: Full Name & Username */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -521,24 +499,11 @@ export function PortalRegisterForm() {
                   <input
                     type="text"
                     required
-                    list="qualification-suggestions"
                     value={qualification}
                     onChange={(e) => setQualification(e.target.value)}
                     placeholder="Type your degree (e.g. B.Tech CS, MCA)"
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:border-indigo-600 text-xs font-medium text-slate-900 outline-hidden transition-all"
                   />
-                  <datalist id="qualification-suggestions">
-                    <option value="B.Tech / B.E. Computer Science" />
-                    <option value="B.Tech / B.E. Information Technology" />
-                    <option value="B.Tech / B.E. (Any Stream)" />
-                    <option value="BCA (Bachelor of Computer Applications)" />
-                    <option value="B.Sc. Computer Science / IT" />
-                    <option value="MCA (Master of Computer Applications)" />
-                    <option value="M.Sc. Computer Science / Data Science" />
-                    <option value="M.Tech / M.E." />
-                    <option value="Diploma in Computer Science / Engineering" />
-                    <option value="Any Graduate / Post Graduate" />
-                  </datalist>
                 </div>
               </div>
 

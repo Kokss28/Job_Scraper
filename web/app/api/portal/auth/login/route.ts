@@ -15,8 +15,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: authResult.error || "Invalid credentials." }, { status: 401 });
     }
 
-    // Create session token
-    const token = createPortalSession(authResult.user.user_id);
+    // Create session token with full user identity for serverless resilience
+    const token = createPortalSession(authResult.user);
     const isAdmin =
       authResult.user.role === "admin" ||
       authResult.user.role === "master_admin" ||

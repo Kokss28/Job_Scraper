@@ -22,6 +22,7 @@ import {
   Clock,
   Globe,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
 
 type CandidateUser = {
@@ -80,7 +81,7 @@ export function AdminSettingsPanel({
   const [inviteScopePreset, setInviteScopePreset] = useState<string>("all");
   const [inviteCustomHours, setInviteCustomHours] = useState<string>("24");
   const [inviteDailyLimit, setInviteDailyLimit] = useState<number>(10);
-  const [inviteRole, setInviteRole] = useState<"candidate" | "system_admin" | "master_admin">("candidate");
+  const [inviteRole, setInviteRole] = useState<"candidate" | "system_admin">("candidate");
   const [publicDomain, setPublicDomain] = useState<string>("");
 
   useEffect(() => {
@@ -153,7 +154,7 @@ export function AdminSettingsPanel({
     setIsGeneratingInvite(true);
     setInviteError(null);
     try {
-      const prefix = inviteRole === "system_admin" ? "SYSADMIN-2026" : inviteRole === "master_admin" ? "MADMIN-2026" : "ADM-2026";
+      const prefix = inviteRole === "system_admin" ? "SYSADMIN-2026" : "ADM-2026";
       const finalScope = inviteRole === "candidate" ? (inviteScopePreset === "custom" ? (inviteCustomHours.trim() || "24") : inviteScopePreset) : "all";
       const finalLimit = inviteRole === "candidate" ? inviteDailyLimit : 9999;
 
@@ -230,6 +231,48 @@ export function AdminSettingsPanel({
       setTimeout(() => setUserActionMsg(null), 3500);
     } catch (err: any) {
       setUserActionMsg({ type: "error", text: err.message || "Action failed." });
+    }
+  };
+
+  const handleDeleteUserFromDashboard = async (cand: CandidateUser) => {
+    const isRootMaster =
+      cand.email === "admin@talentpulse.com" ||
+      cand.role === "master_admin" ||
+      cand.user_id === "usr_admin_master";
+
+    if (isRootMaster) {
+      alert("Master Root Administrator cannot be removed.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove "${cand.full_name}" (@${cand.username}) from the settings dashboard view?\n\nNOTE: Student records, application history, and profile data remain 100% permanently stored in the database.`
+    );
+    if (!confirmed) return;
+
+    setUserActionMsg(null);
+    try {
+      const res = await fetch("/api/portal/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "hide_from_dashboard",
+          userId: cand.user_id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to remove user from dashboard view");
+      }
+      setUsers(data.users);
+      if (data.metrics) setMetrics(data.metrics);
+      setUserActionMsg({
+        type: "success",
+        text: `"${cand.full_name}" removed from settings dashboard. All database records remain safely preserved.`,
+      });
+      setTimeout(() => setUserActionMsg(null), 4000);
+    } catch (err: any) {
+      setUserActionMsg({ type: "error", text: err.message || "Failed to remove candidate from dashboard." });
     }
   };
 
@@ -511,7 +554,6 @@ export function AdminSettingsPanel({
                 >
                   <option value="candidate">Candidate (Job Seeker)</option>
                   <option value="system_admin">System Administrator</option>
-                  <option value="master_admin">Master Administrator</option>
                 </select>
               </div>
 
@@ -577,7 +619,7 @@ export function AdminSettingsPanel({
                   <div className="p-2.5 rounded-lg bg-indigo-50/80 border border-indigo-200 text-indigo-900 text-xs font-medium flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
                     <span>
-                      <strong>{inviteRole === "master_admin" ? "Master Administrator" : "System Administrator"}</strong>: Data Scope &amp; Daily Quota restrictions do not apply. Full catalog access and administrative privileges are automatically granted.
+                      <strong>System Administrator</strong>: Data Scope &amp; Daily Quota restrictions do not apply. Full catalog access and administrative privileges are automatically granted.
                     </span>
                   </div>
                 </div>
@@ -677,7 +719,7 @@ export function AdminSettingsPanel({
                 <div className="space-y-1">
                   <div className="text-[10px] font-bold text-indigo-900/70 uppercase tracking-wider flex items-center justify-between">
                     <span>
-                      Generated Invitation Link (Send to {inviteRole === "master_admin" ? "Master Administrator" : inviteRole === "system_admin" ? "System Administrator" : "Candidate"}):
+                      Generated Invitation Link (Send to {inviteRole === "system_admin" ? "System Administrator" : "Candidate"}):
                     </span>
                     {getActiveBaseUrl().includes("localhost") && (
                       <span className="text-amber-700 font-semibold lowercase">
@@ -969,6 +1011,26 @@ export function AdminSettingsPanel({
                             <Edit3 className="w-3 h-3 text-slate-500" />
                             <span>Edit</span>
                           </button>
+
+                          {/* DELETE USER BUTTON (Soft Delete from dashboard only - database data preserved) */}
+                          <button
+                            type="button"
+                            disabled={isRootMaster}
+                            onClick={() => handleDeleteUserFromDashboard(cand)}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-2xs whitespace-nowrap ${
+                              isRootMaster
+                                ? "bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed opacity-50"
+                                : "bg-white hover:bg-rose-50 border-slate-200 hover:border-rose-300 text-slate-600 hover:text-rose-700 cursor-pointer"
+                            }`}
+                            title={
+                              isRootMaster
+                                ? "Master Root Administrator cannot be removed"
+                                : "Remove candidate from dashboard view (keeps student data permanently stored in database)"
+                            }
+                          >
+                            <Trash2 className="w-3 h-3 text-slate-400 hover:text-rose-600" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1100,7 +1162,6 @@ export function AdminSettingsPanel({
                 >
                   <option value="candidate">Candidate (Job Seeker)</option>
                   <option value="system_admin">System Administrator</option>
-                  <option value="master_admin">Master Administrator</option>
                 </select>
               </div>
 
