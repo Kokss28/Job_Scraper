@@ -58,6 +58,18 @@ export async function POST(req: NextRequest) {
           } catch {}
         };
 
+        if (!fs.existsSync(scriptPath)) {
+          sendEvent("log", { text: "[INFO] Live browser scraper runner is only available in environments with Python installed." });
+          sendEvent("done", {
+            success: false,
+            error: "Live browser scraping requires a desktop or worker server with Python & Chromium (.venv). Please dispatch runs locally or via scheduled worker to sync fresh jobs into Supabase Cloud.",
+          });
+          try {
+            controller.close();
+          } catch {}
+          return;
+        }
+
         const child = spawn(pythonExe, args, {
           cwd: rootDir,
           env: {
@@ -123,10 +135,14 @@ export async function POST(req: NextRequest) {
           } catch {}
         });
 
-        child.on("error", (err) => {
+        child.on("error", (err: any) => {
+          let errorMsg = `Failed to spawn Python runner: ${err.message}`;
+          if (err.code === "ENOENT") {
+            errorMsg = "Python executable not found on this host. Live browser scraping requires a Python environment (.venv). Please run the ingestion runner locally or via worker to push jobs directly into Supabase Cloud.";
+          }
           sendEvent("done", {
             success: false,
-            error: `Failed to spawn Python runner: ${err.message}`,
+            error: errorMsg,
           });
           try {
             controller.close();

@@ -24,6 +24,13 @@ export interface DashboardStats {
   isCloudSupabase: boolean;
 }
 
+export interface SourceBreakdown {
+  all: number;
+  linkedin: number;
+  naukri: number;
+  indeed: number;
+}
+
 export interface JobFilterParams {
   page?: number;
   pageSize?: number;
@@ -47,11 +54,91 @@ export interface PaginatedJobsResult {
 
 // In-memory cache for fast sub-millisecond responses
 let cachedStats: { data: DashboardStats; timestamp: number } | null = null;
+let cachedSourceBreakdowns = new Map<string, { data: SourceBreakdown; timestamp: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes (aligns with scraper frequency)
 
 export function invalidateJobsCache(): void {
   cachedStats = null;
   cachedCatalog = null;
+  cachedSourceBreakdowns.clear();
+}
+
+// ---------------------------------------------------------------------------
+// 0. SCOPED SOURCE BREAKDOWN (LinkedIn, Naukri, Indeed exact split)
+// ---------------------------------------------------------------------------
+export async function getSourceBreakdown(hours?: number): Promise<SourceBreakdown> {
+  const cacheKey = String(hours && hours > 0 ? hours : "all");
+  const cached = cachedSourceBreakdowns.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  if (hasEnvVars) {
+    try {
+      const supabase = await createClient();
+      const cutoff =
+        hours && hours > 0
+          ? new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+          : null;
+
+      let allQ = supabase.from("jobs").select("*", { count: "exact", head: true });
+      let liQ = supabase.from("jobs").select("*", { count: "exact", head: true }).ilike("source", "%linkedin%");
+      let nkQ = supabase.from("jobs").select("*", { count: "exact", head: true }).ilike("source", "%naukri%");
+      let indQ = supabase.from("jobs").select("*", { count: "exact", head: true }).ilike("source", "%indeed%");
+
+      if (cutoff) {
+        allQ = allQ.gte("collected_at", cutoff);
+        liQ = liQ.gte("collected_at", cutoff);
+        nkQ = nkQ.gte("collected_at", cutoff);
+        indQ = indQ.gte("collected_at", cutoff);
+      }
+
+      const [allRes, liRes, nkRes, indRes] = await Promise.all([allQ, liQ, nkQ, indQ]);
+
+      const all = allRes.count ?? 0;
+      const linkedin = liRes.count ?? 0;
+      const naukri = nkRes.count ?? 0;
+      const indeed = indRes.count ?? 0;
+
+      const breakdown: SourceBreakdown = {
+        all,
+        linkedin,
+        naukri,
+        indeed,
+      };
+
+      cachedSourceBreakdowns.set(cacheKey, { data: breakdown, timestamp: Date.now() });
+      return breakdown;
+    } catch (e) {
+      console.warn("Supabase getSourceBreakdown failed, falling back to local CSV:", e);
+    }
+  }
+
+  // Local CSV fallback
+  const allLocal = loadJobsFromLocalCsv();
+  let filtered = allLocal;
+  if (hours && hours > 0) {
+    const cutoff = Date.now() - hours * 60 * 60 * 1000;
+    filtered = filtered.filter((j) => {
+      if (!j.collected_at) return true;
+      const t = new Date(j.collected_at).getTime();
+      return !isNaN(t) ? t >= cutoff : true;
+    });
+  }
+
+  const linkedin = filtered.filter((j) => (j.source || "").toLowerCase().includes("linkedin")).length;
+  const naukri = filtered.filter((j) => (j.source || "").toLowerCase().includes("naukri")).length;
+  const indeed = filtered.filter((j) => (j.source || "").toLowerCase().includes("indeed")).length;
+
+  const breakdown: SourceBreakdown = {
+    all: filtered.length,
+    linkedin,
+    naukri,
+    indeed,
+  };
+
+  cachedSourceBreakdowns.set(cacheKey, { data: breakdown, timestamp: Date.now() });
+  return breakdown;
 }
 
 // ---------------------------------------------------------------------------

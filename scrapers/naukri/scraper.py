@@ -215,14 +215,31 @@ def fetch_page(
             # StealthyFetcher.fetch(...)
             # ------------------------------------------------
 
-            response = StealthyFetcher.fetch(
-                url,
-                headless=headless,
-                network_idle=False,
-                wait=WAIT_MS,
-                timeout=REQUEST_TIMEOUT,
-                google_search=True,
-            )
+            # Adaptive fetch with wait_selector for React job-tuples
+            fetch_kwargs = {
+                "headless": headless,
+                "network_idle": False,
+                "timeout": REQUEST_TIMEOUT,
+                "google_search": True,
+            }
+
+            if "-jobs" in url or "jobAge=" in url or "/jobs" in url:
+                fetch_kwargs["wait_selector"] = "div.srp-jobtuple-wrapper"
+            else:
+                fetch_kwargs["wait"] = WAIT_MS
+
+            try:
+                response = StealthyFetcher.fetch(url, **fetch_kwargs)
+            except Exception as wait_exc:
+                logger.info("Naukri wait_selector fallback triggered (%s), retrying with static wait", wait_exc)
+                response = StealthyFetcher.fetch(
+                    url,
+                    headless=headless,
+                    network_idle=False,
+                    wait=WAIT_MS,
+                    timeout=REQUEST_TIMEOUT,
+                    google_search=True,
+                )
 
             status_code = getattr(
                 response,
@@ -2412,7 +2429,7 @@ def collect_naukri_jobs(
                     consecutive_empty_pages
                 )
 
-                if consecutive_empty_pages >= 2:
+                if consecutive_empty_pages >= 4:
                     logger.info(
                         "No more job cards available on Naukri for this query. Finished pagination."
                     )
@@ -2529,7 +2546,7 @@ def collect_naukri_jobs(
 
             if new_jobs_on_page == 0:
                 consecutive_no_match_pages += 1
-                if consecutive_no_match_pages >= 4:
+                if consecutive_no_match_pages >= 6:
                     logger.info(
                         "Consecutive pages (%s) had no jobs matching the requested time window (past %s hours). Pagination complete.",
                         consecutive_no_match_pages,

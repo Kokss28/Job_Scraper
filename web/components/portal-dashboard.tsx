@@ -244,6 +244,18 @@ export function PortalDashboard() {
   // Jobs State
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [totalCatalogCount, setTotalCatalogCount] = useState(11819);
+  const [currentFilteredCount, setCurrentFilteredCount] = useState(0);
+  const [sourceCounts, setSourceCounts] = useState<{
+    all: number;
+    linkedin: number;
+    naukri: number;
+    indeed: number;
+  }>({
+    all: 0,
+    linkedin: 0,
+    naukri: 0,
+    indeed: 0,
+  });
   const [totalAppliedCount, setTotalAppliedCount] = useState(0);
   const [todayAppliedCount, setTodayAppliedCount] = useState(0);
   const [dailyApplyLimit, setDailyApplyLimit] = useState(10);
@@ -336,7 +348,9 @@ export function PortalDashboard() {
         setJobs(data.jobs || []);
         setTotalPages(data.totalPages || 1);
         setPage(data.page || 1);
+        setCurrentFilteredCount(data.totalCount ?? (data.jobs || []).length);
         if (data.totalCatalogCount) setTotalCatalogCount(data.totalCatalogCount);
+        if (data.sourceCounts) setSourceCounts(data.sourceCounts);
         if (data.totalAppliedCount !== undefined) setTotalAppliedCount(data.totalAppliedCount);
         if (data.todayAppliedCount !== undefined) setTodayAppliedCount(data.todayAppliedCount);
         if (data.dailyApplyLimit !== undefined) setDailyApplyLimit(data.dailyApplyLimit);
@@ -831,8 +845,8 @@ export function PortalDashboard() {
               }`}
             >
               <span>🌐 All Sources</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "All Sources" ? "bg-slate-800 text-slate-200" : "bg-white text-slate-600 border border-slate-200"}`}>
-                {totalCatalogCount.toLocaleString()}
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${selectedSource === "All Sources" ? "bg-slate-800 text-slate-200" : "bg-white text-slate-600 border border-slate-200"}`}>
+                {(sourceCounts.all > 0 ? sourceCounts.all : totalCatalogCount).toLocaleString()}
               </span>
             </button>
 
@@ -847,8 +861,8 @@ export function PortalDashboard() {
             >
               <span className="w-2 h-2 rounded-full bg-[#0A66C2]" />
               <span>LinkedIn</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "LinkedIn" ? "bg-blue-800 text-white" : "bg-blue-50 text-[#0A66C2] border border-blue-100"}`}>
-                5,580+
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${selectedSource === "LinkedIn" ? "bg-blue-800 text-white" : "bg-blue-50 text-[#0A66C2] border border-blue-100"}`}>
+                {sourceCounts.linkedin.toLocaleString()}
               </span>
             </button>
 
@@ -863,8 +877,8 @@ export function PortalDashboard() {
             >
               <span className="w-2 h-2 rounded-full bg-blue-700" />
               <span>Naukri</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "Naukri" ? "bg-blue-900 text-white" : "bg-blue-50 text-blue-800 border border-blue-100"}`}>
-                3,000+
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${selectedSource === "Naukri" ? "bg-blue-900 text-white" : "bg-blue-50 text-blue-800 border border-blue-100"}`}>
+                {sourceCounts.naukri.toLocaleString()}
               </span>
             </button>
 
@@ -879,8 +893,8 @@ export function PortalDashboard() {
             >
               <span className="w-2 h-2 rounded-full bg-indigo-600" />
               <span>Indeed</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedSource === "Indeed" ? "bg-indigo-800 text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
-                3,700+
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${selectedSource === "Indeed" ? "bg-indigo-800 text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
+                {sourceCounts.indeed.toLocaleString()}
               </span>
             </button>
           </div>
@@ -892,11 +906,18 @@ export function PortalDashboard() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight">
-                Verified Job Openings
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                Showing verified opportunities {selectedSource !== "All Sources" ? `from ${selectedSource}` : "across top platforms"} matching your academic and skill criteria
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                  Verified Job Openings
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold">
+                  {currentFilteredCount.toLocaleString()} {currentFilteredCount === 1 ? "Job" : "Jobs"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                {selectedSource !== "All Sources"
+                  ? `Showing ${currentFilteredCount.toLocaleString()} verified opportunities from ${selectedSource}`
+                  : `Showing all ${currentFilteredCount.toLocaleString()} verified opportunities matching your academic and skill criteria`}
               </p>
             </div>
             <span className="text-xs font-bold text-slate-500">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getPaginatedJobs, getDashboardStats } from "@/lib/data-service";
+import { getPaginatedJobs, getDashboardStats, getSourceBreakdown } from "@/lib/data-service";
 import { getUserBySessionToken, getUserAppliedJobIds, getUserTodayAppliedCount } from "@/lib/portal-db";
 
 export async function GET(req: Request) {
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const [paginated, stats] = await Promise.all([
+    const [paginated, stats, sourceBreakdown] = await Promise.all([
       getPaginatedJobs({
         page,
         pageSize,
@@ -63,6 +63,7 @@ export async function GET(req: Request) {
         hours: effectiveHours,
       }),
       getDashboardStats(),
+      getSourceBreakdown(effectiveHours),
     ]);
 
     // Enrich jobs with applied flag, realistic posting freshness and active status
@@ -113,7 +114,8 @@ export async function GET(req: Request) {
       page: paginated.page,
       pageSize: paginated.pageSize,
       totalPages: paginated.totalPages,
-      totalCatalogCount: userScopeHours ? paginated.totalCount : (stats.totalJobs || paginated.totalCount || 11819),
+      totalCatalogCount: sourceBreakdown.all || paginated.totalCount,
+      sourceCounts: sourceBreakdown,
       totalAppliedCount: appliedJobIds.length,
       todayAppliedCount,
       dailyApplyLimit,
