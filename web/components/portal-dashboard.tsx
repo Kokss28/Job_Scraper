@@ -33,7 +33,6 @@ import {
   Lock,
   BookOpen,
   Phone,
-  MessageCircle,
 } from "lucide-react";
 import type { PortalUser } from "@/lib/portal-db";
 
@@ -992,21 +991,10 @@ export function PortalDashboard() {
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                       Want to Apply to More Jobs? Come and Learn at Thoorigai Infotech!
                     </h2>
-                    <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 max-w-2xl">
+                    <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 max-w-3xl">
                       Your daily application quota of <strong>{dailyApplyLimit} jobs</strong> is reached for today. Candidates trained at <strong>Thoorigai Infotech</strong> gain hands-on project experience, in-demand technical certifications, and guaranteed direct employer placement assistance!
                     </p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowThoorigaiPromo(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Back to Job Openings</span>
-                  </button>
                 </div>
               </div>
 
@@ -1121,52 +1109,18 @@ export function PortalDashboard() {
                 </div>
               </div>
 
-              {/* Contact Information & Action Controls in Plain Text on Page */}
+              {/* Contact Information in Plain Text on Page */}
               <div className="rounded-2xl bg-slate-900 text-white p-6 md:p-8 space-y-6 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div>
-                    <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
-                      Direct Contact &amp; Admissions
-                    </div>
-                    <h3 className="text-lg sm:text-xl font-black text-white mt-1">
-                      Ready to Start Learning? Get in Touch with Thoorigai Infotech
-                    </h3>
-                    <p className="text-xs text-slate-300 font-medium mt-1 max-w-xl">
-                      Contact our career advisors today to discuss course syllabus, batches, classroom or online options, and job placement assistance.
-                    </p>
+                <div>
+                  <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
+                    Direct Contact &amp; Admissions
                   </div>
-
-                  {/* Direct Contact Buttons */}
-                  <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <a
-                      href="https://wa.me/919384134008?text=Hello%20Thoorigai%20Infotech%2C%20I%20am%20interested%20in%20courses%20and%20job%20placement"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>Chat on WhatsApp</span>
-                    </a>
-
-                    <a
-                      href="https://www.thoorigaiinfotech.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                    >
-                      <Globe className="w-4 h-4" />
-                      <span>Visit Website</span>
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowThoorigaiPromo(false)}
-                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer border border-slate-700 flex items-center gap-1.5"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      <span>Back to Jobs</span>
-                    </button>
-                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-white mt-1">
+                    Ready to Start Learning? Get in Touch with Thoorigai Infotech
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium mt-1 max-w-2xl">
+                    Contact our career advisors today to discuss course syllabus, batches, classroom or online options, and job placement assistance.
+                  </p>
                 </div>
 
                 {/* Structured Text Details Grid */}
