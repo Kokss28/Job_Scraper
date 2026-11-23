@@ -302,11 +302,41 @@ export function PortalDashboard() {
       const data = await res.json();
       if (data.authenticated && data.user) {
         setUser(data.user);
-        setTotalAppliedCount(data.totalApplied || 0);
-        setTodayAppliedCount(data.todayApplied || 0);
-        setDailyApplyLimit(data.dailyApplyLimit !== undefined ? data.dailyApplyLimit : (data.user?.daily_apply_limit ?? 10));
-        setIsDailyLimitReached(Boolean(data.isDailyLimitReached));
-        setAppliedJobIds(data.appliedJobIds || []);
+        const serverApplied = data.appliedJobIds || [];
+        const serverToday = Number(data.todayApplied || 0);
+        const serverLimit = data.dailyApplyLimit !== undefined ? Number(data.dailyApplyLimit) : Number(data.user?.daily_apply_limit ?? 10);
+
+        // Client-side local backup to guard against any network lag/container reset
+        let localToday = 0;
+        let localApplied: string[] = [];
+        try {
+          const todayKey = new Date().toISOString().slice(0, 10);
+          const savedDate = localStorage.getItem(`talentpulse_date_${data.user.user_id}`);
+          if (savedDate === todayKey) {
+            localToday = Number(localStorage.getItem(`talentpulse_today_${data.user.user_id}`) || 0);
+          }
+          const savedApplied = localStorage.getItem(`talentpulse_applied_${data.user.user_id}`);
+          if (savedApplied) {
+            localApplied = JSON.parse(savedApplied);
+          }
+        } catch {}
+
+        const effectiveToday = Math.max(serverToday, localToday);
+        const mergedApplied = Array.from(new Set([...serverApplied, ...localApplied]));
+        const isLimitReached = Boolean(data.isDailyLimitReached) || (serverLimit > 0 && effectiveToday >= serverLimit);
+
+        setTotalAppliedCount(Math.max(data.totalApplied || 0, mergedApplied.length));
+        setTodayAppliedCount(effectiveToday);
+        setDailyApplyLimit(serverLimit);
+        setIsDailyLimitReached(isLimitReached);
+        setAppliedJobIds(mergedApplied);
+
+        try {
+          const todayKey = new Date().toISOString().slice(0, 10);
+          localStorage.setItem(`talentpulse_date_${data.user.user_id}`, todayKey);
+          localStorage.setItem(`talentpulse_today_${data.user.user_id}`, String(effectiveToday));
+          localStorage.setItem(`talentpulse_applied_${data.user.user_id}`, JSON.stringify(mergedApplied));
+        } catch {}
       } else {
         router.push("/login");
       }
@@ -354,10 +384,20 @@ export function PortalDashboard() {
         setCurrentFilteredCount(data.totalCount ?? (data.jobs || []).length);
         if (data.totalCatalogCount) setTotalCatalogCount(data.totalCatalogCount);
         if (data.sourceCounts) setSourceCounts(data.sourceCounts);
-        if (data.totalAppliedCount !== undefined) setTotalAppliedCount(data.totalAppliedCount);
-        if (data.todayAppliedCount !== undefined) setTodayAppliedCount(data.todayAppliedCount);
+        if (data.totalAppliedCount !== undefined) {
+          setTotalAppliedCount((prev) => Math.max(prev, data.totalAppliedCount));
+        }
+        if (data.todayAppliedCount !== undefined) {
+          setTodayAppliedCount((prev) => {
+            const nextCount = Math.max(prev, data.todayAppliedCount);
+            if (dailyApplyLimit > 0 && nextCount >= dailyApplyLimit) {
+              setIsDailyLimitReached(true);
+            }
+            return nextCount;
+          });
+        }
         if (data.dailyApplyLimit !== undefined) setDailyApplyLimit(data.dailyApplyLimit);
-        if (data.isDailyLimitReached !== undefined) setIsDailyLimitReached(Boolean(data.isDailyLimitReached));
+        if (data.isDailyLimitReached) setIsDailyLimitReached(true);
       }
     } catch (e) {
       console.error("Error loading jobs:", e);
@@ -423,16 +463,29 @@ export function PortalDashboard() {
 
     // 3. Mark locally as applied immediately
     if (!appliedJobIds.includes(job.job_id)) {
-      setAppliedJobIds((prev) => [...prev, job.job_id]);
-      setTotalAppliedCount((prev) => prev + 1);
+      const nextApplied = [...appliedJobIds, job.job_id];
       const nextTodayCount = todayAppliedCount + 1;
+      const reached = dailyApplyLimit > 0 && nextTodayCount >= dailyApplyLimit;
+
+      setAppliedJobIds(nextApplied);
+      setTotalAppliedCount((prev) => prev + 1);
       setTodayAppliedCount(nextTodayCount);
-      if (dailyApplyLimit > 0 && nextTodayCount >= dailyApplyLimit) {
+      if (reached) {
         setIsDailyLimitReached(true);
       }
       setJobs((prev) =>
         prev.map((j) => (j.job_id === job.job_id ? { ...j, isApplied: true } : j))
       );
+
+      // Persist to localStorage immediately
+      if (user?.user_id) {
+        try {
+          const todayKey = new Date().toISOString().slice(0, 10);
+          localStorage.setItem(`talentpulse_date_${user.user_id}`, todayKey);
+          localStorage.setItem(`talentpulse_today_${user.user_id}`, String(nextTodayCount));
+          localStorage.setItem(`talentpulse_applied_${user.user_id}`, JSON.stringify(nextApplied));
+        } catch {}
+      }
 
       // 4. Record in database in background (graceful, non-blocking)
       try {
@@ -488,18 +541,31 @@ export function PortalDashboard() {
     }
 
     // 2. Mark locally as applied
+    let nextApplied = appliedJobIds;
+    let nextTodayCount = todayAppliedCount;
     if (!appliedJobIds.includes(applyingJob.job_id)) {
-      const nextTodayCount = todayAppliedCount + 1;
+      nextTodayCount = todayAppliedCount + 1;
+      nextApplied = [...appliedJobIds, applyingJob.job_id];
       setTodayAppliedCount(nextTodayCount);
+      setAppliedJobIds(nextApplied);
+      setTotalAppliedCount((prev) => prev + 1);
       if (dailyApplyLimit > 0 && nextTodayCount >= dailyApplyLimit) {
         setIsDailyLimitReached(true);
       }
     }
-    setAppliedJobIds((prev) => (prev.includes(applyingJob.job_id) ? prev : [...prev, applyingJob.job_id]));
-    setTotalAppliedCount((prev) => (appliedJobIds.includes(applyingJob.job_id) ? prev : prev + 1));
     setJobs((prev) =>
       prev.map((j) => (j.job_id === applyingJob.job_id ? { ...j, isApplied: true } : j))
     );
+
+    // Persist to localStorage immediately
+    if (user?.user_id) {
+      try {
+        const todayKey = new Date().toISOString().slice(0, 10);
+        localStorage.setItem(`talentpulse_date_${user.user_id}`, todayKey);
+        localStorage.setItem(`talentpulse_today_${user.user_id}`, String(nextTodayCount));
+        localStorage.setItem(`talentpulse_applied_${user.user_id}`, JSON.stringify(nextApplied));
+      } catch {}
+    }
 
     // 3. Record in database
     try {

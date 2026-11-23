@@ -757,6 +757,17 @@ export function getUserBySessionToken(token: string): PortalUser | null {
             let row: any = null;
             try {
               row = db.prepare("SELECT * FROM users WHERE user_id = ?").get(claims.uid) as any;
+              if (!row && claims.email) {
+                row = db.prepare("SELECT * FROM users WHERE email = ?").get(claims.email) as any;
+                if (row && row.user_id !== claims.uid) {
+                  // Harmonize legacy SQLite user ID with Supabase Auth UUID
+                  try {
+                    db.prepare("UPDATE users SET user_id = ? WHERE email = ?").run(claims.uid, claims.email);
+                    db.prepare("UPDATE job_applications SET user_id = ? WHERE user_id = ?").run(claims.uid, row.user_id);
+                    row.user_id = claims.uid;
+                  } catch {}
+                }
+              }
             } catch {}
 
             if (row) {
@@ -864,106 +875,208 @@ export function destroySession(token: string): void {
   db.prepare("DELETE FROM portal_sessions WHERE token = ?").run(token);
 }
 
-// 5. Job Applications
-export function applyToJob(userId: string, jobId: string, notes?: string): { success: boolean; error?: string; application?: any } {
+// Helper to check if an application was submitted "today" (IST / UTC calendar day or within 24 hours)
+export function isApplicationFromToday(dateStr: string): boolean {
+  if (!dateStr) return false;
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+
+    // 1. Same calendar day in UTC
+    const sameUtc =
+      d.getUTCFullYear() === now.getUTCFullYear() &&
+      d.getUTCMonth() === now.getUTCMonth() &&
+      d.getUTCDate() === now.getUTCDate();
+    if (sameUtc) return true;
+
+    // 2. Same calendar day in IST (UTC+5:30)
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const dIst = new Date(d.getTime() + istOffsetMs);
+    const nowIst = new Date(now.getTime() + istOffsetMs);
+    const sameIst =
+      dIst.getUTCFullYear() === nowIst.getUTCFullYear() &&
+      dIst.getUTCMonth() === nowIst.getUTCMonth() &&
+      dIst.getUTCDate() === nowIst.getUTCDate();
+    if (sameIst) return true;
+
+    // 3. Fallback: applied within last 24 hours
+    const diffHours = (now.getTime() - d.getTime()) / (1000 * 60 * 60);
+    return diffHours >= 0 && diffHours < 24;
+  } catch {
+    return false;
+  }
+}
+
+// 5. Job Applications (Unified Supabase Cloud + Local SQLite Cache)
+export async function applyToJob(
+  userId: string,
+  jobId: string,
+  notes?: string
+): Promise<{ success: boolean; error?: string; message?: string; application?: any; alreadyApplied?: boolean }> {
   if (!userId || !jobId) {
     return { success: false, error: "Invalid user or job identifier." };
   }
   const db = getPortalDb();
+  const supabase = getSupabaseAdmin();
 
-  // Check user status and daily application limit
-  const userRow = db.prepare("SELECT daily_apply_limit, status FROM users WHERE user_id = ?").get(userId) as any;
-  if (!userRow) {
-    return { success: false, error: "Candidate user not found." };
+  // 1. Resolve User from Supabase and/or SQLite
+  let supaUser: any = null;
+  let supaMetadata: Record<string, any> = {};
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.admin.getUserById(userId);
+      supaUser = data?.user || null;
+      if (supaUser) {
+        supaMetadata = supaUser.user_metadata || {};
+      }
+    } catch {}
   }
-  if (userRow.status === "Stopped") {
+
+  // Also check local SQLite
+  let localUser: any = null;
+  try {
+    localUser = db.prepare("SELECT * FROM users WHERE user_id = ? OR email = ?").get(userId, supaUser?.email || userId) as any;
+    if (localUser && localUser.user_id !== userId) {
+      // Harmonize legacy SQLite user ID to Supabase UUID
+      try {
+        db.prepare("UPDATE users SET user_id = ? WHERE email = ?").run(userId, localUser.email);
+        db.prepare("UPDATE job_applications SET user_id = ? WHERE user_id = ?").run(userId, localUser.user_id);
+      } catch {}
+    }
+  } catch {}
+
+  const status = supaMetadata.status || localUser?.status || "Active";
+  if (status === "Stopped") {
     return { success: false, error: "Your candidate account access has been stopped by the administrator." };
   }
 
-  const limit = userRow.daily_apply_limit !== undefined && userRow.daily_apply_limit !== null ? Number(userRow.daily_apply_limit) : 10;
-  if (limit > 0) {
-    const todayCount = getUserTodayAppliedCount(userId);
-    if (todayCount >= limit) {
-      return {
-        success: false,
-        error: `Daily application limit reached (${limit}/${limit} jobs applied today). Verified Job Openings are locked until tomorrow.`,
-      };
+  const limitVal =
+    supaMetadata.daily_apply_limit !== undefined
+      ? supaMetadata.daily_apply_limit
+      : localUser?.daily_apply_limit !== undefined
+      ? localUser.daily_apply_limit
+      : 10;
+  const limit = Number(limitVal ?? 10);
+
+  // 2. Fetch existing applications from both Supabase and SQLite
+  const existingApps = await getUserApplications(userId);
+
+  // 3. Duplicate check
+  const alreadyApplied = existingApps.some((a) => String(a.job_id) === String(jobId));
+  if (alreadyApplied) {
+    return { success: true, alreadyApplied: true, message: "Application already recorded." };
+  }
+
+  // 4. Daily quota check
+  const todayApps = existingApps.filter((a) => isApplicationFromToday(a.application_date));
+  if (limit > 0 && todayApps.length >= limit) {
+    return {
+      success: false,
+      error: `Daily application limit reached (${limit}/${limit} jobs applied today). Verified Job Openings are locked until tomorrow.`,
+    };
+  }
+
+  // 5. Create new application
+  const appId = `app_${crypto.randomBytes(8).toString("hex")}`;
+  const now = new Date().toISOString();
+  const newApp = {
+    application_id: appId,
+    user_id: userId,
+    job_id: jobId,
+    application_date: now,
+    application_status: "Submitted",
+    notes: notes || "Applied via original portal link",
+  };
+
+  const updatedApps = [newApp, ...existingApps];
+
+  // 6. Save to Supabase Cloud User Metadata (Persistent across Vercel & serverless)
+  if (supabase && supaUser) {
+    try {
+      await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          ...supaMetadata,
+          applications: updatedApps,
+        },
+      });
+    } catch (err) {
+      console.error("[Supabase applyToJob] Failed to update user metadata:", err);
     }
   }
 
-  // Check duplicate
-  const existing = db
-    .prepare("SELECT application_id FROM job_applications WHERE user_id = ? AND job_id = ?")
-    .get(userId, jobId);
-
-  if (existing) {
-    return { success: false, error: "You have already applied for this job." };
-  }
-
-  const appId = `app_${crypto.randomBytes(8).toString("hex")}`;
-  const now = new Date().toISOString();
-
+  // 7. Save to local SQLite cache
   try {
     db.prepare(`
-      INSERT INTO job_applications (application_id, user_id, job_id, application_date, application_status, notes)
+      INSERT OR REPLACE INTO job_applications (application_id, user_id, job_id, application_date, application_status, notes)
       VALUES (?, ?, ?, ?, 'Submitted', ?)
-    `).run(appId, userId, jobId, now, notes || null);
-
-    return {
-      success: true,
-      application: {
-        application_id: appId,
-        user_id: userId,
-        job_id: jobId,
-        application_date: now,
-        application_status: "Submitted",
-      },
-    };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Failed to submit job application." };
+    `).run(appId, userId, jobId, now, notes || "Applied via original portal link");
+  } catch (err) {
+    console.warn("[SQLite applyToJob] Failed to cache:", err);
   }
+
+  return {
+    success: true,
+    application: newApp,
+  };
 }
 
-export function getUserApplications(userId: string): any[] {
+export async function getUserApplications(userId: string): Promise<any[]> {
   if (!userId) return [];
   const db = getPortalDb();
-  return db
-    .prepare(`
-      SELECT application_id, user_id, job_id, application_date, application_status, notes
-      FROM job_applications
-      WHERE user_id = ?
-      ORDER BY application_date DESC
-    `)
-    .all(userId) as any[];
+  const supabase = getSupabaseAdmin();
+  const mapByJobId = new Map<string, any>();
+
+  // 1. Fetch from Supabase Cloud
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.admin.getUserById(userId);
+      const supaApps = (data?.user?.user_metadata?.applications as any[]) || [];
+      for (const app of supaApps) {
+        if (app && app.job_id) {
+          mapByJobId.set(String(app.job_id), app);
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Fetch from local SQLite cache
+  try {
+    const sqliteApps = db
+      .prepare(`
+        SELECT application_id, user_id, job_id, application_date, application_status, notes
+        FROM job_applications
+        WHERE user_id = ?
+        ORDER BY application_date DESC
+      `)
+      .all(userId) as any[];
+
+    for (const sa of sqliteApps) {
+      if (sa && sa.job_id && !mapByJobId.has(String(sa.job_id))) {
+        mapByJobId.set(String(sa.job_id), sa);
+      }
+    }
+  } catch {}
+
+  const merged = Array.from(mapByJobId.values());
+  return merged.sort(
+    (a, b) => new Date(b.application_date || 0).getTime() - new Date(a.application_date || 0).getTime()
+  );
 }
 
-export function getUserAppliedJobIds(userId: string): string[] {
-  if (!userId) return [];
-  const db = getPortalDb();
-  const rows = db
-    .prepare("SELECT job_id FROM job_applications WHERE user_id = ?")
-    .all(userId) as any[];
-  return rows.map((r) => r.job_id);
+export async function getUserAppliedJobIds(userId: string): Promise<string[]> {
+  const apps = await getUserApplications(userId);
+  return Array.from(new Set(apps.map((a) => String(a.job_id))));
 }
 
-export function getUserAppliedCount(userId: string): number {
-  if (!userId) return 0;
-  const db = getPortalDb();
-  const row = db
-    .prepare("SELECT COUNT(*) as count FROM job_applications WHERE user_id = ?")
-    .get(userId) as any;
-  return row?.count || 0;
+export async function getUserAppliedCount(userId: string): Promise<number> {
+  const ids = await getUserAppliedJobIds(userId);
+  return ids.length;
 }
 
-export function getUserTodayAppliedCount(userId: string): number {
-  if (!userId) return 0;
-  const db = getPortalDb();
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const row = db
-    .prepare("SELECT COUNT(*) as count FROM job_applications WHERE user_id = ? AND application_date >= ?")
-    .get(userId, startOfDay) as any;
-  return row?.count || 0;
+export async function getUserTodayAppliedCount(userId: string): Promise<number> {
+  const apps = await getUserApplications(userId);
+  const todayApps = apps.filter((a) => isApplicationFromToday(a.application_date));
+  return todayApps.length;
 }
 
 // 6. Admin Code Generation & Listing (for Admin/Recruiter visibility)

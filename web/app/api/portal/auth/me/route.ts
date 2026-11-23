@@ -16,8 +16,8 @@ export async function GET() {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    const appliedJobIds = getUserAppliedJobIds(user.user_id);
-    const todayApplied = getUserTodayAppliedCount(user.user_id);
+    const appliedJobIds = await getUserAppliedJobIds(user.user_id);
+    const todayApplied = await getUserTodayAppliedCount(user.user_id);
     const dailyLimit = user.daily_apply_limit !== undefined && user.daily_apply_limit !== null ? Number(user.daily_apply_limit) : 10;
     const isDailyLimitReached = dailyLimit > 0 && todayApplied >= dailyLimit;
 

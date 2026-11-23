@@ -27,8 +27,8 @@ export async function GET(req: Request) {
     if (token) {
       const user = getUserBySessionToken(token);
       if (user) {
-        appliedJobIds = getUserAppliedJobIds(user.user_id);
-        todayAppliedCount = getUserTodayAppliedCount(user.user_id);
+        appliedJobIds = await getUserAppliedJobIds(user.user_id);
+        todayAppliedCount = await getUserTodayAppliedCount(user.user_id);
         dailyApplyLimit = user.daily_apply_limit !== undefined && user.daily_apply_limit !== null ? Number(user.daily_apply_limit) : 10;
         isDailyLimitReached = dailyApplyLimit > 0 && todayAppliedCount >= dailyApplyLimit;
         userScopeStr = user.data_scope_hours || "all";

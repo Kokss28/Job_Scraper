@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Job ID is required." }, { status: 400 });
     }
 
-    const result = applyToJob(user.user_id, jobId, notes);
+    const result = await applyToJob(user.user_id, jobId, notes);
     if (!result.success) {
       return NextResponse.json({
         success: true,
@@ -78,7 +78,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const applications = getUserApplications(user.user_id);
+    const applications = await getUserApplications(user.user_id);
     return NextResponse.json({
       success: true,
       applications,
