@@ -31,6 +31,9 @@ import {
   DollarSign,
   Globe,
   Lock,
+  BookOpen,
+  Phone,
+  MessageCircle,
 } from "lucide-react";
 import type { PortalUser } from "@/lib/portal-db";
 
@@ -260,6 +263,7 @@ export function PortalDashboard() {
   const [todayAppliedCount, setTodayAppliedCount] = useState(0);
   const [dailyApplyLimit, setDailyApplyLimit] = useState(10);
   const [isDailyLimitReached, setIsDailyLimitReached] = useState(false);
+  const [showThoorigaiPromo, setShowThoorigaiPromo] = useState(false);
   const [appliedJobIds, setAppliedJobIds] = useState<string[]>([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
 
@@ -399,9 +403,9 @@ export function PortalDashboard() {
   const handleApplyToJob = async (job: JobItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    // Check if daily limit reached
+    // Check if daily limit reached: switch in-page to Thoorigai Infotech learning hub
     if (isDailyLimitReached && !appliedJobIds.includes(job.job_id)) {
-      alert(`Daily application quota reached (${dailyApplyLimit}/${dailyApplyLimit} jobs applied today). Verified Job Openings are locked for today. Your quota automatically resets tomorrow.`);
+      setShowThoorigaiPromo(true);
       return;
     }
 
@@ -451,6 +455,10 @@ export function PortalDashboard() {
   // Open Apply Confirmation Modal (Optional Note)
   const handleOpenApply = (job: JobItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (isDailyLimitReached && !appliedJobIds.includes(job.job_id)) {
+      setShowThoorigaiPromo(true);
+      return;
+    }
     setAppFeedback(null);
     setApplicationNotes("");
     setApplyingJob(job);
@@ -461,10 +469,8 @@ export function PortalDashboard() {
     if (!applyingJob) return;
 
     if (isDailyLimitReached && !appliedJobIds.includes(applyingJob.job_id)) {
-      setAppFeedback({
-        type: "error",
-        message: `Daily application quota reached (${dailyApplyLimit}/${dailyApplyLimit} jobs applied today). Verified Job Openings are locked for today.`,
-      });
+      setShowThoorigaiPromo(true);
+      setApplyingJob(null);
       return;
     }
 
@@ -925,31 +931,277 @@ export function PortalDashboard() {
             </span>
           </div>
 
-          {/* Daily Limit Reached Lock Banner */}
+          {/* Daily Limit Reached Lock Banner with Thoorigai In-Page Toggle */}
           {isDailyLimitReached && (
-            <div className="mb-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border-2 border-rose-300 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+            <div className="mb-5 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-violet-500/10 to-indigo-500/10 border-2 border-indigo-300 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
               <div className="flex items-start sm:items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/20">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-600/20">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-black text-slate-900">
-                      🔒 Verified Job Openings Locked for Today
+                      🔒 Daily Application Limit Reached
                     </h3>
-                    <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
                       {todayAppliedCount} / {dailyApplyLimit} Used Today
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 font-medium mt-1">
-                    You have reached your daily candidate application limit of <strong>{dailyApplyLimit} jobs per day</strong>. Further job applications are locked until 00:00 midnight. To increase your daily limit, please contact your administrator.
+                    You have reached your daily quota of <strong>{dailyApplyLimit} jobs per day</strong>. Want to apply to more jobs? Come and learn at <strong>Thoorigai Infotech</strong> to unlock direct interview calls &amp; placement assistance!
                   </p>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowThoorigaiPromo((prev) => !prev)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>{showThoorigaiPromo ? "← Back to Job Openings" : "Apply More Jobs • Thoorigai Infotech"}</span>
+                </button>
               </div>
             </div>
           )}
 
-          {isLoadingJobs ? (
+          {showThoorigaiPromo ? (
+            /* ========================================================= */
+            /* THOORIGAI INFOTECH IN-PAGE CAREER & ENROLLMENT HUB        */
+            /* ========================================================= */
+            <div className="rounded-3xl bg-white border-2 border-indigo-200/90 p-6 md:p-8 shadow-md shadow-indigo-600/5 space-y-8 animate-in fade-in zoom-in-95 duration-200">
+              {/* Top Header with Logo, Message & Back Button */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                    <img
+                      src="/thoorigai-logo.jpg"
+                      alt="Thoorigai Infotech Logo"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "https://www.thoorigaiinfotech.com/hubfs/ThoorigAILogo-1.jpg";
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold uppercase tracking-wider mb-1">
+                      <Sparkles className="w-3 h-3 text-indigo-600" />
+                      <span>Thoorigai Infotech Placement &amp; Training Hub</span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      Want to Apply to More Jobs? Come and Learn at Thoorigai Infotech!
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 max-w-2xl">
+                      Your daily application quota of <strong>{dailyApplyLimit} jobs</strong> is reached for today. Candidates trained at <strong>Thoorigai Infotech</strong> gain hands-on project experience, in-demand technical certifications, and guaranteed direct employer placement assistance!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowThoorigaiPromo(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Back to Job Openings</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Course Catalog Provided at Thoorigai Infotech */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-600" />
+                    <span>In-Demand Courses Provided at Thoorigai Infotech</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Industry-tailored syllabus taught by senior IT engineers with real-time projects and resume building.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Course 1: Artificial Intelligence & Machine Learning */}
+                  <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white p-5 hover:border-indigo-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      🤖
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">Artificial Intelligence &amp; Machine Learning</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Generative AI, Large Language Models (LLMs), Prompt Engineering, Neural Networks, Computer Vision &amp; Autonomous AI Agent building.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-indigo-700">
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-100/70">GenAI</span>
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-100/70">LLMs</span>
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-100/70">Deep Learning</span>
+                    </div>
+                  </div>
+
+                  {/* Course 2: Python Full Stack Development */}
+                  <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-5 hover:border-blue-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      🐍
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">Python Full Stack Development</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Core &amp; Advanced Python, Django, FastAPI frameworks, REST APIs, PostgreSQL integration, automated testing &amp; cloud deployment.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-blue-700">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-100/70">Django</span>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-100/70">FastAPI</span>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-100/70">REST APIs</span>
+                    </div>
+                  </div>
+
+                  {/* Course 3: MERN Stack Web Development */}
+                  <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/60 to-white p-5 hover:border-violet-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      💻
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">MERN Stack Web Development</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Full-lifecycle web apps with MongoDB, Express.js, React.js, Node.js, Redux State Management, Tailwind CSS &amp; Cloud Deployment.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-violet-700">
+                      <span className="px-2 py-0.5 rounded-md bg-violet-100/70">MongoDB</span>
+                      <span className="px-2 py-0.5 rounded-md bg-violet-100/70">React.js</span>
+                      <span className="px-2 py-0.5 rounded-md bg-violet-100/70">Node.js</span>
+                    </div>
+                  </div>
+
+                  {/* Course 4: Java Full Stack Development */}
+                  <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50/60 to-white p-5 hover:border-amber-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      ☕
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">Java Full Stack Development</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Core Java, OOP principles, Spring Boot, Hibernate ORM, Microservices architecture, Docker basics &amp; modern React web frontend.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-amber-700">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100/70">Spring Boot</span>
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100/70">Microservices</span>
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100/70">Hibernate</span>
+                    </div>
+                  </div>
+
+                  {/* Course 5: Data Analytics & Data Science */}
+                  <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/60 to-white p-5 hover:border-emerald-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      📊
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">Data Analytics &amp; Data Science</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Advanced SQL queries, Power BI dashboards, Tableau visualization, Python data analytics (Pandas, NumPy) &amp; business metrics.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-emerald-700">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100/70">Power BI</span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100/70">Advanced SQL</span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100/70">Pandas</span>
+                    </div>
+                  </div>
+
+                  {/* Course 6: Digital Marketing & SEO */}
+                  <div className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50/60 to-white p-5 hover:border-rose-300 transition-all shadow-2xs space-y-2">
+                    <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                      🌐
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900">Digital Marketing &amp; SEO</h4>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Search Engine Optimization (SEO), Google Ads, Social Media Marketing, Performance Marketing, Analytics &amp; Brand Strategy.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-rose-700">
+                      <span className="px-2 py-0.5 rounded-md bg-rose-100/70">SEO</span>
+                      <span className="px-2 py-0.5 rounded-md bg-rose-100/70">Google Ads</span>
+                      <span className="px-2 py-0.5 rounded-md bg-rose-100/70">Social Media</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information & Action Controls in Plain Text on Page */}
+              <div className="rounded-2xl bg-slate-900 text-white p-6 md:p-8 space-y-6 shadow-sm">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div>
+                    <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
+                      Direct Contact &amp; Admissions
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black text-white mt-1">
+                      Ready to Start Learning? Get in Touch with Thoorigai Infotech
+                    </h3>
+                    <p className="text-xs text-slate-300 font-medium mt-1 max-w-xl">
+                      Contact our career advisors today to discuss course syllabus, batches, classroom or online options, and job placement assistance.
+                    </p>
+                  </div>
+
+                  {/* Direct Contact Buttons */}
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                    <a
+                      href="https://wa.me/919384134008?text=Hello%20Thoorigai%20Infotech%2C%20I%20am%20interested%20in%20courses%20and%20job%20placement"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Chat on WhatsApp</span>
+                    </a>
+
+                    <a
+                      href="https://www.thoorigaiinfotech.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                    >
+                      <Globe className="w-4 h-4" />
+                      <span>Visit Website</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowThoorigaiPromo(false)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer border border-slate-700 flex items-center gap-1.5"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Back to Jobs</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Structured Text Details Grid */}
+                <div className="pt-6 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Phone Numbers</span>
+                    </div>
+                    <div className="text-white font-semibold text-sm">+91 93841 34008</div>
+                    <div className="text-slate-300 font-medium">+91 93841 64008</div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Campus Address</span>
+                    </div>
+                    <div className="text-slate-200 font-medium leading-relaxed">
+                      127, Ettayapuram Road, Melur, Thoothukudi (Tuticorin) – 628002, Tamil Nadu
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Website &amp; Modes</span>
+                    </div>
+                    <div className="text-indigo-400 font-semibold text-sm">www.thoorigaiinfotech.com</div>
+                    <div className="text-slate-300 font-medium">Classroom (Tuticorin) &amp; Live Online Pan-India</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : isLoadingJobs ? (
             <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200">
               <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
               <div className="text-xs font-bold text-slate-600">Loading Job Postings...</div>
@@ -1059,7 +1311,7 @@ export function PortalDashboard() {
                       <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-slate-500 font-medium">
                           <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{job.posted_ago || "Recently Added"}</span>
+                          <span>{job.posted_ago && !job.posted_ago.includes("Invalid") ? job.posted_ago : "Recently Added"}</span>
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shrink-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1086,14 +1338,14 @@ export function PortalDashboard() {
                           isApplied
                             ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200"
                             : isDailyLimitReached
-                            ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                            ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-indigo-600/20"
                             : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/25"
                         }`}
                         title={
                           isApplied
                             ? "Applied! Click to re-open official listing"
                             : isDailyLimitReached
-                            ? `Daily quota reached (${dailyApplyLimit}/${dailyApplyLimit} applied today). Locked until tomorrow.`
+                            ? `Daily quota reached (${dailyApplyLimit}/${dailyApplyLimit} applied today). Click to learn with Thoorigai Infotech & unlock more applications.`
                             : `Apply on ${job.source || "official portal"}`
                         }
                       >
@@ -1105,8 +1357,8 @@ export function PortalDashboard() {
                           </>
                         ) : isDailyLimitReached ? (
                           <>
-                            <Lock className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Locked</span>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Apply More</span>
                           </>
                         ) : (
                           <>

@@ -74,23 +74,36 @@ export async function GET(req: Request) {
       let postedDate = "Recently";
       if (job.collected_at) {
         try {
-          const d = new Date(job.collected_at);
-          const now = new Date();
-          const diffMs = Math.max(0, now.getTime() - d.getTime());
-          const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-          const diffDays = Math.floor(diffHours / 24);
-
-          postedDate = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-          if (diffHours < 1) {
-            postedAgo = "Just now";
-          } else if (diffHours < 24) {
-            postedAgo = `Posted ${diffHours}h ago`;
-          } else if (diffDays === 1) {
-            postedAgo = "Posted yesterday";
-          } else if (diffDays < 7) {
-            postedAgo = `Posted ${diffDays}d ago`;
+          const raw = String(job.collected_at).trim();
+          let d: Date | null = null;
+          // Handle DD/MM/YYYY format
+          const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+          if (slashMatch) {
+            const [, day, month, year, h = "00", min = "00", sec = "00"] = slashMatch;
+            d = new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${h.padStart(2, "0")}:${min.padStart(2, "0")}:${sec.padStart(2, "0")}`);
           } else {
-            postedAgo = `Posted on ${postedDate}`;
+            const parsed = new Date(raw);
+            if (!isNaN(parsed.getTime())) d = parsed;
+          }
+
+          if (d && !isNaN(d.getTime())) {
+            const now = new Date();
+            const diffMs = Math.max(0, now.getTime() - d.getTime());
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+
+            postedDate = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+            if (diffHours < 1) {
+              postedAgo = "Just now";
+            } else if (diffHours < 24) {
+              postedAgo = `Posted ${diffHours}h ago`;
+            } else if (diffDays === 1) {
+              postedAgo = "Posted yesterday";
+            } else if (diffDays < 7) {
+              postedAgo = `Posted ${diffDays}d ago`;
+            } else {
+              postedAgo = `Posted on ${postedDate}`;
+            }
           }
         } catch {}
       }
