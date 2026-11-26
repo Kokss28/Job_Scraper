@@ -365,7 +365,7 @@ export function ExtractionHistoryDashboard({
 
               {/* Interactive Calendar Popover */}
               {showCalendar && (
-                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 w-76 sm:w-84 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 sm:p-4 w-[calc(100vw-32px)] max-w-xs sm:w-84 animate-in fade-in zoom-in-95 duration-150">
                   {/* Month Navigation */}
                   <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
                     <button
@@ -570,7 +570,7 @@ export function ExtractionHistoryDashboard({
           ) : (
             <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-800">
+                <table className="w-full min-w-[700px] text-left text-xs text-slate-800">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                       <th className="py-3 px-4">Status</th>

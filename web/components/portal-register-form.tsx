@@ -240,7 +240,7 @@ export function PortalRegisterForm() {
       </div>
 
       {/* Main Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-200/50 p-6 sm:p-8">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-200/50 p-4 sm:p-6 md:p-8">
         {/* Card Header */}
         <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
           <div>

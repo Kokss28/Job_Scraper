@@ -647,33 +647,34 @@ export function PortalDashboard() {
       {/* 1. TOP NAVIGATION & USER WELCOME BAR                      */}
       {/* ========================================================= */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-2xs">
-        <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 h-16 flex items-center justify-between">
+        <div className="w-full px-3.5 sm:px-6 md:px-8 lg:px-10 h-16 flex items-center justify-between">
           {/* Logo & Platform Name */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
-              <Briefcase className="w-5 h-5" />
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 shrink-0">
+              <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="text-base font-black text-slate-900 tracking-tight leading-none">
+              <div className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-none">
                 TalentPulse
               </div>
-              <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-0.5">
+              <div className="text-[9px] sm:text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-0.5">
                 Candidate Job Portal
               </div>
             </div>
           </div>
 
           {/* User Controls & Navigation */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* View Applications History Button */}
             <button
               type="button"
               onClick={handleOpenMyApplications}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors cursor-pointer border border-indigo-200"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors cursor-pointer border border-indigo-200"
             >
-              <FileCheck2 className="w-4 h-4 text-indigo-600" />
-              <span>My Applications</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px]">
+              <FileCheck2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+              <span className="hidden xs:inline">My Applications</span>
+              <span className="xs:hidden">Apps</span>
+              <span className="ml-0.5 sm:ml-1 px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px]">
                 {totalAppliedCount}
               </span>
             </button>
@@ -697,7 +698,7 @@ export function PortalDashboard() {
             <button
               type="button"
               onClick={handleLogout}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -709,16 +710,16 @@ export function PortalDashboard() {
       {/* ========================================================= */}
       {/* 2. DASHBOARD OVERVIEW & HERO SECTION                      */}
       {/* ========================================================= */}
-      <main className="w-full px-4 sm:px-6 md:px-8 lg:px-10 pt-6 space-y-6">
+      <main className="w-full px-3.5 sm:px-6 md:px-8 lg:px-10 pt-4 sm:pt-6 space-y-4 sm:space-y-6 overflow-x-hidden">
         {/* Welcome Banner */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-xs relative overflow-hidden">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 md:p-8 shadow-xs relative overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold mb-2">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Verified Candidate Workspace</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                 Welcome back, {user?.full_name}!
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 max-w-2xl">
@@ -726,7 +727,7 @@ export function PortalDashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap">
               {user?.data_scope_hours && user.data_scope_hours !== "all" ? (
                 <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-indigo-600" />
@@ -750,7 +751,7 @@ export function PortalDashboard() {
         {/* ========================================================= */}
         {/* 3. FOUR DASHBOARD STATISTICS CARDS                        */}
         {/* ========================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Total Available Jobs */}
           <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs border-t-4 border-t-indigo-600">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
@@ -1035,11 +1036,11 @@ export function PortalDashboard() {
             /* ========================================================= */
             /* THOORIGAI INFOTECH IN-PAGE CAREER & ENROLLMENT HUB        */
             /* ========================================================= */
-            <div className="rounded-3xl bg-white border-2 border-indigo-200/90 p-6 md:p-8 shadow-md shadow-indigo-600/5 space-y-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="rounded-3xl bg-white border-2 border-indigo-200/90 p-4 sm:p-6 md:p-8 shadow-md shadow-indigo-600/5 space-y-6 sm:space-y-8 animate-in fade-in zoom-in-95 duration-200">
               {/* Top Header with Logo, Message & Back Button */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 pb-6 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
                     <img
                       src="/thoorigai-logo.jpg"
                       alt="Thoorigai Infotech Logo"
@@ -1054,7 +1055,7 @@ export function PortalDashboard() {
                       <Sparkles className="w-3 h-3 text-indigo-600" />
                       <span>Thoorigai Infotech Placement &amp; Training Hub</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight">
                       Want to Apply to More Jobs? Come and Learn at Thoorigai Infotech!
                     </h2>
                     <p className="text-xs sm:text-sm text-slate-600 font-medium mt-1 max-w-3xl">
@@ -1176,12 +1177,12 @@ export function PortalDashboard() {
               </div>
 
               {/* Contact Information in Plain Text on Page */}
-              <div className="rounded-2xl bg-slate-900 text-white p-6 md:p-8 space-y-6 shadow-sm">
+              <div className="rounded-2xl bg-slate-900 text-white p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 shadow-sm">
                 <div>
                   <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
                     Direct Contact &amp; Admissions
                   </div>
-                  <h3 className="text-lg sm:text-xl font-black text-white mt-1">
+                  <h3 className="text-base sm:text-lg md:text-xl font-black text-white mt-1">
                     Ready to Start Learning? Get in Touch with Thoorigai Infotech
                   </h3>
                   <p className="text-xs text-slate-300 font-medium mt-1 max-w-2xl">
@@ -1190,7 +1191,7 @@ export function PortalDashboard() {
                 </div>
 
                 {/* Structured Text Details Grid */}
-                <div className="pt-6 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+                <div className="pt-4 sm:pt-6 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 text-xs">
                   <div className="space-y-1.5">
                     <div className="font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-indigo-400" />

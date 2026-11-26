@@ -27,22 +27,22 @@ export default async function AdminPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       <AppNav
         userEmail={userEmail}
         role="admin"
         isCloudSupabase={isCloudSupabase}
       />
-      <main className="flex-1 min-w-0 flex flex-col p-6 md:p-8 space-y-6 max-w-7xl mx-auto h-screen overflow-y-auto">
+      <main className="flex-1 min-w-0 w-full flex flex-col p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto h-[calc(100vh-56px)] lg:h-screen overflow-y-auto overflow-x-hidden">
         {/* Hero Header */}
-        <div className="relative rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-xs overflow-hidden">
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 md:p-8 shadow-xs overflow-hidden">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold mb-3">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Role-Based Access Control &amp; System Administration
               </div>
-              <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                 Extraction History &amp; Audit Intelligence
               </h1>
               <p className="text-slate-600 text-xs md:text-sm mt-1 max-w-2xl font-medium">

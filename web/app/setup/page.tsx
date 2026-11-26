@@ -34,13 +34,13 @@ export default async function SetupPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#F1F5F9] text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       <AppNav
         userEmail={userEmail}
         role={userRole}
         isCloudSupabase={isCloudSupabase}
       />
-      <main className="flex-1 min-w-0 flex flex-col p-6 md:p-8 space-y-6 max-w-7xl mx-auto h-screen overflow-y-auto">
+      <main className="flex-1 min-w-0 w-full flex flex-col p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto h-[calc(100vh-56px)] lg:h-screen overflow-y-auto overflow-x-hidden">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
           <div>
@@ -48,7 +48,7 @@ export default async function SetupPage() {
               <Settings className="w-3.5 h-3.5" />
               Application &amp; Ingestion Governance
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
               System Settings &amp; Platform Controls
             </h1>
             <p className="text-slate-600 text-xs md:text-sm mt-1 max-w-2xl font-medium leading-relaxed">

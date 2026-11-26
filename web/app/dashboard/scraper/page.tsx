@@ -162,7 +162,7 @@ export default function ScraperStudioPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-7xl w-full mx-auto overflow-x-hidden">
       {/* Top Header & Global Status Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
@@ -170,7 +170,7 @@ export default function ScraperStudioPage() {
             <Activity className="w-3.5 h-3.5" />
             Live Ingestion Operations
           </div>
-          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
             Live Scraper &amp; Ingestion Studio
           </h1>
         </div>
@@ -190,7 +190,7 @@ export default function ScraperStudioPage() {
         {/* ========================================================= */}
         {/* LEFT COLUMN: Clean Ingestion Dispatcher (5 Cols / ~42%)   */}
         {/* ========================================================= */}
-        <div className="lg:col-span-5 rounded-2xl bg-white border border-slate-200 p-5 md:p-6 shadow-xs space-y-5">
+        <div className="lg:col-span-5 rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 md:p-6 shadow-xs space-y-4 sm:space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
               <Layers className="w-4 h-4 text-indigo-600" />
@@ -410,7 +410,7 @@ export default function ScraperStudioPage() {
           </div>
 
           {/* TAB CONTENT CONTAINER */}
-          <div className="p-5 flex-1 min-h-[360px] flex flex-col">
+          <div className="p-3.5 sm:p-5 flex-1 min-h-[360px] flex flex-col">
             {/* TAB 1: Fresh Batch Table */}
             {activeTab === "table" && (
               <div className="space-y-4 flex-1 flex flex-col">

@@ -114,22 +114,22 @@ export function MarketInsightsClient({
   }, [jobs]);
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 md:space-y-8 max-w-7xl w-full mx-auto overflow-x-hidden">
       {/* Header */}
       <div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold mb-2">
           <Building2 className="w-3.5 h-3.5" />
           Indian Market Landscape
         </div>
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
           Market &amp; Geographic Hiring Hubs
         </h1>
       </div>
 
       {/* 2x2 Analytics Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Chart 1: Hubs Bar */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-emerald-600" />
@@ -176,7 +176,7 @@ export function MarketInsightsClient({
         </div>
 
         {/* Chart 2: Top Companies */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Award className="w-4 h-4 text-indigo-600" />
@@ -220,7 +220,7 @@ export function MarketInsightsClient({
         </div>
 
         {/* Chart 3: Education Track Distribution */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-violet-600" />
@@ -264,7 +264,7 @@ export function MarketInsightsClient({
         </div>
 
         {/* Chart 4: Platform Sourcing Share */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Globe className="w-4 h-4 text-indigo-600" />

@@ -147,16 +147,16 @@ export function SavedJobsClient({
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 md:space-y-8 max-w-7xl w-full mx-auto overflow-x-hidden">
       {/* Header Banner */}
-      <div className="relative rounded-2xl bg-white border border-slate-200 p-6 md:p-8 shadow-xs overflow-hidden">
+      <div className="relative rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 md:p-8 shadow-xs overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold mb-3">
               <Bookmark className="w-3.5 h-3.5" />
               Candidate Workspace &amp; Tracking Board
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
               Saved Opportunities &amp; Application Pipeline
             </h1>
             <p className="text-slate-600 text-xs md:text-sm mt-1 max-w-2xl font-medium leading-relaxed">
@@ -164,18 +164,18 @@ export function SavedJobsClient({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
             <button
               onClick={exportPipelineCsv}
               data-testid="export-pipeline-csv"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-bold transition-all shadow-xs"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-bold transition-all shadow-xs"
             >
               <Download className="w-4 h-4 text-indigo-600" />
               Export Pipeline CSV
             </button>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
             >
               <Briefcase className="w-4 h-4" />
               Explore More Jobs
@@ -185,8 +185,8 @@ export function SavedJobsClient({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-indigo-600 shadow-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-indigo-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Total Tracked
           </div>
@@ -196,7 +196,7 @@ export function SavedJobsClient({
           <div className="text-xs text-slate-500 font-medium mt-0.5">Active in pipeline</div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-violet-600 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-violet-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Interviewing Stage
           </div>
@@ -206,7 +206,7 @@ export function SavedJobsClient({
           <div className="text-xs text-slate-500 font-medium mt-0.5">Active hiring rounds</div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-emerald-600 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-emerald-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Applications Sent
           </div>
@@ -216,7 +216,7 @@ export function SavedJobsClient({
           <div className="text-xs text-slate-500 font-medium mt-0.5">Awaiting feedback</div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-amber-500 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-amber-500 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Bookmarked Leads
           </div>
@@ -228,7 +228,7 @@ export function SavedJobsClient({
       </div>
 
       {/* Pipeline Filter Strip */}
-      <div className="rounded-2xl bg-white border border-slate-200 p-4 flex items-center gap-2 flex-wrap shadow-xs">
+      <div className="rounded-2xl bg-white border border-slate-200 p-3 sm:p-4 flex items-center gap-2 flex-wrap shadow-xs">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-600 mr-2">
           Pipeline Stage:
         </span>
@@ -295,7 +295,7 @@ export function SavedJobsClient({
             {filteredItems.map((item) => (
               <div
                 key={item.job_id}
-                className="rounded-xl bg-white border border-slate-200 p-6 hover:border-slate-300 transition-all shadow-xs space-y-4"
+                className="rounded-xl bg-white border border-slate-200 p-4 sm:p-6 hover:border-slate-300 transition-all shadow-xs space-y-4"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="space-y-1">
@@ -309,10 +309,10 @@ export function SavedJobsClient({
                         </span>
                       )}
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">
+                    <h3 className="font-bold text-slate-900 text-base sm:text-lg break-words">
                       {item.title}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 font-medium">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 font-medium">
                       <span className="flex items-center gap-1 font-semibold text-slate-900">
                         <Building2 className="w-3.5 h-3.5 text-slate-500" />
                         {item.company}
@@ -332,7 +332,7 @@ export function SavedJobsClient({
                   </div>
 
                   {/* Stage Switcher Dropdown */}
-                  <div className="flex items-center gap-2 self-start">
+                  <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-end">
                     <select
                       value={item.status}
                       data-testid={`stage-select-${item.job_id}`}
@@ -342,7 +342,7 @@ export function SavedJobsClient({
                           e.target.value as SavedJobItem["status"]
                         )
                       }
-                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-indigo-700 focus:outline-none focus:border-indigo-600 shadow-xs cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-indigo-700 focus:outline-none focus:border-indigo-600 shadow-xs cursor-pointer flex-1 sm:flex-initial"
                     >
                       <option value="saved">📌 Bookmarked</option>
                       <option value="applied">📨 Applied</option>
@@ -353,7 +353,7 @@ export function SavedJobsClient({
                     <button
                       onClick={() => removeJob(item.job_id)}
                       data-testid={`delete-saved-${item.job_id}`}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
                       title="Remove from saved"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -404,7 +404,7 @@ export function SavedJobsClient({
                 </div>
 
                 {/* Card Actions Footer */}
-                <div className="pt-2 flex items-center justify-between text-xs">
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                   <span className="text-slate-500 font-medium">
                     Saved on {new Date(item.saved_at).toLocaleDateString()}
                   </span>
@@ -413,7 +413,7 @@ export function SavedJobsClient({
                     href={item.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold transition-colors shadow-xs"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold transition-colors shadow-xs w-full sm:w-auto"
                   >
                     Open Official Posting <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>

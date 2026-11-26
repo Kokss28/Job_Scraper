@@ -330,7 +330,7 @@ export function AdminCodeManager() {
       {/* TAB 1: CODES TABLE */}
       {activeTab === "codes" && (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800">
+          <table className="w-full min-w-[650px] text-left text-xs text-slate-800">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 <th className="py-3 px-4">Admin Code</th>
@@ -474,7 +474,7 @@ export function AdminCodeManager() {
       {/* TAB 2: REGISTERED CANDIDATES DIRECTORY */}
       {activeTab === "candidates" && (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800">
+          <table className="w-full min-w-[750px] text-left text-xs text-slate-800">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 <th className="py-3 px-4">Candidate Profile</th>

@@ -146,7 +146,7 @@ export function ExperienceIntelClient({
   }, [jobs, selectedTier]);
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-3.5 sm:p-6 md:p-8 space-y-4 sm:space-y-6 md:space-y-8 max-w-7xl w-full mx-auto overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -154,7 +154,7 @@ export function ExperienceIntelClient({
             <Compass className="w-3.5 h-3.5" />
             Talent Experience Matrix
           </div>
-          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
             Experience &amp; Career Tier Intelligence
           </h1>
           <p className="text-slate-600 text-xs md:text-sm mt-1 font-medium max-w-2xl">
@@ -163,7 +163,7 @@ export function ExperienceIntelClient({
         </div>
 
         {/* Statistical Summary Badge */}
-        <div className="flex items-center gap-3 bg-white border border-slate-200 shadow-xs rounded-xl px-4 py-2.5 text-xs text-slate-600 font-semibold self-start md:self-auto">
+        <div className="flex items-center gap-2 sm:gap-3 bg-white border border-slate-200 shadow-xs rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs text-slate-600 font-semibold flex-wrap self-start md:self-auto">
           <div className="flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-emerald-600" />
             Mean: <strong className="text-slate-900 font-bold">{meanExp}y</strong>
@@ -180,8 +180,8 @@ export function ExperienceIntelClient({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-emerald-600 shadow-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-emerald-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Fresher &amp; Entry (0 - 2y)
           </div>
@@ -193,7 +193,7 @@ export function ExperienceIntelClient({
           </div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-indigo-600 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-indigo-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Mid-Level (2 - 5y)
           </div>
@@ -205,7 +205,7 @@ export function ExperienceIntelClient({
           </div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-violet-600 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-violet-600 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Senior (5 - 8y)
           </div>
@@ -217,7 +217,7 @@ export function ExperienceIntelClient({
           </div>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-5 border-t-4 border-t-amber-500 shadow-xs">
+        <div className="rounded-xl bg-white border border-slate-200 p-4 sm:p-5 border-t-4 border-t-amber-500 shadow-xs">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Staff &amp; Lead (8+y)
           </div>
@@ -233,7 +233,7 @@ export function ExperienceIntelClient({
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Experience Curve */}
-        <div className="lg:col-span-2 rounded-2xl bg-white border border-slate-200 p-6 shadow-xs">
+        <div className="lg:col-span-2 rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -286,7 +286,7 @@ export function ExperienceIntelClient({
         </div>
 
         {/* Tier Share Pie */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Layers className="w-4 h-4 text-violet-600" />
@@ -349,7 +349,7 @@ export function ExperienceIntelClient({
       </div>
 
       {/* Skills Demanded by Career Tier */}
-      <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
+      <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
